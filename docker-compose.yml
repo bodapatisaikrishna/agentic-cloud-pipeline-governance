@@ -1,0 +1,49 @@
+# ACDE core stack — Phase 0: postgres + OPA only.
+# Airflow and Redpanda are added in Phase 1; experiment overlay comes in Phase 7.
+name: acde
+
+services:
+  postgres:
+    image: postgres:16.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-acde}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-acde}
+      POSTGRES_DB: ${POSTGRES_DB:-acde}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-acde} -d ${POSTGRES_DB:-acde}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  opa:
+    # -debug variant keeps a busybox shell on the distroless base so the
+    # wget healthcheck below can run (see DEVIATIONS.md).
+    image: openpolicyagent/opa:0.68.0-debug
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-format=json"
+      - "/policies"
+    ports:
+      - "${OPA_PORT:-8181}:8181"
+    volumes:
+      - ./infra/opa/policies:/policies:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8181/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

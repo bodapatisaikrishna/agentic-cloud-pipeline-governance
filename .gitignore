@@ -1,0 +1,22 @@
+# Secrets & local config
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+
+# Experiment outputs (reproducible artifacts, not source)
+results/*
+!results/.gitkeep
+
+# OS
+.DS_Store
