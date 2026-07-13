@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     # --- SLAs ---
     freshness_sla_streaming_s: float = 60.0
 
+    # --- Policy plane ---
+    budget_default_units: float = 100.0  # per-run cost budget the cost policy checks against
+    rate_limit_max_per_10min: int = 5  # runaway-loop guard (mirrors rate_limit.rego)
+
+    # --- Human simulator (§6 baseline) ---
+    human_latency_median_s: float = 360.0
+    human_latency_sigma: float = 0.5
+
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
     telemetry_interval_s: float = 5.0  # collector sampling period

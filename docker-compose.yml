@@ -60,6 +60,7 @@ services:
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-format=json"
+      - "--watch"  # live-reload policies when infra/opa/policies changes (dev convenience)
       - "/policies"
     ports:
       - "${OPA_PORT:-8181}:8181"

@@ -66,6 +66,11 @@ telemetry:  ## Collect telemetry for DURATION seconds (default 120), then aggreg
 cost:  ## Aggregate resource_usage into the cost ledger
 	MOCK_LLM=1 $(UV) python -m acde.telemetry.cost
 
+## --- Policy plane (Phase 3) ---
+
+opa-test:  ## Run the OPA Rego policy test suites (requires the stack up)
+	$(COMPOSE) exec -T opa opa test /policies -v
+
 ## --- Future phases (stable interface, implemented later) ---
 
 chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Phase 4

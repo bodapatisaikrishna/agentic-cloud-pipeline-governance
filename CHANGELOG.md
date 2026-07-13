@@ -3,6 +3,27 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.4.0] — 2026-07-13 — Phase 3: policy plane & executor
+
+### Added
+- **OPA Rego policies** (`infra/opa/policies/`): `cost_budget`, `recovery_approval`,
+  `schema_compat`, `rate_limit`, and a `main.rego` aggregator (`data.acde.policy.decision`),
+  each with `_test.rego` — **20 `opa test` cases**. OPA now runs with `--watch` (live reload).
+- **`src/acde/policy/gate.py`** — assembles the policy context (projected marginal cost,
+  prior-version existence, recent-action count) and evaluates via OPA REST → `PolicyDecision`;
+  fails safe by escalating when OPA is unreachable.
+- **`src/acde/policy/executor.py`** — the §5.2 action→side-effect mapping: rollback (pointer
+  flip via `PartitionVersionManager`), scale_workers/apply_mapping/block_ingestion/reprioritize
+  (`control.desired_state`), retry/replay/partial_recompute + adjust_pool_slots (Airflow REST),
+  quarantine (deactivate + `quarantine_events`), and escalation → `manual_interventions`.
+- **`src/acde/human/simulator.py`** — seeded lognormal(360s, σ0.5) on-call human that assigns and
+  resolves manual interventions deterministically.
+- **Config**: `budget_default_units`, `rate_limit_max_per_10min`, `human_latency_median_s`,
+  `human_latency_sigma`. **Makefile**: `opa-test`.
+- **Tests**: +29 unit (gate, executor dispatch, human simulator); integration `test_policy.py`
+  (budget denial, rollback pointer-flip, escalation→resolution). 164 unit tests, 98% coverage.
+- **Docs**: DEVIATIONS D-021…D-025.
+
 ## [0.3.0] — 2026-07-13 — Phase 2: telemetry, cost ledger, freshness
 
 ### Added

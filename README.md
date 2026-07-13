@@ -74,6 +74,26 @@ The collector fills `telemetry.task_runs` (Airflow REST), `telemetry.resource_us
 (freshness). `cost.py` writes `telemetry.cost_ledger` per the disclosed model above
 (`compute_unit_seconds × 0.05 + storage_gb_hours × 0.01`). All rows are tagged `experiment_run`.
 
+### Policy plane
+
+Every agent action is a `ProposedAction` that the **gate** evaluates against OPA before the
+**executor** touches anything:
+
+```
+ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.decision ──▶ PolicyDecision
+                                                                                │
+                        allowed ─▶ executor side effect (rollback / scale / retry / quarantine …)
+                        escalate ─▶ telemetry.manual_interventions ─▶ human simulator resolves
+```
+
+- Four Rego policies (`infra/opa/policies/`): `cost_budget`, `recovery_approval`,
+  `schema_compat`, `rate_limit`, aggregated by `main.rego`. Run their tests with `make opa-test`
+  (20 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
+- The gate **fails safe** — if OPA is unreachable it escalates rather than allowing.
+- The human simulator (`acde.human.simulator`) resolves escalations after a seeded
+  lognormal(360 s, σ0.5) delay; run it with
+  `python -m acde.human.simulator --duration 600 --experiment-run <run>`.
+
 ## Cost model (disclosed)
 
 The paper does not define its cost model. Ours (see DEVIATIONS.md D-006):
@@ -101,7 +121,7 @@ Key entry points — full tree in the project spec:
 | 0 | Scaffold, contracts, postgres+OPA, CI | ✅ verified |
 | 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
 | 2 | Telemetry, cost ledger, freshness | ✅ verified |
-| 3 | Policy plane (OPA) & executor | ⬜ |
+| 3 | Policy plane (OPA) & executor | ✅ verified |
 | 4 | Failure-injection harness | ⬜ |
 | 5 | Agents & LLM layer | ⬜ |
 | 6 | Control-loop orchestrator | ⬜ |

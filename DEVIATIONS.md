@@ -187,3 +187,50 @@ auto-included in the final report.
 - **Rationale:** Matches the Phase 1 streaming runner (also host-side), avoids mounting the
   docker socket into a container, and keeps the collector trivially runnable during experiments.
   A tick never crashes the loop (all I/O is guarded).
+
+---
+
+## Phase 3 — Policy plane & executor
+
+## D-021 — The gate assembles the policy context; OPA stays a pure decision function
+
+- **Decision:** `policy/gate.py` computes `projected_marginal_cost`, `has_prior_version`, and
+  `actions_last_10min` from settings + DB state and passes them in `input.context`. Rego never
+  reads DB/HTTP state — it decides purely from `input`.
+- **Alternatives:** Push data into OPA and evaluate against `data`; give OPA a DB pull.
+- **Rationale:** Keeps policies pure, hermetically testable (`opa test` needs no services), and
+  reusable across baseline/experiment modes; the gate is the single place that reads live state.
+
+## D-022 — One aggregating Rego entrypoint
+
+- **Decision:** `data.acde.policy.decision` (`main.rego`) dispatches by agent/action_type to four
+  sub-packages (`acde.cost_budget`, `acde.recovery`, `acde.schema`, `acde.rate_limit`), returning
+  `{allowed, escalate, reason, policy_id}`. The rate-limit runaway guard is checked first for all
+  agents; `no_action` is always allowed; unmatched inputs hit a fail-safe `escalate` default.
+- **Rationale:** A single query path for the gate, one decision object matching
+  `contracts.PolicyDecision`, and clean per-policy `_test.rego` suites (20 tests).
+
+## D-023 — Gate fail-safe = escalate on OPA failure
+
+- **Decision:** If OPA is unreachable/errors or returns an empty result, `gate.evaluate` returns
+  `allowed=false, escalate=true` (`policy_id="gate_failsafe"`), after bounded retries.
+- **Rationale:** Brings the Phase 9 "OPA down → all actions escalate" resilience behavior forward;
+  never silently allows an ungoverned action.
+
+## D-024 — Human latency: seeded lognormal(median 360s, σ 0.5)
+
+- **Decision:** `human/simulator.py` samples latency deterministically from
+  `(default_seed, intervention id)`; assigns it once per pending row, resolves when
+  `now ≥ requested_ts + latency`, and stamps `completed_ts = requested_ts + latency`.
+- **Rationale:** The §6 baseline specifies this distribution; seeding by row id makes the whole
+  intervention timeline reproducible across runs while keeping the simulator stateless.
+
+## D-025 — Executor scope: side effects + escalation rows only
+
+- **Decision:** `policy/executor.py` performs the §5.2 side effects for allowed actions and writes
+  `manual_interventions` on escalation, returning an `ExecutionOutcome`. Writing
+  `telemetry.agent_actions` (with LLM token counts) is deferred to the agents (Phase 5). Airflow
+  network handlers (`clearTaskInstances`, `dagRuns`, `PATCH /pools`) are integration-verified;
+  control-plane and DB side effects are unit-tested via the dispatch map.
+- **Rationale:** Keeps the executor a pure "apply the decision" component; the agents own the
+  audit trail so token/confidence/justification live in one place next phase.
