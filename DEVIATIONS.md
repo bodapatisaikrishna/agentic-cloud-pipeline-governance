@@ -65,3 +65,15 @@ auto-included in the final report.
 - **Alternatives:** Report-only until the Phase 9 hardening pass.
 - **Rationale:** Ratcheting from the start avoids a painful backfill; Phase 0 surface is
   small and fully testable (currently 97%).
+
+## D-008 — Postgres published on host port 5433, not 5432
+
+- **Decision:** The stack publishes Postgres on host port **5433** (`POSTGRES_PORT`
+  default) mapped to the container's internal 5432.
+- **Alternatives:** Keep 5432 and require the developer to stop any local Postgres;
+  ask the user to stop their `postgresql@16` brew service.
+- **Rationale:** A locally-installed PostgreSQL on 5432 binds loopback (`127.0.0.1`/`::1`),
+  which on macOS shadows Docker's wildcard `*:5432` publish — so clients hit the local DB
+  and see `role "acde" does not exist`. Publishing on 5433 lets the research stack coexist
+  with a developer's local Postgres without touching their data or services. The container
+  port is unchanged (5432 internally).

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # --- Postgres (telemetry / warehouse / control schemas) ---
     postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_port: int = 5433  # host-published port; 5433 avoids clashing with a local pg on 5432
     postgres_user: str = "acde"
     postgres_password: str = "acde"
     postgres_db: str = "acde"
