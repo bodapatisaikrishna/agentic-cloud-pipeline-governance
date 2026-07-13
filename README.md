@@ -62,6 +62,18 @@ make stream   # publish a seeded burst, then run the consumer for one 60s sessio
   `materialized_ts`) over an async worker pool sized **live** from
   `control.desired_state['streaming.workers']` (1–8).
 
+### Telemetry & cost
+
+```bash
+DURATION=180 make telemetry   # collect Airflow + docker stats for 3 min, then aggregate cost
+make cost                     # (re)aggregate the cost ledger from resource_usage
+```
+
+The collector fills `telemetry.task_runs` (Airflow REST), `telemetry.resource_usage`
+(`docker stats` + logical `streaming`/`batch` resource units), and `telemetry.pipeline_metrics`
+(freshness). `cost.py` writes `telemetry.cost_ledger` per the disclosed model above
+(`compute_unit_seconds × 0.05 + storage_gb_hours × 0.01`). All rows are tagged `experiment_run`.
+
 ## Cost model (disclosed)
 
 The paper does not define its cost model. Ours (see DEVIATIONS.md D-006):
@@ -88,7 +100,7 @@ Key entry points — full tree in the project spec:
 |---|---|---|
 | 0 | Scaffold, contracts, postgres+OPA, CI | ✅ verified |
 | 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
-| 2 | Telemetry, cost ledger, freshness | ⬜ |
+| 2 | Telemetry, cost ledger, freshness | ✅ verified |
 | 3 | Policy plane (OPA) & executor | ⬜ |
 | 4 | Failure-injection harness | ⬜ |
 | 5 | Agents & LLM layer | ⬜ |

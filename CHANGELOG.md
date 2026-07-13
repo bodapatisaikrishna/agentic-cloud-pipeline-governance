@@ -3,6 +3,29 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.3.0] — 2026-07-13 — Phase 2: telemetry, cost ledger, freshness
+
+### Added
+- **`src/acde/telemetry/`** package:
+  - `collector.py` — host-side loop polling the Airflow REST API (task instances → `task_runs`,
+    upserted via a new unique index) and `docker stats` (→ `resource_usage`, incl. logical
+    `streaming`/`batch` resource-unit rows). Pure parsers unit-tested.
+  - `freshness.py` — streaming freshness (`materialized_ts − event_ts`) and batch staleness →
+    `pipeline_metrics`.
+  - `cost.py` — disclosed cost model (§5.5): step-integrates worker-seconds and warehouse
+    storage into per-component 1-min `cost_ledger` rows; pure math unit-verified.
+- **Config**: `experiment_run`, `telemetry_interval_s`, `cost_window_s`.
+- **SQL**: unique index `task_runs_uident` for idempotent task-run upserts.
+- **Makefile**: `telemetry` (collect for DURATION then aggregate), `cost`.
+- **Tests**: +27 unit (cost math vs hand fixture, freshness, docker/airflow parsers, config);
+  integration `test_telemetry.py` (all telemetry tables fill; a cost window recomputes by hand).
+  135 unit tests, 98% coverage.
+- **Docs**: DEVIATIONS D-018…D-020.
+
+### Fixed
+- `warehouse_size_gb` coerces psycopg's `Decimal` from `pg_total_relation_size` to `float`
+  (caught by the live integration test).
+
 ## [0.2.0] — 2026-07-13 — Phase 1: data plane
 
 ### Added

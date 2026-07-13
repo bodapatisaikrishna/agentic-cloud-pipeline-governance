@@ -57,6 +57,15 @@ stream:  ## Publish a seeded burst, then run the consumer for one 60s session
 	MOCK_LLM=1 $(UV) python -m acde.dataplane.streaming.producer --events 2000
 	MOCK_LLM=1 $(UV) python -m acde.dataplane.streaming.consumer --duration 60
 
+## --- Telemetry (Phase 2) ---
+
+telemetry:  ## Collect telemetry for DURATION seconds (default 120), then aggregate cost
+	MOCK_LLM=1 $(UV) python -m acde.telemetry.collector --duration $${DURATION:-120}
+	$(MAKE) cost
+
+cost:  ## Aggregate resource_usage into the cost ledger
+	MOCK_LLM=1 $(UV) python -m acde.telemetry.cost
+
 ## --- Future phases (stable interface, implemented later) ---
 
 chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Phase 4

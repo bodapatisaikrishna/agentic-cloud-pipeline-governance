@@ -151,3 +151,39 @@ auto-included in the final report.
 - **Rationale:** Postgres only runs `/docker-entrypoint-initdb.d` on first volume init, so new
   tables added in later phases would never reach an existing volume. Idempotent re-apply is
   the simplest way to evolve the fixed research schema without destroying data.
+
+---
+
+## Phase 2 — Telemetry, cost, freshness
+
+## D-018 — Cost compute driven by logical resource-unit series
+
+- **Decision:** §5.5 compute = "(active workers or pool slots) × wall seconds". The collector
+  records two logical series into `telemetry.resource_usage`: `component='streaming'`
+  (workers = `control.desired_state['streaming.workers']`) and `component='batch'`
+  (workers = Airflow `running_slots`). `cost.py` step-integrates these over 1-min windows.
+  Storage = live `warehouse`-schema size (`pg_total_relation_size`) → `storage_gb_hours`,
+  attributed to `component='postgres'`. Docker-container rows (real cpu/mem, workers=1) are
+  also recorded for observability but are not cost drivers.
+- **Alternatives:** Derive compute from docker CPU-seconds; treat every container as a worker.
+- **Rationale:** Faithful to the paper's "resource units" abstraction (the streaming worker
+  pool and Airflow slots are the tunable capacity), and the two logical components map cleanly
+  to the optimization agent's `scale_workers` / `adjust_pool_slots` actions in later phases.
+
+## D-019 — Batch freshness = partition staleness (now − created_ts)
+
+- **Decision:** Batch data freshness is `now − active partition.created_ts`; streaming
+  freshness is the exact §5.4 metric `materialized_ts − event_ts`.
+- **Alternatives:** Track a true source-arrival timestamp per partition.
+- **Rationale:** The synthetic batch sources have no distinct "arrival" event separate from
+  generation, so staleness of the freshest available partition is the honest available-lag
+  proxy. Refined if a real arrival signal is added.
+
+## D-020 — Telemetry collector is a host-side loop
+
+- **Decision:** `telemetry/collector.py` runs on the host (`docker stats` CLI + Airflow REST
+  over localhost), invoked by `make telemetry`; it is not a containerized service.
+- **Alternatives:** A sidecar container with the docker socket mounted.
+- **Rationale:** Matches the Phase 1 streaming runner (also host-side), avoids mounting the
+  docker socket into a container, and keeps the collector trivially runnable during experiments.
+  A tick never crashes the loop (all I/O is guarded).

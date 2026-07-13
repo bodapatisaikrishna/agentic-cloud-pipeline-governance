@@ -4,6 +4,9 @@ CREATE TABLE IF NOT EXISTS telemetry.task_runs (
   id BIGSERIAL PRIMARY KEY, run_id TEXT, dag_id TEXT, task_id TEXT,
   state TEXT, start_ts TIMESTAMPTZ, end_ts TIMESTAMPTZ,
   duration_s DOUBLE PRECISION, try_number INT, error TEXT, experiment_run TEXT);
+-- Enables idempotent upsert from the telemetry collector polling the Airflow REST API.
+CREATE UNIQUE INDEX IF NOT EXISTS task_runs_uident
+  ON telemetry.task_runs (dag_id, run_id, task_id, try_number);
 
 CREATE TABLE IF NOT EXISTS telemetry.pipeline_metrics (
   id BIGSERIAL PRIMARY KEY, pipeline_id TEXT, metric TEXT,

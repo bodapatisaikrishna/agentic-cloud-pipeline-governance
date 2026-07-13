@@ -25,3 +25,14 @@ class TestDataplaneDefaults:
         assert s.stream_max_workers == 16
         assert s.use_real_tlc is True
         assert s.data_dir == "/data"
+
+    def test_telemetry_defaults_and_overrides(self, monkeypatch):
+        s = Settings(_env_file=None)
+        assert s.experiment_run == "adhoc"
+        assert s.telemetry_interval_s == 5.0
+        assert s.cost_window_s == 60.0
+        monkeypatch.setenv("EXPERIMENT_RUN", "exp-7")
+        monkeypatch.setenv("COST_WINDOW_S", "30")
+        s2 = Settings(_env_file=None)
+        assert s2.experiment_run == "exp-7"
+        assert s2.cost_window_s == 30.0

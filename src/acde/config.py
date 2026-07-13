@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # --- SLAs ---
     freshness_sla_streaming_s: float = 60.0
 
+    # --- Telemetry ---
+    experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
+    telemetry_interval_s: float = 5.0  # collector sampling period
+    cost_window_s: float = 60.0  # cost-ledger aggregation window
+
     # --- Determinism ---
     default_seed: int = 42
 
