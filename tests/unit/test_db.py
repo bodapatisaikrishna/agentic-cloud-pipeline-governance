@@ -72,6 +72,21 @@ class TestHelpers:
         db.execute("INSERT INTO t VALUES (%s)", ("v",))
         conn.execute.assert_called_once_with("INSERT INTO t VALUES (%s)", ("v",))
 
+    def test_execute_many_uses_cursor_executemany(self, monkeypatch):
+        conn = MagicMock()
+        monkeypatch.setattr(db, "get_pool", lambda: _pool_with(conn))
+        rows = [("a",), ("b",)]
+        db.execute_many("INSERT INTO t VALUES (%s)", rows)
+        conn.cursor.return_value.executemany.assert_called_once_with(
+            "INSERT INTO t VALUES (%s)", rows
+        )
+
+    def test_execute_many_noop_on_empty(self, monkeypatch):
+        conn = MagicMock()
+        monkeypatch.setattr(db, "get_pool", lambda: _pool_with(conn))
+        db.execute_many("INSERT INTO t VALUES (%s)", [])
+        conn.cursor.assert_not_called()
+
 
 class TestPoolLifecycle:
     def test_close_pool_when_never_opened_is_safe(self):

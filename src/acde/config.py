@@ -26,8 +26,20 @@ class Settings(BaseSettings):
     db_retry_attempts: int = 3
     db_retry_backoff_s: float = 0.5
 
-    # --- Streaming broker (Redpanda, Phase 1) ---
+    # --- Streaming broker (Redpanda) ---
     broker_bootstrap: str = "localhost:9092"
+    stream_topic: str = "acde.stream.events"
+    stream_default_workers: int = 2
+    stream_min_workers: int = 1
+    stream_max_workers: int = 8
+    stream_window_s: float = 60.0  # tumbling-window width
+
+    # --- Datasets (Phase 1) ---
+    data_dir: str = "data"
+    tpcds_scale_rows: int = 20_000  # downscaled synthetic SF1 fact-row count
+    opengov_rows: int = 5_000
+    use_real_tlc: bool = False  # opt-in: download real NYC TLC parquet
+    use_real_opengov: bool = False  # opt-in: fetch a real open-gov CSV
 
     # --- Policy engine ---
     opa_url: str = "http://localhost:8181"

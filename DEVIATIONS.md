@@ -77,3 +77,77 @@ auto-included in the final report.
   and see `role "acde" does not exist`. Publishing on 5433 lets the research stack coexist
   with a developer's local Postgres without touching their data or services. The container
   port is unchanged (5432 internally).
+
+---
+
+## Phase 1 — Data plane
+
+## D-009 — Synthetic, seeded TPC-DS instead of dsdgen
+
+- **Decision:** Generate schema-faithful, downscaled TPC-DS-shaped tables (`store_sales`,
+  `item`) with a seeded NumPy generator (`dataplane/datasets/tpcds_gen.py`).
+- **Alternatives:** Build/run the official `dsdgen` C toolchain for true SF1 data.
+- **Rationale:** Spec §8 Phase 1 explicitly permits this when dsdgen is painful in-container.
+  Synthetic data is deterministic (same seed ⇒ byte-identical CSVs), offline, and sufficient
+  for the batch pipeline (validate → daily-revenue → versioned partition). Row shapes follow
+  the TPC-DS column names so the pipeline stays faithful.
+
+## D-010 — Airflow lives only in the Docker image, never in the project venv
+
+- **Decision:** `apache-airflow` is installed into a custom image
+  (`docker/airflow.Dockerfile`) that `pip install`s the `acde` package; it is **not** a
+  `pyproject.toml` dependency. DAG modules are the only code that imports airflow.
+- **Alternatives:** Add airflow to the project's uv dependencies.
+- **Rationale:** Airflow's dependency tree is huge and constraint-pinned; keeping it out of
+  the venv keeps `uv sync`, unit tests, and CI fast and airflow-free. Batch logic lives in
+  `dataplane/batch/pipeline.py` (no airflow import) and is unit-tested directly.
+
+## D-011 — Airflow metadata in a separate `airflow` database in the shared Postgres
+
+- **Decision:** A one-shot `airflow-init` service creates an `airflow` database inside the
+  existing postgres:16 container (idempotently), then runs `airflow db migrate` and creates
+  the admin user. The research `acde` DB is untouched.
+- **Alternatives:** A dedicated second Postgres container for Airflow metadata.
+- **Rationale:** One fewer container/volume; clean logical separation via a distinct
+  database. Airflow reaches it over the compose network as `postgres:5432`.
+
+## D-012 — Synthetic-by-default data sources; real public data is opt-in
+
+- **Decision:** Default streaming source is the seeded bursty synthetic producer; default
+  open-gov source is a seeded synthetic NYC-311-shaped CSV. `USE_REAL_TLC=1` /
+  `USE_REAL_OPENGOV=1` switch to a real NYC-TLC parquet download / NYC-311 fetch.
+- **Alternatives:** Always download real data.
+- **Rationale:** Determinism and offline CI. Real datasets are non-deterministic and
+  network/disk-bound; keeping them opt-in preserves reproducibility while still shipping the
+  real fetchers the spec asks for.
+
+## D-013 — Versioned partitions = one physical table per (dataset, partition, version)
+
+- **Decision:** `PartitionVersionManager` creates a physical `warehouse.<dataset>__<part>__v<n>`
+  table per version and records it in `warehouse.partition_versions.table_name`; the active
+  version is a boolean pointer, so rollback is a transactional pointer flip (no data movement).
+- **Alternatives:** One data table with a `version` column + a filter on active version.
+- **Rationale:** Matches the spec's `partition_versions.table_name` column and the §5.2
+  "rollback = pointer flip" mapping directly; recovery's rollback reuses `activate()`.
+
+## D-014 — New dependencies: pandas, pyarrow, confluent-kafka, httpx
+
+- **Decision:** Added to core deps in the phase that needs them (data generation/transform,
+  TLC parquet, Kafka client, HTTP for downloads + the Airflow REST client).
+- **Rationale:** Per the repo rule "deps are added in the phase that needs them"; `uv.lock`
+  is committed.
+
+## D-015 / D-016 — Image pins: Airflow 2.10.5, Redpanda v24.2.18
+
+- **Decision:** `apache/airflow:2.10.5-python3.11` and `redpandadata/redpanda:v24.2.18`.
+- **Rationale:** Latest patch of the spec-mandated 2.10.x / v24.2.x lines; python3.11 matches
+  the project interpreter. Airflow 3.x migration remains future work (spec).
+
+## D-017 — `make migrate` applies init SQL to a running DB
+
+- **Decision:** `acde/dataplane/migrate.py` re-applies every `infra/postgres/init/*.sql`
+  (all `IF NOT EXISTS`) to the live DB; wired as `make migrate` and run by `make seed`.
+- **Alternatives:** `make clean` to reinitialize the volume; a migration framework (alembic).
+- **Rationale:** Postgres only runs `/docker-entrypoint-initdb.d` on first volume init, so new
+  tables added in later phases would never reach an existing volume. Idempotent re-apply is
+  the simplest way to evolve the fixed research schema without destroying data.

@@ -11,6 +11,10 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "psycopg-pool>=3.2,<4",
     "tenacity>=8.4,<10",
+    "pandas>=3.0.3",
+    "pyarrow>=25.0.0",
+    "confluent-kafka>=2.15.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]
@@ -52,6 +56,13 @@ addopts = "-q"
 
 [tool.coverage.run]
 source = ["src/acde"]
+omit = [
+    # Airflow DAGs and broker/network I/O — exercised by integration tests, not unit.
+    "src/acde/dataplane/batch/dags/*",
+    "src/acde/dataplane/streaming/kafka_io.py",
+    "src/acde/dataplane/streaming/consumer.py",
+    "src/acde/dataplane/datasets/nyc_tlc_fetch.py",
+]
 
 [tool.coverage.report]
 fail_under = 80

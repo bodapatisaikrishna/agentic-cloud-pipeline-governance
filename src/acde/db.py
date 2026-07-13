@@ -70,6 +70,19 @@ def execute(sql: str, params: dict[str, Any] | tuple[Any, ...] | None = None) ->
     _run()
 
 
+def execute_many(sql: str, rows: list[tuple[Any, ...]] | list[dict[str, Any]]) -> None:
+    """Run one statement over many parameter sets, with bounded retry."""
+    if not rows:
+        return
+
+    @_db_retry()
+    def _run() -> None:
+        with get_pool().connection() as conn:
+            conn.cursor().executemany(sql, rows)
+
+    _run()
+
+
 def fetch_all(
     sql: str, params: dict[str, Any] | tuple[Any, ...] | None = None
 ) -> list[dict[str, Any]]:

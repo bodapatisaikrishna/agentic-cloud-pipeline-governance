@@ -36,14 +36,31 @@ Prereqs: [uv](https://docs.astral.sh/uv/), Docker Desktop (Compose v2), GNU make
 ```bash
 cp .env.example .env        # defaults work for local dev; add ANTHROPIC_API_KEY for live runs
 uv sync                     # create venv from committed uv.lock
-make up                     # postgres + OPA, waits for healthchecks
-make test-unit              # 54 tests, MOCK_LLM=1, zero API calls, coverage >= 80%
-make test-integration       # smoke: tables exist, DDL idempotent, OPA /health
+make up                     # full stack: postgres, opa, redpanda, airflow (builds the image)
+make test-unit              # unit tests, MOCK_LLM=1, zero API calls, coverage >= 80%
+make seed                   # generate seeded datasets + migrate the DB
+make test-integration       # batch DAG + streaming session + stack smoke
 make down
 ```
 
-`MOCK_LLM=1` is the default everywhere (tests, CI, local runs). Live LLM runs are always
-an explicit opt-in.
+`make up-core` starts only postgres + OPA (fast) when you don't need the data plane.
+Postgres is published on host port **5433** (so it coexists with a local Postgres on 5432).
+`MOCK_LLM=1` is the default everywhere (tests, CI, local runs); live LLM runs are opt-in.
+
+### Data plane
+
+```bash
+make seed     # seeded TPC-DS + open-gov CSVs → data/, then apply init SQL
+make stream   # publish a seeded burst, then run the consumer for one 60s session
+```
+
+- **Batch (Airflow, localhost:8080):** trigger `tpcds_ingest` → `validate → transform →
+  materialize` writes a new **versioned partition** (`warehouse.partition_versions`); rollback
+  is a pointer flip.
+- **Streaming (Redpanda):** the producer emits seeded bursty events; the consumer aggregates
+  them into 60s tumbling windows (`warehouse.stream_aggregates`, with `event_ts` /
+  `materialized_ts`) over an async worker pool sized **live** from
+  `control.desired_state['streaming.workers']` (1–8).
 
 ## Cost model (disclosed)
 
@@ -69,8 +86,8 @@ Key entry points — full tree in the project spec:
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Scaffold, contracts, postgres+OPA, CI | ✅ code complete (docker gate pending) |
-| 1 | Data plane: Airflow, Redpanda, datasets | ⬜ |
+| 0 | Scaffold, contracts, postgres+OPA, CI | ✅ verified |
+| 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
 | 2 | Telemetry, cost ledger, freshness | ⬜ |
 | 3 | Policy plane (OPA) & executor | ⬜ |
 | 4 | Failure-injection harness | ⬜ |

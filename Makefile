@@ -4,14 +4,17 @@
 COMPOSE := docker compose
 UV := uv run
 
-.PHONY: up down logs lint fmt test-unit test-integration clean \
-        seed agents baseline experiment-quick experiment-paper analyze report \
+.PHONY: up up-core down logs lint fmt test-unit test-integration clean \
+        seed migrate stream agents baseline experiment-quick experiment-paper analyze report \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
 
-up:  ## Bring up the stack (waits for healthchecks)
-	$(COMPOSE) up -d --wait
+up:  ## Bring up the full stack (postgres, opa, redpanda, airflow); builds the airflow image
+	$(COMPOSE) up -d --build --wait
+
+up-core:  ## Bring up only postgres + opa (fast; no data plane)
+	$(COMPOSE) up -d --wait postgres opa
 
 down:  ## Stop the stack (keeps volumes)
 	$(COMPOSE) down
@@ -40,10 +43,21 @@ test-unit:  ## Unit tests: MOCK_LLM=1, no docker, no network, coverage >= 80%
 test-integration:  ## Integration tests (requires `make up` first)
 	MOCK_LLM=1 $(UV) pytest tests/integration -m integration
 
-## --- Future phases (stable interface, implemented later) ---
+## --- Data plane (Phase 1) ---
 
-seed:  ## Phase 1: load datasets
-	@echo "'seed' is implemented in Phase 1 (data plane)"; exit 1
+migrate:  ## Apply idempotent init SQL to the running DB (adds tables to existing volumes)
+	MOCK_LLM=1 $(UV) python -m acde.dataplane.migrate
+
+seed:  ## Generate seeded datasets and migrate the DB
+	MOCK_LLM=1 $(UV) python -m acde.dataplane.datasets.tpcds_gen
+	MOCK_LLM=1 $(UV) python -m acde.dataplane.datasets.opengov_fetch
+	$(MAKE) migrate
+
+stream:  ## Publish a seeded burst, then run the consumer for one 60s session
+	MOCK_LLM=1 $(UV) python -m acde.dataplane.streaming.producer --events 2000
+	MOCK_LLM=1 $(UV) python -m acde.dataplane.streaming.consumer --duration 60
+
+## --- Future phases (stable interface, implemented later) ---
 
 chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Phase 4
 	@echo "'$@' is implemented in Phase 4 (failure injection)"; exit 1

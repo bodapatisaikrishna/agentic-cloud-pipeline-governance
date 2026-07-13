@@ -18,5 +18,9 @@ dist/
 results/*
 !results/.gitkeep
 
+# Generated datasets (reproducible from seeds)
+data/*
+!data/.gitkeep
+
 # OS
 .DS_Store
