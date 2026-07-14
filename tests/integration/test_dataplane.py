@@ -42,6 +42,11 @@ def _trigger_and_wait(client: httpx.Client, dag_id: str, timeout_s: float = 120)
 
 
 def test_batch_dag_materializes_versioned_partition():
+    # Regenerate a clean source so this test is independent of any prior schema_drift
+    # corruption / quarantine left by the chaos or agent integration tests (order-safe).
+    from acde.dataplane.datasets import tpcds_gen
+
+    tpcds_gen.write()
     with _airflow() as client:
         _trigger_and_wait(client, "tpcds_ingest")
     active = db.fetch_one(
