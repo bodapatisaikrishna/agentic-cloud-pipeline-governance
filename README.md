@@ -94,6 +94,25 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
   lognormal(360 s, σ0.5) delay; run it with
   `python -m acde.human.simulator --duration 600 --experiment-run <run>`.
 
+### Agents
+
+Four bounded agents (`acde.agents`) run **observe → detect → reason → propose → gate →
+execute**, logging every action to `telemetry.agent_actions`. Detection is statistical
+(z-score + thresholds); the LLM only triages/proposes a `ProposedAction` (never executes or
+emits code). Monitoring stamps `detected_ts`, recovery stamps `resolved_ts` — so MTTR is
+`resolved_ts − detected_ts`.
+
+```bash
+make chaos-schema_drift            # inject a fault
+EXPERIMENT_RUN=demo make agents    # one cycle of all four agents (MOCK_LLM=1)
+# → schema agent quarantines the drifted partition; unaffected pipelines continue
+```
+
+`MOCK_LLM=1` (the default) serves deterministic proposals with zero API calls. The live path is
+built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` with `ANTHROPIC_API_KEY` set makes
+one real Anthropic call, routed monitoring→Haiku / others→Sonnet, bounded by the 60-call /
+150k-token per-run caps.
+
 ### Chaos harness
 
 Four seeded failure scenarios (§6) degrade the running pipelines and record
@@ -142,7 +161,7 @@ Key entry points — full tree in the project spec:
 | 2 | Telemetry, cost ledger, freshness | ✅ verified |
 | 3 | Policy plane (OPA) & executor | ✅ verified |
 | 4 | Failure-injection harness | ✅ verified |
-| 5 | Agents & LLM layer | ⬜ |
+| 5 | Agents & LLM layer | ✅ verified |
 | 6 | Control-loop orchestrator | ⬜ |
 | 7 | Baseline & experiment runner | ⬜ |
 | 8 | Analysis, figures, report | ⬜ |

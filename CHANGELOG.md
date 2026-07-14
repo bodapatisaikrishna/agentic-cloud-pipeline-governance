@@ -3,6 +3,23 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.6.0] — 2026-07-14 — Phase 5: agents & LLM layer
+
+### Added
+- **LLM layer** (`src/acde/llm/`): `client.py` (`LLMClient` with monitoring→`MODEL_FAST` /
+  others→`MODEL_REASONING` routing, temperature=0, per-run `BudgetTracker`, in-run cache, 429/5xx
+  retry → `no_action`/`llm_unavailable`), `mock.py` (deterministic per agent × scenario), and four
+  `prompts/*.md` system templates (§5.6). New dep: `anthropic`.
+- **Agents** (`src/acde/agents/`): `detection.py` (z-score + thresholds), `base.py`
+  (observe→reason→propose→gate→execute→`agent_actions`), the four agents, and a `run.py` cycle CLI.
+  Monitoring stamps `failure_events.detected_ts`; recovery stamps `resolved_ts` (MTTR endpoints).
+- **Config**: anomaly thresholds. **Makefile**: `agents` (MOCK_LLM=1) and `agents-live-smoke`
+  (MOCK_LLM=0, user-run).
+- **Tests**: +48 unit (detection, mock coverage of every agent × scenario, client budget/cache/
+  routing, agents observe/invalid/act); integration `test_agents_e2e.py` (each scenario → owning
+  agent → agent_actions + side effect; lifecycle closed). 223 unit tests, 95% coverage.
+- **Docs**: DEVIATIONS D-031…D-036.
+
 ## [0.5.0] — 2026-07-13 — Phase 4: failure-injection harness
 
 ### Added

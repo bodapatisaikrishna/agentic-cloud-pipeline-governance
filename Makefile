@@ -76,8 +76,11 @@ opa-test:  ## Run the OPA Rego policy test suites (requires the stack up)
 chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Inject a seeded fault
 	MOCK_LLM=1 $(UV) python -m acde.chaos.injector --scenario $(subst chaos-,,$@)
 
-agents:  ## Phase 5/6: run the agent control loop
-	@echo "'agents' is implemented in Phases 5-6 (agents + orchestrator)"; exit 1
+agents:  ## Run one agent cycle (all four agents), MOCK_LLM=1
+	MOCK_LLM=1 $(UV) python -m acde.agents.run --experiment-run $${EXPERIMENT_RUN:-adhoc}
+
+agents-live-smoke:  ## One live LLM cycle (MOCK_LLM=0) — needs ANTHROPIC_API_KEY; you run this
+	MOCK_LLM=0 $(UV) python -m acde.agents.run --experiment-run $${EXPERIMENT_RUN:-live-smoke}
 
 baseline:  ## Phase 7: static-orchestration baseline
 	@echo "'baseline' is implemented in Phase 7 (baseline + runner)"; exit 1

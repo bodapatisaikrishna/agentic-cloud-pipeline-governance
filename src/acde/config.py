@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     human_latency_median_s: float = 360.0
     human_latency_sigma: float = 0.5
 
+    # --- Agents / anomaly detection (§5.6) ---
+    anomaly_z_threshold: float = 3.0  # z-score above which a metric point is anomalous
+    cpu_high_pct: float = 80.0  # resource-contention detection threshold
+    agent_min_confidence: float = 0.0  # proposals below this are downgraded to no_action
+
     # --- Chaos harness (§6/§8 Phase 4) ---
     chaos_warmup_s: float = 120.0
     chaos_fault_window_s: float = 180.0

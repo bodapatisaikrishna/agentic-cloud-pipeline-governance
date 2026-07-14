@@ -277,3 +277,58 @@ auto-included in the final report.
   byte-identical plan; the `--plan-only` CLI prints it).
 - **Rationale:** The experiment runner (Phase 7) replays identical fault conditions across configs
   for paired statistics, so the seed→plan mapping must be exactly reproducible and inspectable.
+
+---
+
+## Phase 5 — Agents & LLM layer
+
+## D-031 — Statistical detection, LLM triage
+
+- **Decision:** `agents/detection.py` detects anomalies with a z-score + static thresholds
+  (task failed, freshness > SLA, cpu high, open fault, breaking drift); the LLM only
+  classifies/proposes. Detection never calls the LLM.
+- **Rationale:** Matches §5.6 ("LLM as bounded reasoning"); detection stays cheap, deterministic,
+  and testable, and the LLM spend is bounded to triage/proposal.
+
+## D-032 — `llm/mock.py` is the single deterministic response source
+
+- **Decision:** Under `MOCK_LLM=1`, `mock_propose(agent, snapshot)` inspects the snapshot (open
+  faults, schema_compat, freshness) and returns a scenario-appropriate `ProposedAction` per agent,
+  covering every agent × scenario, with fixed token counts. All tests use it; no API calls anywhere.
+- **Rationale:** Deterministic, offline, CI-safe verification of the whole agent loop; the live
+  path is exercised only by the opt-in smoke.
+
+## D-033 — Agents own the audit trail and the failure lifecycle
+
+- **Decision:** Each cycle writes a `telemetry.agent_actions` row (action, params, justification,
+  confidence, policy decision/reason, executed, outcome, llm_model, tokens_in/out). Monitoring
+  stamps `failure_events.detected_ts` on `raise_anomaly`; recovery stamps `resolved_ts` +
+  `resolution` on a successful remediating action — defining MTTR (§5.4) as
+  `resolved_ts − detected_ts`.
+- **Rationale:** Consolidates the audit trail (deferred from the Phase 3 executor) with the agents
+  that generate it, and closes the fault lifecycle the analysis pipeline needs.
+
+## D-034 — Live smoke shipped, not gated
+
+- **Decision:** The live Anthropic path (routing, temperature=0, budget guard, retry) is fully
+  implemented; `make agents-live-smoke` runs one `MOCK_LLM=0` cycle. It is never run in the
+  automated gate — the user runs it with their key.
+- **Rationale:** The gate must stay free and deterministic; a paid external call is the user's
+  explicit choice.
+
+## D-035 — Budget guard, in-run cache, routing, retry→no_action
+
+- **Decision:** Per-run caps (`LLM_MAX_CALLS_PER_RUN=60`, `LLM_MAX_TOKENS_PER_RUN=150000`) →
+  degrade to `no_action`; in-run cache keyed on `hash(agent, snapshot.cache_key_material())` (a
+  cache hit is not re-charged); routing monitoring→`MODEL_FAST`, others→`MODEL_REASONING`; retry
+  429/5xx ×3 then `no_action` + `llm_unavailable`. Invalid LLM output → `no_action` +
+  `agent_output_invalid`.
+- **Rationale:** §5.6 verbatim; keeps live cost bounded and failures graceful.
+
+## D-036 — Model IDs kept (already current-valid)
+
+- **Decision:** `MODEL_REASONING=claude-sonnet-4-6`, `MODEL_FAST=claude-haiku-4-5` — the spec's
+  §5.6 routing. Verified against the current model list: both are valid current IDs and both accept
+  `temperature=0`, so no change was needed.
+- **Rationale:** Honors the spec's explicit cost-conscious routing (Sonnet for reasoning, Haiku for
+  fast triage) while remaining valid for the live smoke.
