@@ -82,6 +82,16 @@ agents:  ## Run one agent cycle (all four agents), MOCK_LLM=1
 agents-live-smoke:  ## One live LLM cycle (MOCK_LLM=0) — needs ANTHROPIC_API_KEY; you run this
 	MOCK_LLM=0 $(UV) python -m acde.agents.run --experiment-run $${EXPERIMENT_RUN:-live-smoke}
 
+## --- Orchestrator (Phase 6) ---
+
+orchestrator:  ## Run the control loop (CONFIG, DURATION, EXPERIMENT_RUN)
+	MOCK_LLM=1 $(UV) python -m acde.orchestrator.loop \
+	  --config $${CONFIG:-full} --experiment-run $${EXPERIMENT_RUN:-adhoc} --duration $${DURATION:-1200}
+
+soak:  ## Inject two overlapping chaos scenarios and run the loop (DURATION seconds)
+	MOCK_LLM=1 $(UV) python -m acde.orchestrator.soak \
+	  --config $${CONFIG:-full} --experiment-run $${EXPERIMENT_RUN:-soak} --duration $${DURATION:-1200}
+
 baseline:  ## Phase 7: static-orchestration baseline
 	@echo "'baseline' is implemented in Phase 7 (baseline + runner)"; exit 1
 

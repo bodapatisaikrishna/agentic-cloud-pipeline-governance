@@ -332,3 +332,52 @@ auto-included in the final report.
   `temperature=0`, so no change was needed.
 - **Rationale:** Honors the spec's explicit cost-conscious routing (Sonnet for reasoning, Haiku for
   fast triage) while remaining valid for the live smoke.
+
+---
+
+## Phase 6 — Control-loop orchestrator
+
+## D-037 — Per-target Postgres advisory locks
+
+- **Decision:** `orchestrator/locks.py::target_advisory_lock` holds one pooled connection and runs a
+  non-blocking `pg_try_advisory_lock(hashtext(target))`; on failure the agent skips that target this
+  tick. Real cross-process locks, released on unlock/disconnect.
+- **Alternatives:** In-process `asyncio.Lock` per target (single-process only); `pg_advisory_xact_lock`
+  (would need the whole act in one transaction).
+- **Rationale:** The spec calls for Postgres advisory locks; a held connection gives genuine
+  cross-process mutual exclusion so two agents never act on the same target concurrently, and it
+  survives a future multi-process runner.
+
+## D-038 — Conflict rule via act order + shared lock
+
+- **Decision:** Reactive agents run `schema → recovery → optimization`; contending on the same
+  target's advisory lock, recovery (earlier) wins and optimization (later) skips — implementing
+  "recovery outranks optimization on the same target" with no special case. Distinct targets run
+  independently.
+- **Rationale:** Simple, correct, and emergent from the locking primitive rather than bespoke
+  priority bookkeeping.
+
+## D-039 — Event-driven reactive scheduling
+
+- **Decision:** Monitoring runs every `monitoring_interval_s` (detect + `detected_ts`); the reactive
+  agents run in a tick only when open `failure_events` exist. `no_action` proposals are not executed
+  or logged (no no-op `agent_actions` rows).
+- **Rationale:** Bounds LLM spend to ticks that have something to react to and keeps the audit trail
+  meaningful; matches §5.6 "others event-driven off anomalies".
+
+## D-040 — Ablation via enabled-agent sets
+
+- **Decision:** `orchestrator/configs.py` maps config → enabled agents. `baseline` runs no agents;
+  every single-agent config also enables `monitoring` (the detector) so MTTR stays measurable;
+  `full` enables all four. Phase 7's experiment configs build on this.
+- **Rationale:** One switch drives the whole ablation matrix; keeping monitoring on preserves the
+  `detected_ts` needed for MTTR in single-agent runs.
+
+## D-041 — Sync agents under an async loop; stateless ⇒ resumable
+
+- **Decision:** Agent cycles run via `asyncio.to_thread` (the db/gate/executor stack is sync). The
+  loop keeps no durable state — everything is in Postgres and advisory locks are session-scoped — so
+  SIGTERM/kill then restart resumes cleanly. A failing tick is logged and swallowed (the loop never
+  dies).
+- **Rationale:** Reuses the Phase 5 sync agents unchanged, and makes the orchestrator restart-safe,
+  which the experiment runner (Phase 7) relies on.

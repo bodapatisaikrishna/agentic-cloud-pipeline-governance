@@ -3,6 +3,25 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.7.0] — 2026-07-14 — Phase 6: control-loop orchestrator
+
+### Added
+- **`src/acde/orchestrator/`**:
+  - `loop.py` — `ControlLoop`: async scheduler running monitoring every `monitoring_interval_s`
+    and the reactive agents (`schema → recovery → optimization`) only when open faults exist; each
+    action guarded by a per-target advisory lock; SIGTERM-aware graceful shutdown; agents run via
+    `asyncio.to_thread`.
+  - `locks.py` — `target_advisory_lock` (non-blocking `pg_try_advisory_lock` over a held pooled
+    connection) so no two agents act on the same target concurrently; recovery outranks optimization
+    by act order + shared lock.
+  - `configs.py` — ablation map (`baseline`, `monitor_only`, `*_only`, `full`).
+  - `soak.py` — inject two overlapping chaos scenarios then run the loop.
+- **Config**: `monitoring_interval_s`, `soak_duration_s`. **Makefile**: `orchestrator`, `soak`.
+- **Tests**: +30 unit (configs, advisory locks, loop scheduling/lock decisions/ablation ordering);
+  integration `test_orchestrator_e2e.py` (short soak closes the lifecycle across agents; ablation
+  gating; kill-and-restart resumes). 243 unit tests, 94% coverage.
+- **Docs**: DEVIATIONS D-037…D-041.
+
 ## [0.6.0] — 2026-07-14 — Phase 5: agents & LLM layer
 
 ### Added

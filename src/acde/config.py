@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     cpu_high_pct: float = 80.0  # resource-contention detection threshold
     agent_min_confidence: float = 0.0  # proposals below this are downgraded to no_action
 
+    # --- Orchestrator (§8 Phase 6) ---
+    monitoring_interval_s: float = 15.0  # control-loop tick period
+    soak_duration_s: float = 1200.0  # 20-min soak (manual checklist)
+
     # --- Chaos harness (§6/§8 Phase 4) ---
     chaos_warmup_s: float = 120.0
     chaos_fault_window_s: float = 180.0

@@ -113,6 +113,22 @@ built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` with `ANTHROPIC_
 one real Anthropic call, routed monitoring→Haiku / others→Sonnet, bounded by the 60-call /
 150k-token per-run caps.
 
+### Orchestrator (control loop)
+
+`acde.orchestrator.loop.ControlLoop` runs the agents continuously: monitoring every
+`MONITORING_INTERVAL_S`, the reactive agents (schema → recovery → optimization) only when faults
+are open. A **Postgres advisory lock per target** guarantees no two agents act on the same target
+at once, and the act order makes **recovery outrank optimization** on a shared target. Which agents
+run is set by the ablation config (`baseline`, `monitor_only`, `recovery_only`, …, `full`).
+
+```bash
+CONFIG=full DURATION=1200 EXPERIMENT_RUN=demo make orchestrator   # run the loop
+CONFIG=full DURATION=1200 EXPERIMENT_RUN=soak make soak            # inject 2 faults + run the loop
+```
+
+The loop keeps no durable state (everything is in Postgres), so **killing and restarting it resumes
+cleanly** — the basis for the resumable experiment runner in Phase 7.
+
 ### Chaos harness
 
 Four seeded failure scenarios (§6) degrade the running pipelines and record
@@ -162,7 +178,7 @@ Key entry points — full tree in the project spec:
 | 3 | Policy plane (OPA) & executor | ✅ verified |
 | 4 | Failure-injection harness | ✅ verified |
 | 5 | Agents & LLM layer | ✅ verified |
-| 6 | Control-loop orchestrator | ⬜ |
+| 6 | Control-loop orchestrator | ✅ verified |
 | 7 | Baseline & experiment runner | ⬜ |
 | 8 | Analysis, figures, report | ⬜ |
 | 9 | Hardening & reproducibility package | ⬜ |
