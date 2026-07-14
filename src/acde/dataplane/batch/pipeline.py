@@ -21,14 +21,26 @@ class SchemaValidationError(ValueError):
     """Raised when a source frame violates its expected schema (breaking drift)."""
 
 
-def validate(df: pd.DataFrame, required_columns: list[str], non_null: list[str]) -> None:
-    """Assert required columns exist and key columns are non-null. Raises on violation."""
+def validate(
+    df: pd.DataFrame,
+    required_columns: list[str],
+    non_null: list[str],
+    numeric: list[str] | None = None,
+) -> None:
+    """Assert required columns exist, key columns are non-null, and numeric columns are numeric.
+
+    The ``numeric`` check makes a retyped column (schema drift) a detectable breaking change,
+    not just a dropped one.
+    """
     missing = [c for c in required_columns if c not in df.columns]
     if missing:
         raise SchemaValidationError(f"missing columns: {missing}")
     for col in non_null:
         if df[col].isna().any():
             raise SchemaValidationError(f"nulls in non-null column: {col}")
+    for col in numeric or []:
+        if col in df.columns and not pd.api.types.is_numeric_dtype(df[col]):
+            raise SchemaValidationError(f"non-numeric values in numeric column: {col}")
     log.info("batch_validated", extra={"rows": len(df), "columns": list(df.columns)})
 
 
@@ -104,6 +116,7 @@ def run_tpcds(
             "ss_net_paid",
         ],
         non_null=["ss_sold_date", "ss_net_paid"],
+        numeric=["ss_quantity", "ss_net_paid"],
     )
     daily = transform_daily_revenue(df)
     return materialize(

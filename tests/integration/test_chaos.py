@@ -6,9 +6,6 @@ destructive to the source CSV, so this module restores it from the seeded genera
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pandas as pd
 import pytest
 
 from acde import db
@@ -46,11 +43,9 @@ def test_schema_drift_corrupts_source_and_records_event():
     _clear()
     FaultInjector(experiment_run=RUN).inject("schema_drift", run_seed("full", "schema_drift", 0))
     assert _event_count("schema_drift") == 1
-    # the source CSV now fails the batch validator
-    path = Path(get_settings().data_dir) / "tpcds" / "store_sales.csv"
-    df = pd.read_csv(path)
+    # the drifted source now breaks the real batch pipeline (drop -> missing, retype -> non-numeric)
     with pytest.raises(pipeline.SchemaValidationError):
-        pipeline.validate(df, ["ss_sold_date", "ss_net_paid"], ["ss_net_paid"])
+        pipeline.run_tpcds(get_settings().data_dir, experiment_run=RUN)
 
 
 def test_ingress_burst_lands_events_and_records():

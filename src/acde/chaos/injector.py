@@ -28,7 +28,9 @@ from acde.logging import get_logger
 
 log = get_logger("chaos.injector")
 
-DRIFT_COLUMNS = ("ss_net_paid", "ss_quantity", "ss_sales_price")
+# Columns the tpcds batch pipeline validates (required + numeric), so a drift on any of them
+# is a genuine breaking change the validator catches (drop -> missing, retype -> non-numeric).
+DRIFT_COLUMNS = ("ss_net_paid", "ss_quantity")
 
 
 @dataclasses.dataclass(frozen=True)

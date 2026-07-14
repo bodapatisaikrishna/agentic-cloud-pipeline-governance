@@ -59,11 +59,24 @@ class TestCorruptFrame:
         out = corrupt_frame(self._df(), "retype", "ss_net_paid")
         assert out["ss_net_paid"].iloc[0] == "CORRUPT"
 
-    def test_corrupted_frame_fails_validate(self):
-        # dropping a required non-null column must make the batch validator reject it
+    def test_drop_fails_validate_as_missing_column(self):
         out = corrupt_frame(self._df(), "drop", "ss_net_paid")
-        with pytest.raises(pipeline.SchemaValidationError):
-            pipeline.validate(out, ["ss_sold_date", "ss_net_paid"], ["ss_net_paid"])
+        with pytest.raises(pipeline.SchemaValidationError, match="missing"):
+            pipeline.validate(
+                out, ["ss_sold_date", "ss_net_paid"], ["ss_net_paid"], numeric=["ss_net_paid"]
+            )
+
+    def test_retype_fails_validate_as_non_numeric(self):
+        out = corrupt_frame(self._df(), "retype", "ss_net_paid")
+        with pytest.raises(pipeline.SchemaValidationError, match="non-numeric"):
+            pipeline.validate(
+                out, ["ss_sold_date", "ss_net_paid"], ["ss_net_paid"], numeric=["ss_net_paid"]
+            )
+
+    def test_drift_columns_are_all_validated_numeric(self):
+        from acde.chaos.injector import DRIFT_COLUMNS
+
+        assert set(DRIFT_COLUMNS) <= {"ss_net_paid", "ss_quantity"}
 
 
 class TestBuildDelayedRecords:
