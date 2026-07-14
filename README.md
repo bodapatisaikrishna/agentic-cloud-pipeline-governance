@@ -141,7 +141,7 @@ Key entry points — full tree in the project spec:
 | 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
 | 2 | Telemetry, cost ledger, freshness | ✅ verified |
 | 3 | Policy plane (OPA) & executor | ✅ verified |
-| 4 | Failure-injection harness | 🟡 code + unit-verified (live gate deferred) |
+| 4 | Failure-injection harness | ✅ verified |
 | 5 | Agents & LLM layer | ⬜ |
 | 6 | Control-loop orchestrator | ⬜ |
 | 7 | Baseline & experiment runner | ⬜ |

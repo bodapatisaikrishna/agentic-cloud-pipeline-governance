@@ -21,10 +21,15 @@ per phase, `v1.0.0` at Phase 9.
   (each scenario writes a `failure_events` row + visible degradation). 188 unit tests, 97% coverage.
 - **Docs**: DEVIATIONS D-026…D-030.
 
-### Note
-Live integration gate deferred: the local Docker context was switched to colima (another project),
-so the acde stack was down at gate time. Unit suite + `--plan-only` determinism proof pass; the
-chaos integration tests run once the acde stack is back on Docker Desktop.
+### Fixed
+- `schema_drift` is now a validator-detectable breaking change: `pipeline.validate` gained a
+  numeric-dtype check, `DRIFT_COLUMNS` is restricted to the pipeline's validated numeric columns,
+  and `run_tpcds` declares them numeric — so both drift ops (drop → missing, retype → non-numeric)
+  fail validation. (Surfaced by the live chaos integration gate.)
+
+### Verified
+Live gate (desktop-linux context): lint clean; 190 unit tests; `opa test` 20/20; 14 integration
+tests incl. all four chaos scenarios writing `failure_events`.
 
 ## [0.4.0] — 2026-07-13 — Phase 3: policy plane & executor
 
