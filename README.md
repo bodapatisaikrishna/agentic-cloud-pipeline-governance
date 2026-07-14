@@ -129,6 +129,23 @@ CONFIG=full DURATION=1200 EXPERIMENT_RUN=soak make soak            # inject 2 fa
 The loop keeps no durable state (everything is in Postgres), so **killing and restarting it resumes
 cleanly** — the basis for the resumable experiment runner in Phase 7.
 
+### Experiments
+
+The runner sweeps the config × scenario × seed matrix, and for each run injects the seeded fault,
+lets the agents (or, for `baseline`, the simulated human) respond, and harvests the §5.4 metrics
+into `results/raw.csv` (one row per metric) with a `results/manifest.jsonl` checkpoint.
+
+```bash
+make experiment-smoke   # 2 runs (the gate)          make experiment-quick   # 72 runs, ~15–25 min
+make experiment-paper   # 320 runs (the publication run; launch overnight)
+```
+
+Every run is keyed by `experiment_run = "{config}__{scenario}__r{replicate}"` and isolated; the
+runner **skips runs already in the manifest**, so a killed matrix resumes where it left off. The
+seed policy `sha256("{config}:{scenario}:{replicate}") % 2³²` gives each cell reproducible fault
+conditions. First reproduced signal (smoke, `upstream_delay`): **baseline MTTR ≈ 312 s** (human) vs
+**full MTTR ≈ 0.2 s** (recovery agent). Phase 8 turns `raw.csv` into the paper's figures.
+
 ### Chaos harness
 
 Four seeded failure scenarios (§6) degrade the running pipelines and record
@@ -179,7 +196,7 @@ Key entry points — full tree in the project spec:
 | 4 | Failure-injection harness | ✅ verified |
 | 5 | Agents & LLM layer | ✅ verified |
 | 6 | Control-loop orchestrator | ✅ verified |
-| 7 | Baseline & experiment runner | ⬜ |
+| 7 | Baseline & experiment runner | ✅ verified |
 | 8 | Analysis, figures, report | ⬜ |
 | 9 | Hardening & reproducibility package | ⬜ |
 

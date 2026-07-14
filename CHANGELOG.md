@@ -3,6 +3,30 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.8.0] — 2026-07-14 — Phase 7: baseline & resumable experiment runner
+
+### Added
+- **`src/acde/experiments/`**:
+  - `configs.py` — profile matrices: `quick` (6×4×3 = 72 runs), `paper` (baseline/full N=20 +
+    4 ablations N=10 = 320), `smoke` (2).
+  - `scenarios.py` — per-profile `RunTimings`.
+  - `baseline.py` — `resolve_via_human`: fixed-monitor detection + seeded human resolution of every
+    open fault (back-fills `failure_events.resolved_ts`).
+  - `runner.py` — `run_one` (reset → warmup → inject → control loop / baseline → fallback human →
+    cost → harvest → CSV + manifest) and `run_profile` (resumable via `manifest.jsonl`); metrics
+    `mttr_s`, `cost_units`, `manual_interventions`, `llm_tokens`, `wall_clock_s`.
+- **Agents**: schema + optimization now stamp `resolved_ts` for their fault types (MTTR closure).
+- **Config**: `results_dir`. **Makefile**: `experiment-smoke` / `experiment-quick` /
+  `experiment-paper`.
+- **Tests**: +40 unit (profiles, runner I/O + harvest + resumability, baseline, agent lifecycle);
+  integration `test_experiment_runner.py` (smoke profile writes `raw.csv` + manifest, resumable,
+  agents recover faster than the human baseline). 263 unit tests, 94% coverage.
+- **Docs**: DEVIATIONS D-042…D-046.
+
+### Result
+First real signal reproduced: on `upstream_delay`, **baseline MTTR ≈ 312 s** (human) vs
+**full MTTR ≈ 0.2 s** (recovery agent) — the agentic control plane recovers ~1500× faster.
+
 ## [0.7.0] — 2026-07-14 — Phase 6: control-loop orchestrator
 
 ### Added

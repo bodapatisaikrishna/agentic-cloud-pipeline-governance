@@ -381,3 +381,48 @@ auto-included in the final report.
   dies).
 - **Rationale:** Reuses the Phase 5 sync agents unchanged, and makes the orchestrator restart-safe,
   which the experiment runner (Phase 7) relies on.
+
+---
+
+## Phase 7 — Baseline & experiment runner
+
+## D-042 — Profile-scaled per-run timings
+
+- **Decision:** `paper` uses the §6 timeline (120s warmup / 180s fault / 120s recovery); `quick`
+  uses short seconds-scale timings so 72 runs finish in ~15–25 min; `smoke` (2 runs) is the automated
+  gate.
+- **Alternatives:** Use the full §6 timeline for `quick` (≈8 h).
+- **Rationale:** Keeps the quick smoke usable interactively and the CI/integration gate fast, while
+  `paper` preserves the real timeline for the publication run. Disclosed vs the spec's "~2 h quick".
+
+## D-043 — Per-run isolation + manifest resumability
+
+- **Decision:** `experiment_run = f"{config}__{scenario}__r{replicate}"`; `_reset_run` deletes that
+  run's rows before it starts; each completed run appends to `results/manifest.jsonl`, and
+  `run_profile` skips any run_id already there.
+- **Rationale:** Clean per-run isolation keyed strictly by `experiment_run` (§8 Phase 7) and a
+  resumable matrix — kill mid-run, re-run, finished cells are skipped.
+
+## D-044 — Baseline = fixed resources + human-resolved failures
+
+- **Decision:** `baseline` runs no agents; `experiments/baseline.resolve_via_human` stamps
+  `detected_ts` (fixed monitor) and resolves every fault through the seeded `HumanSimulator`
+  (lognormal 360 s). Agent configs also call it as a fallback for anything unresolved at run end.
+- **Rationale:** Matches §6's baseline (static + on-call human), and makes MTTR reflect human latency
+  exactly where the agents don't help — the paired-comparison signal (verified: baseline MTTR ≈312 s
+  vs full ≈0.2 s on upstream_delay).
+
+## D-045 — Lifecycle-closing extended to schema + optimization agents
+
+- **Decision:** Recovery already stamped `resolved_ts`; schema (quarantine/block/apply_mapping) and
+  optimization (scale/adjust/reprioritize) now do too, scoped to their fault types (schema_drift;
+  ingress_burst/resource_contention).
+- **Rationale:** Makes MTTR well-defined for every scenario under its owning agent, so the ablation
+  isolates each agent's contribution.
+
+## D-046 — Cost harvested per run; long-format CSV
+
+- **Decision:** Per run the runner samples `resource_usage` and runs `compute_cost_windows`;
+  `raw.csv` rows are `(run_id, config, scenario, replicate, seed, metric, value)` — one row per
+  metric (`mttr_s`, `cost_units`, `manual_interventions`, `llm_tokens`, `wall_clock_s`).
+- **Rationale:** Reuses the Phase 2 cost pipeline and gives the Phase 8 analysis a tidy long table.

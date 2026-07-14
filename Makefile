@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents baseline experiment-quick experiment-paper analyze report \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper analyze report \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -92,11 +92,14 @@ soak:  ## Inject two overlapping chaos scenarios and run the loop (DURATION seco
 	MOCK_LLM=1 $(UV) python -m acde.orchestrator.soak \
 	  --config $${CONFIG:-full} --experiment-run $${EXPERIMENT_RUN:-soak} --duration $${DURATION:-1200}
 
-baseline:  ## Phase 7: static-orchestration baseline
-	@echo "'baseline' is implemented in Phase 7 (baseline + runner)"; exit 1
+experiment-smoke:  ## Tiny 2-run profile (baseline+full) — used by the integration gate
+	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile smoke
 
-experiment-quick experiment-paper:  ## Phase 7: experiment matrix
-	@echo "'$@' is implemented in Phase 7 (experiment runner)"; exit 1
+experiment-quick:  ## Quick matrix: 6 configs x 4 scenarios x N=3 = 72 runs (resumable)
+	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile quick
+
+experiment-paper:  ## Paper matrix: baseline/full N=20 + 4 ablations N=10 = 320 runs (resumable)
+	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile paper
 
 analyze report:  ## Phase 8: statistics + figures + report
 	@echo "'$@' is implemented in Phase 8 (analysis)"; exit 1

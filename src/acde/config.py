@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     monitoring_interval_s: float = 15.0  # control-loop tick period
     soak_duration_s: float = 1200.0  # 20-min soak (manual checklist)
 
+    # --- Experiments (§8 Phase 7) ---
+    results_dir: str = "results"  # git-ignored raw.csv + manifest.jsonl land here
+
     # --- Chaos harness (§6/§8 Phase 4) ---
     chaos_warmup_s: float = 120.0
     chaos_fault_window_s: float = 180.0
