@@ -234,3 +234,46 @@ auto-included in the final report.
   control-plane and DB side effects are unit-tested via the dispatch map.
 - **Rationale:** Keeps the executor a pure "apply the decision" component; the agents own the
   audit trail so token/confidence/justification live in one place next phase.
+
+---
+
+## Phase 4 — Failure-injection harness
+
+## D-026 — resource_contention uses a host CPU stressor by default
+
+- **Decision:** `chaos/stressor.py` runs N seeded multiprocessing busy-loops on the host for the
+  fault window; a stress-ng container is opt-in via `STRESS_USE_CONTAINER=1` + `stress_image`.
+- **Alternatives:** Always run a stress-ng container (spec's literal wording).
+- **Rationale:** Self-contained and deterministic (no external image pull), so the gate is
+  reliable; host CPU pressure still degrades the co-located Docker containers (they share the VM's
+  CPU). The container path remains available for a faithful stress-ng run.
+
+## D-027 — The injector self-publishes the degraded/burst stream
+
+- **Decision:** `upstream_delay` and `ingress_burst` publish their (dropped+delayed / surged)
+  streams directly via `JsonProducer`, rather than only setting a flag a separate producer honors.
+- **Rationale:** A `make chaos-<scenario>` visibly degrades freshness on its own, with no
+  separately-running producer; the record-building is pure and unit-tested.
+
+## D-028 — schema_drift mutates the batch source CSV
+
+- **Decision:** Drop or retype a seeded column in `DATA_DIR/tpcds/store_sales.csv` so the next
+  DAG run's `validate()` rejects it; `make seed` regenerates the clean source.
+- **Alternatives:** Publish a drifting schema to a registry.
+- **Rationale:** Directly exercises the Phase 1 validator and the schema agent's future path;
+  the corruption is deterministic (`corrupt_frame`) and trivially reversible.
+
+## D-029 — The injector records injection only
+
+- **Decision:** `FaultInjector` writes `failure_events` with `injected_ts`/`fault_type`/`scenario`;
+  `detected_ts`/`resolved_ts` stay NULL until the monitoring/recovery agents fill them (Phase 5).
+- **Rationale:** Phase 4 is fault *creation*; the full lifecycle (detection latency, MTTR) belongs
+  to the agents that observe and remediate.
+
+## D-030 — Fault timeline is a pure seeded plan
+
+- **Decision:** `plan_timeline(scenario, seed)` is a pure function returning a `FaultPlan`; all I/O
+  follows the plan. Determinism is guaranteed and unit-tested at the plan level (same seed ⇒
+  byte-identical plan; the `--plan-only` CLI prints it).
+- **Rationale:** The experiment runner (Phase 7) replays identical fault conditions across configs
+  for paired statistics, so the seed→plan mapping must be exactly reproducible and inspectable.

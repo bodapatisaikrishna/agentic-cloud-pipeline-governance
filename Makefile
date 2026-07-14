@@ -73,8 +73,8 @@ opa-test:  ## Run the OPA Rego policy test suites (requires the stack up)
 
 ## --- Future phases (stable interface, implemented later) ---
 
-chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Phase 4
-	@echo "'$@' is implemented in Phase 4 (failure injection)"; exit 1
+chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst:  ## Inject a seeded fault
+	MOCK_LLM=1 $(UV) python -m acde.chaos.injector --scenario $(subst chaos-,,$@)
 
 agents:  ## Phase 5/6: run the agent control loop
 	@echo "'agents' is implemented in Phases 5-6 (agents + orchestrator)"; exit 1

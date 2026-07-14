@@ -94,6 +94,25 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
   lognormal(360 s, σ0.5) delay; run it with
   `python -m acde.human.simulator --duration 600 --experiment-run <run>`.
 
+### Chaos harness
+
+Four seeded failure scenarios (§6) degrade the running pipelines and record
+`telemetry.failure_events`:
+
+```bash
+make chaos-schema_drift        # corrupt the batch source → next DAG run fails validation
+make chaos-upstream_delay      # publish a dropped + delayed stream (freshness stressor)
+make chaos-resource_contention # CPU contention for the fault window (host stressor by default)
+make chaos-ingress_burst       # ×5–10 rate surge to the stream
+# inspect the deterministic plan without side effects:
+python -m acde.chaos.injector --scenario ingress_burst --seed 42 --plan-only
+```
+
+The fault plan is a **pure seeded function** — the same seed always yields the same plan
+(`run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`), so the experiment runner can
+replay identical fault conditions across configs. `make seed` restores the source CSV after a
+`schema_drift`.
+
 ## Cost model (disclosed)
 
 The paper does not define its cost model. Ours (see DEVIATIONS.md D-006):
@@ -122,7 +141,7 @@ Key entry points — full tree in the project spec:
 | 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
 | 2 | Telemetry, cost ledger, freshness | ✅ verified |
 | 3 | Policy plane (OPA) & executor | ✅ verified |
-| 4 | Failure-injection harness | ⬜ |
+| 4 | Failure-injection harness | 🟡 code + unit-verified (live gate deferred) |
 | 5 | Agents & LLM layer | ⬜ |
 | 6 | Control-loop orchestrator | ⬜ |
 | 7 | Baseline & experiment runner | ⬜ |

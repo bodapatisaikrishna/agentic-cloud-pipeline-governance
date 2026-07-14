@@ -3,6 +3,29 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.5.0] — 2026-07-13 — Phase 4: failure-injection harness
+
+### Added
+- **`src/acde/chaos/`** package:
+  - `scenarios.py` — `run_seed(config, scenario, replicate)` (`sha256 % 2**32`) and the four §6
+    scenarios (`schema_drift`, `upstream_delay`, `resource_contention`, `ingress_burst`) with
+    warmup→fault→recovery timelines bounded by a hard cap.
+  - `injector.py` — pure, deterministic `plan_timeline(scenario, seed) -> FaultPlan`;
+    `FaultInjector.inject` writes `telemetry.failure_events` and applies the degradation
+    (CSV corruption / self-published degraded+burst streams / CPU stressor). CLI with
+    `--plan-only` for inspecting the seeded plan.
+  - `stressor.py` — host multiprocessing CPU stress (default) or opt-in stress-ng container.
+- **Config**: chaos timings + stress knobs. **Makefile**: the four `chaos-<scenario>` targets.
+- **Tests**: +33 unit incl. the determinism headline (`plan_timeline` same-seed ⇒ identical,
+  different-seed ⇒ different) and `corrupt_frame` → `validate` failure; integration `test_chaos.py`
+  (each scenario writes a `failure_events` row + visible degradation). 188 unit tests, 97% coverage.
+- **Docs**: DEVIATIONS D-026…D-030.
+
+### Note
+Live integration gate deferred: the local Docker context was switched to colima (another project),
+so the acde stack was down at gate time. Unit suite + `--plan-only` determinism proof pass; the
+chaos integration tests run once the acde stack is back on Docker Desktop.
+
 ## [0.4.0] — 2026-07-13 — Phase 3: policy plane & executor
 
 ### Added

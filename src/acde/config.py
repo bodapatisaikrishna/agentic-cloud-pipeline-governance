@@ -73,6 +73,19 @@ class Settings(BaseSettings):
     human_latency_median_s: float = 360.0
     human_latency_sigma: float = 0.5
 
+    # --- Chaos harness (§6/§8 Phase 4) ---
+    chaos_warmup_s: float = 120.0
+    chaos_fault_window_s: float = 180.0
+    chaos_recovery_s: float = 120.0
+    chaos_hard_cap_s: float = 720.0
+    chaos_burst_min: float = 5.0
+    chaos_burst_max: float = 10.0
+    chaos_delay_ms_max: int = 5000
+    chaos_drop_pct_max: float = 0.5
+    chaos_cpu_workers_max: int = 4
+    stress_use_container: bool = False
+    stress_image: str = "ghcr.io/colinianking/stress-ng:latest"
+
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
     telemetry_interval_s: float = 5.0  # collector sampling period
