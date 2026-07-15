@@ -11,8 +11,10 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from acde import db
 from acde.config import get_settings
@@ -21,6 +23,17 @@ from acde.dataplane.partitions import PartitionVersionManager
 from acde.logging import get_logger
 
 log = get_logger("policy.executor")
+
+
+def _airflow_retry() -> Any:
+    """Bounded retry for transient Airflow-REST failures (mirrors ``db._db_retry``, D-052)."""
+    s = get_settings()
+    return retry(
+        retry=retry_if_exception_type(httpx.HTTPError),
+        stop=stop_after_attempt(s.executor_retry_attempts),
+        wait=wait_exponential(multiplier=s.executor_retry_backoff_s, max=5),
+        reraise=True,
+    )
 
 
 @dataclass
@@ -55,8 +68,13 @@ def _airflow_client() -> httpx.Client:  # pragma: no cover - network
 
 def _trigger_dag(dag_id: str) -> str:  # pragma: no cover - network
     run_id = f"recovery__{int(time.time() * 1000)}"
-    with _airflow_client() as c:
-        c.post(f"/dags/{dag_id}/dagRuns", json={"dag_run_id": run_id}).raise_for_status()
+
+    @_airflow_retry()
+    def _run() -> None:
+        with _airflow_client() as c:
+            c.post(f"/dags/{dag_id}/dagRuns", json={"dag_run_id": run_id}).raise_for_status()
+
+    _run()
     return run_id
 
 
@@ -64,13 +82,22 @@ def _clear_task_instances(dag_id: str, task_ids: list[str]) -> None:  # pragma: 
     body: dict = {"dry_run": False, "reset_dag_runs": True, "only_failed": True}
     if task_ids:
         body["task_ids"] = task_ids
-    with _airflow_client() as c:
-        c.post(f"/dags/{dag_id}/clearTaskInstances", json=body).raise_for_status()
+
+    @_airflow_retry()
+    def _run() -> None:
+        with _airflow_client() as c:
+            c.post(f"/dags/{dag_id}/clearTaskInstances", json=body).raise_for_status()
+
+    _run()
 
 
 def _patch_pool(pool: str, slots: int) -> None:  # pragma: no cover - network
-    with _airflow_client() as c:
-        c.patch(f"/pools/{pool}", json={"name": pool, "slots": slots}).raise_for_status()
+    @_airflow_retry()
+    def _run() -> None:
+        with _airflow_client() as c:
+            c.patch(f"/pools/{pool}", json={"name": pool, "slots": slots}).raise_for_status()
+
+    _run()
 
 
 # --- Per-action handlers --------------------------------------------------------------------
@@ -188,8 +215,24 @@ def execute(
     executed = False
     if decision.allowed:
         handler = _HANDLERS.get(action.action_type, _noop)
-        parts.append(handler(action, experiment_run))
-        executed = True
+        try:
+            parts.append(handler(action, experiment_run))
+            executed = True
+        except httpx.HTTPError as exc:
+            # Infra (Airflow) unreachable after bounded retry: degrade to escalate, never crash.
+            _escalate(action, decision, experiment_run)
+            log.warning(
+                "action_execution_failed",
+                extra={
+                    "action_id": str(action.action_id),
+                    "action_type": action.action_type,
+                    "error": str(exc),
+                    "experiment_run": experiment_run,
+                },
+            )
+            return ExecutionOutcome(
+                executed=False, outcome=f"execution_failed: {exc}; escalated_to_human"
+            )
     if decision.escalate:
         _escalate(action, decision, experiment_run)
         parts.append("escalated_to_human")

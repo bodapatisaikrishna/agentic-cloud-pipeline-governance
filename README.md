@@ -9,25 +9,49 @@ static-orchestration baseline with a deterministic failure-injection harness, a 
 experiment matrix, and a statistical analysis pipeline (paired tests, corrections, effect
 sizes, CIs).
 
-## Architecture (Phase 0 slice)
+## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph stack [docker compose]
-    PG[(Postgres 16
-telemetry / warehouse / control)]
-    OPA[OPA 0.68
-policy engine]
+  subgraph dataplane [Data plane]
+    AF[Airflow 2.10
+tpcds_ingest DAG]
+    RP[Redpanda
+stream + workers]
   end
-  CFG[Settings
-.env] --> APP[acde package
-contracts · db · logging]
-  APP --> PG
-  APP -. Phase 3 .-> OPA
+  subgraph tel [Telemetry]
+    COL[collector · cost · freshness]
+  end
+  subgraph control [Control loop · orchestrator]
+    MON[monitoring] --> AG
+    AG[optimization · schema · recovery agents]
+    LLM[LLM / MOCK_LLM]
+  end
+  subgraph policy [Policy plane]
+    GATE[gate.build_context] --> OPA[OPA 0.68
+4 Rego policies]
+    EXE[executor
+side effects · retry · escalate]
+  end
+  CHAOS[chaos harness
+seeded faults] -.-> AF & RP
+  AF & RP --> COL --> PG[(Postgres
+telemetry / warehouse / control)]
+  PG --> MON
+  AG <-->|propose| LLM
+  AG -->|ProposedAction| GATE
+  OPA -->|PolicyDecision| EXE
+  EXE -->|allowed| AF & RP & PG
+  EXE -->|escalate / fail-safe| HUM[human simulator]
+  PG --> RUN[experiment runner
+config × scenario × seed] --> CSV[results/raw.csv]
+  CSV --> AN[analysis
+stats · figures · report] --> MD[results/results.md]
 ```
 
-Later phases add Airflow 2.10 + Redpanda (data plane), telemetry collectors, the agent
-control loop, the chaos harness, and the experiment runner. See the phase table below.
+Agents only ever emit a pydantic `ProposedAction`; the OPA gate decides; the executor is the sole
+component with side effects (and it retries then escalates rather than crash — see **Fault
+tolerance**). Everything durable lives in Postgres, so the loop is stateless and resumable.
 
 ## Quickstart
 
@@ -90,6 +114,8 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
   `schema_compat`, `rate_limit`, aggregated by `main.rego`. Run their tests with `make opa-test`
   (20 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
 - The gate **fails safe** — if OPA is unreachable it escalates rather than allowing.
+- The executor **retries then escalates** — an Airflow-REST side effect that fails is retried with
+  bounded backoff and, if it still fails, degrades to a human escalation (see **Fault tolerance**).
 - The human simulator (`acde.human.simulator`) resolves escalations after a seeded
   lognormal(360 s, σ0.5) delay; run it with
   `python -m acde.human.simulator --duration 600 --experiment-run <run>`.
@@ -198,6 +224,21 @@ Key entry points — full tree in the project spec:
 - `infra/opa/policies/` — Rego policies (Phase 3)
 - `tests/unit` (no docker) · `tests/integration` (needs `make up`)
 - `DEVIATIONS.md` — every assumption vs. the paper (research artifact)
+- `DATA_LICENSES.md` — provenance & licensing of the TPC-DS and NYC TLC data sources
+
+## Fault tolerance
+
+Operational agents must survive a dependency outage, not crash. ACDE degrades on three failure modes
+(proven by unit tests; `tests/integration/test_failure_modes.py` also stops the real OPA container):
+
+| Dependency down | Behaviour | Where |
+|---|---|---|
+| **OPA** unreachable | gate fails safe → **escalate** (never allow) | `policy/gate.py` |
+| **Airflow** unreachable | executor **retries with bounded backoff**, then escalates; returns an `execution_failed` outcome instead of raising | `policy/executor.py` (D-052) |
+| **Postgres** transient blip | `acde.db` **retries** the statement (tenacity) and recovers | `db.py` |
+
+In every case the agent cycle completes and, where relevant, a `telemetry.manual_interventions` row
+hands the incident to the (simulated) human — the loop stays alive and resumable.
 
 ## Phase status
 
@@ -212,10 +253,31 @@ Key entry points — full tree in the project spec:
 | 6 | Control-loop orchestrator | ✅ verified |
 | 7 | Baseline & experiment runner | ✅ verified |
 | 8 | Analysis, figures, report | ✅ verified |
-| 9 | Hardening & reproducibility package | ⬜ |
+| 9 | Hardening & reproducibility package | ✅ verified |
 
 ## Reproduction
 
-The full reproduction guide (clone → every figure) lands in Phase 9. Every stochastic
-component is seeded (`run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`);
-all experiment metrics are reconstructable from the `telemetry` schema and JSON logs.
+From a clean clone to the paper's figures. Every stochastic component is seeded
+(`run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`) and `MOCK_LLM=1` is the default, so
+the pipeline is deterministic and needs zero API calls.
+
+```bash
+git clone <repo> && cd cloudagent
+uv sync                       # venv from the committed uv.lock
+cp .env.example .env          # defaults work; add ANTHROPIC_API_KEY only for optional live runs
+make lint && make test-unit   # gate: ruff+mypy clean, ~290 unit tests, coverage ≥ 80%
+
+make up                       # full stack: postgres, opa, redpanda, airflow
+make seed                     # seeded TPC-DS + open-gov data, then migrate the DB
+make test-integration         # optional: stack smoke, agents e2e, failure modes
+
+make experiment-paper         # the publication matrix (320 runs) → results/raw.csv (launch overnight)
+make report                   # analyze + figures → results/results.md + results/figures/*.png
+make down
+```
+
+Open `results/results.md` for the per-metric tables, the ablation heatmap, and the comparison of our
+full-vs-baseline reductions to the paper's **45% / 25% / 70%** claims. All experiment metrics are
+reconstructable from the `telemetry` schema and the JSON logs; data provenance/licensing is in
+`DATA_LICENSES.md`. Prefer a fast smoke first: `make experiment-quick` (72 runs, ~15–25 min) then
+`make report`.

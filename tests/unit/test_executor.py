@@ -2,8 +2,10 @@
 
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
+from acde.config import Settings
 from acde.contracts import PolicyDecision, ProposedAction
 from acde.policy import executor
 
@@ -138,3 +140,44 @@ class TestDecisionSemantics:
         )
         assert out.executed
         assert "escalated_to_human" in out.outcome
+
+
+class TestInfraDegrade:
+    """Airflow unreachable: bounded retry, then degrade to escalate instead of crashing (D-052)."""
+
+    def _install_down_airflow(self, monkeypatch, attempts=2):
+        monkeypatch.setattr(
+            executor,
+            "get_settings",
+            lambda: Settings(
+                _env_file=None,
+                executor_retry_attempts=attempts,
+                executor_retry_backoff_s=0.0,
+            ),
+        )
+        client = MagicMock()
+        client.__enter__.return_value.post.side_effect = httpx.ConnectError("airflow down")
+        client.__enter__.return_value.patch.side_effect = httpx.ConnectError("airflow down")
+        monkeypatch.setattr(executor, "_airflow_client", lambda: client)
+        return client
+
+    def test_airflow_down_retries_then_escalates(self, fake_db, monkeypatch):
+        client = self._install_down_airflow(monkeypatch, attempts=2)
+        out = executor.execute(_action("recovery", "replay", target="tpcds_ingest"), ALLOW, "run-1")
+        assert not out.executed
+        assert "execution_failed" in out.outcome
+        assert "escalated_to_human" in out.outcome
+        # bounded retry actually retried before giving up
+        assert client.__enter__.return_value.post.call_count == 2
+        # degraded by escalating to a human
+        assert any("manual_interventions" in c.args[0] for c in fake_db.execute.call_args_list)
+
+    def test_airflow_down_on_pool_patch_degrades(self, fake_db, monkeypatch):
+        self._install_down_airflow(monkeypatch, attempts=1)
+        out = executor.execute(
+            _action("optimization", "adjust_pool_slots", target="default_pool", slots=6),
+            ALLOW,
+            "run-1",
+        )
+        assert not out.executed
+        assert "execution_failed" in out.outcome

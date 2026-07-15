@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     db_pool_max_size: int = 8
     db_retry_attempts: int = 3
     db_retry_backoff_s: float = 0.5
+    # bounded retry for Airflow-REST side effects before the executor degrades to escalate (D-052)
+    executor_retry_attempts: int = 3
+    executor_retry_backoff_s: float = 0.5
 
     # --- Streaming broker (Redpanda) ---
     broker_bootstrap: str = "localhost:9092"

@@ -469,3 +469,40 @@ auto-included in the final report.
   manual checklist.
 - **Rationale:** Keeps the gate fast and deterministic while still exercising the whole pipeline
   end-to-end (including matplotlib rendering).
+
+## D-052 — Executor degrades gracefully on infra failure
+
+- **Decision:** The Airflow-REST side effects (`_trigger_dag`, `_clear_task_instances`, `_patch_pool`)
+  are wrapped in a bounded retry (tenacity; `executor_retry_attempts=3`,
+  `executor_retry_backoff_s=0.5`, mirroring `db._db_retry`). If Airflow stays unreachable, `execute()`
+  catches the `httpx.HTTPError`, escalates to a human (`telemetry.manual_interventions`), logs
+  `action_execution_failed`, and returns `ExecutionOutcome(executed=False, outcome="execution_failed:
+  …; escalated_to_human")` — it never lets the exception crash the agent cycle / control loop.
+- **Rationale:** Matches the gate's existing fail-safe philosophy (OPA down ⇒ escalate). An
+  operational agent must survive a transient dependency outage and hand off to a human, not die.
+
+## D-053 — Failure-mode test strategy
+
+- **Decision:** The three degrade paths are proven mostly by fast, offline unit tests — Airflow-down
+  (`test_executor.py::TestInfraDegrade`, mocked `httpx.ConnectError`), OPA-down
+  (`test_gate.py::test_opa_error_fails_safe_escalate`), and DB-blip (`test_db.py`, retried
+  `OperationalError`). One marked integration test (`tests/integration/test_failure_modes.py`) stops
+  the real `opa` container and asserts end-to-end escalation, restarting OPA in teardown.
+- **Rationale:** Unit tests give a deterministic, zero-infra gate; one live container-stop test
+  confirms the wiring without the flakiness of stopping every dependency on the colima/desktop split.
+
+## D-054 — Data-license notes only (no code license)
+
+- **Decision:** Ship `DATA_LICENSES.md` documenting the two data sources — TPC-DS (a TPC trademark;
+  our data is synthetic and schema-faithful, not `dsdgen` output — see D-009) and NYC TLC (official
+  public trip data, opt-in via `USE_REAL_TLC=1` — see D-012, used under the TLC terms of use). No
+  source-code `LICENSE` file is added.
+- **Rationale:** The paper-replication brief calls for dataset license notes specifically; the code
+  license is the repository owner's call and is intentionally left unset (all rights reserved).
+
+## D-055 — Full-system architecture diagram
+
+- **Decision:** The README's Phase-0-slice mermaid is replaced with a full-system diagram spanning the
+  data plane → telemetry → agents → gate → executor → experiment runner → analysis.
+- **Rationale:** Phase 9 ships the reproducibility package; the diagram should reflect the finished
+  system, not the Phase-0 scaffold.

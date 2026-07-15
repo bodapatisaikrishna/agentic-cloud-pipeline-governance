@@ -3,6 +3,24 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [1.0.0] — 2026-07-15 — Phase 9: hardening & reproducibility package
+
+### Added
+- **Executor fault tolerance (D-052):** Airflow-REST side effects now retry with bounded backoff
+  (`executor_retry_attempts`, `executor_retry_backoff_s`); on exhaustion `execute()` escalates to a
+  human and returns an `execution_failed` outcome instead of letting the exception crash the agent
+  cycle. Mirrors the gate's existing OPA-down fail-safe.
+- **Failure-mode tests (D-053):** unit coverage for all three degrade paths (Airflow-down, OPA-down,
+  DB-blip) plus `tests/integration/test_failure_modes.py`, which stops the real `opa` container and
+  asserts end-to-end escalation (restarting OPA in teardown).
+- **`DATA_LICENSES.md` (D-054):** provenance + licensing for TPC-DS (synthetic, not `dsdgen`) and
+  NYC TLC (official public data, opt-in). No code license shipped.
+- **README:** full-system architecture diagram (D-055), a clone→figures **Reproduction** guide, and a
+  **Fault tolerance** section.
+
+### Changed
+- Phase table: Phase 9 ✅; project tagged **`v1.0.0`** (all 9 phases complete).
+
 ## [0.9.0] — 2026-07-14 — Phase 8: analysis, figures, report
 
 ### Added
