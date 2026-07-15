@@ -16,6 +16,8 @@ dependencies = [
     "confluent-kafka>=2.15.0",
     "httpx>=0.28.1",
     "anthropic>=0.116.0",
+    "scipy>=1.17.1",
+    "matplotlib>=3.11.0",
 ]
 
 [dependency-groups]

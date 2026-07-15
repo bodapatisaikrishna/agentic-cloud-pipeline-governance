@@ -146,6 +146,20 @@ seed policy `sha256("{config}:{scenario}:{replicate}") % 2³²` gives each cell 
 conditions. First reproduced signal (smoke, `upstream_delay`): **baseline MTTR ≈ 312 s** (human) vs
 **full MTTR ≈ 0.2 s** (recovery agent). Phase 8 turns `raw.csv` into the paper's figures.
 
+### Analysis & report
+
+```bash
+make analyze   # stats from results/raw.csv → results/analysis.json
+make report    # analyze + figures + results/results.md
+```
+
+`acde.analysis` computes, per metric, per-config **median / IQR / bootstrap 95% CI** plus a paired
+**baseline-vs-full Wilcoxon** test with **Holm–Bonferroni** correction and **Cliff's delta** effect
+size. `figures.py` renders MTTR/cost/interventions bars with CI error bars, an MTTR CDF, and the
+**ablation heatmap** (config × metric % vs baseline) to `results/figures/`. `report.py` writes
+`results/results.md` — per-metric tables, embedded figures, a comparison of our full-vs-baseline
+reductions to the paper's **45% / 25% / 70%** claims, and an appended `DEVIATIONS.md`.
+
 ### Chaos harness
 
 Four seeded failure scenarios (§6) degrade the running pipelines and record
@@ -197,7 +211,7 @@ Key entry points — full tree in the project spec:
 | 5 | Agents & LLM layer | ✅ verified |
 | 6 | Control-loop orchestrator | ✅ verified |
 | 7 | Baseline & experiment runner | ✅ verified |
-| 8 | Analysis, figures, report | ⬜ |
+| 8 | Analysis, figures, report | ✅ verified |
 | 9 | Hardening & reproducibility package | ⬜ |
 
 ## Reproduction

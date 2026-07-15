@@ -35,19 +35,20 @@ class TestHarvest:
     def test_computes_metrics(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.return_value = [{"mttr": 10.0}, {"mttr": 20.0}, {"mttr": 30.0}]
-        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"t": 800}]
+        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"t": 800}, {"value": 25.0}]
         monkeypatch.setattr(runner, "db", fake)
         m = runner.harvest_metrics("run", wall_s=12.5)
         assert m["mttr_s"] == 20.0  # median
         assert m["cost_units"] == 5.0
         assert m["manual_interventions"] == 2.0
         assert m["llm_tokens"] == 800.0
+        assert m["freshness_s"] == 25.0
         assert m["wall_clock_s"] == 12.5
 
     def test_no_events_zero_mttr(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.return_value = []
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 0}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 0}, None]
         monkeypatch.setattr(runner, "db", fake)
         assert runner.harvest_metrics("run", 1.0)["mttr_s"] == 0.0
 

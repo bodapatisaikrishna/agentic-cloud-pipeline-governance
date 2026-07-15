@@ -3,6 +3,28 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [0.9.0] — 2026-07-14 — Phase 8: analysis, figures, report
+
+### Added
+- **`src/acde/analysis/`**:
+  - `stats.py` — median/IQR, seeded bootstrap CI (10k), paired Wilcoxon, Holm–Bonferroni, Cliff's
+    delta (pure; unit-tested on known-answer fixtures).
+  - `analyze.py` — loads `raw.csv` → per-metric per-config median/IQR/CI, paired baseline-vs-full
+    Wilcoxon + Cliff's delta with Holm–Bonferroni across metrics, ablation table → `analysis.json`.
+  - `figures.py` — MTTR/cost/interventions bars with CI error bars, MTTR CDF, ablation heatmap
+    (headless matplotlib Agg) → `results/figures/*.png`.
+  - `report.py` — `results/results.md`: per-metric tables, embedded figures, the vs-paper (45/25/70)
+    comparison, and an appended DEVIATIONS dump.
+- **Config**: `bootstrap_resamples`, `paper_{mttr,cost,intervention}_pct`. **Runner**: harvests
+  `freshness_s`. **Makefile**: `analyze`, `report`. New deps: `scipy`, `matplotlib`.
+- **Tests**: +30 unit (stats known answers, analyze on synthetic data, report+figures render).
+  288 unit tests, 95% coverage.
+- **Docs**: DEVIATIONS D-047…D-051.
+
+### Result
+Full pipeline verified on synthetic data: significant baseline-vs-full MTTR (Wilcoxon p=0.008,
+Holm p=0.039, Cliff's δ=1.0), the vs-paper table, and all figures render.
+
 ## [0.8.0] — 2026-07-14 — Phase 7: baseline & resumable experiment runner
 
 ### Added

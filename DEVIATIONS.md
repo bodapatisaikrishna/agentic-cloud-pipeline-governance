@@ -426,3 +426,46 @@ auto-included in the final report.
   `raw.csv` rows are `(run_id, config, scenario, replicate, seed, metric, value)` — one row per
   metric (`mttr_s`, `cost_units`, `manual_interventions`, `llm_tokens`, `wall_clock_s`).
 - **Rationale:** Reuses the Phase 2 cost pipeline and gives the Phase 8 analysis a tidy long table.
+
+---
+
+## Phase 8 — Analysis, figures, report
+
+## D-047 — Analysis lives in the package, not a bare `analysis/` dir
+
+- **Decision:** The analysis code is `src/acde/analysis/` (importable), not a top-level `analysis/`
+  scripts dir; the Makefile calls `python -m acde.analysis.{analyze,report}`.
+- **Rationale:** Makes the statistics unit-testable and consistent with the rest of the `src/acde`
+  package layout; the spec's `analysis/` maps 1:1 to `acde.analysis`.
+
+## D-048 — Paper-claim mapping (45/25/70) and honest cost reporting
+
+- **Decision:** The report compares our full-vs-baseline reductions to MTTR ↓45%, operational
+  cost ↓25%, manual interventions ↓70% (my reading of the paper's abstract). Constants live in
+  `config.py`. Because our cost model is compute-only (D-006), agent scaling can *raise* cost —
+  reported as measured, with the caveat printed in the report.
+- **Rationale:** The exact claim-to-metric mapping isn't specified; disclosing it (and the cost
+  caveat) keeps the comparison honest.
+
+## D-049 — Statistics choices
+
+- **Decision:** `stats.py` — seeded bootstrap CI (10k resamples, deterministic), paired Wilcoxon
+  signed-rank (baseline vs full, paired on scenario+replicate), Holm–Bonferroni across metrics,
+  Cliff's delta. Undefined tests (tiny N, all-equal pairs) return a non-significant sentinel rather
+  than crashing.
+- **Rationale:** Matches §6; graceful degradation keeps the pipeline robust on small/`quick` data.
+
+## D-050 — Headless figures; report appends DEVIATIONS
+
+- **Decision:** `matplotlib` Agg backend → `results/figures/*.png`; `report.py` embeds them and
+  appends the full `DEVIATIONS.md` to `results/results.md`.
+- **Rationale:** Renders in CI/servers without a display; the report is a self-contained artifact.
+
+## D-051 — `freshness_s` added to the per-run harvest; gate runs on synthetic data
+
+- **Decision:** `harvest_metrics` also records `freshness_s` (latest run `pipeline_metrics`), so the
+  freshness CDF has data. The automated gate runs analyze/figures/report on a synthetic `raw.csv`
+  fixture (stats are unit-tested against known answers); the full quick-profile analysis is the
+  manual checklist.
+- **Rationale:** Keeps the gate fast and deterministic while still exercising the whole pipeline
+  end-to-end (including matplotlib rendering).

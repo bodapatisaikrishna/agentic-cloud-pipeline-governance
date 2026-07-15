@@ -101,5 +101,8 @@ experiment-quick:  ## Quick matrix: 6 configs x 4 scenarios x N=3 = 72 runs (res
 experiment-paper:  ## Paper matrix: baseline/full N=20 + 4 ablations N=10 = 320 runs (resumable)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile paper
 
-analyze report:  ## Phase 8: statistics + figures + report
-	@echo "'$@' is implemented in Phase 8 (analysis)"; exit 1
+analyze:  ## Phase 8: compute statistics from results/raw.csv
+	MOCK_LLM=1 $(UV) python -m acde.analysis.analyze
+
+report:  ## Phase 8: analyze + figures + results/results.md
+	MOCK_LLM=1 $(UV) python -m acde.analysis.report

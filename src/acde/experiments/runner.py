@@ -89,11 +89,17 @@ def harvest_metrics(experiment_run: str, wall_s: float) -> dict[str, float]:
         "FROM telemetry.agent_actions WHERE experiment_run = %s",
         (experiment_run,),
     )
+    freshness = db.fetch_one(
+        "SELECT value FROM telemetry.pipeline_metrics "
+        "WHERE experiment_run = %s AND metric = 'freshness_s' ORDER BY ts DESC LIMIT 1",
+        (experiment_run,),
+    )
     return {
         "mttr_s": statistics.median(mttrs) if mttrs else 0.0,
         "cost_units": float(cost["c"]) if cost else 0.0,
         "manual_interventions": float(interventions["n"]) if interventions else 0.0,
         "llm_tokens": float(tokens["t"]) if tokens else 0.0,
+        "freshness_s": float(freshness["value"]) if freshness else 0.0,
         "wall_clock_s": wall_s,
     }
 

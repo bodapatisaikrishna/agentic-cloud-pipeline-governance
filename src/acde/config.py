@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     # --- Experiments (§8 Phase 7) ---
     results_dir: str = "results"  # git-ignored raw.csv + manifest.jsonl land here
 
+    # --- Analysis (§8 Phase 8) ---
+    bootstrap_resamples: int = 10000
+    paper_mttr_pct: float = 45.0  # paper's claimed MTTR reduction (full vs baseline)
+    paper_cost_pct: float = 25.0  # paper's claimed operational-cost reduction
+    paper_intervention_pct: float = 70.0  # paper's claimed manual-intervention reduction
+
     # --- Chaos harness (§6/§8 Phase 4) ---
     chaos_warmup_s: float = 120.0
     chaos_fault_window_s: float = 180.0
