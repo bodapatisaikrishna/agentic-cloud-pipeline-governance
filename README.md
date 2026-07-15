@@ -135,9 +135,12 @@ EXPERIMENT_RUN=demo make agents    # one cycle of all four agents (MOCK_LLM=1)
 ```
 
 `MOCK_LLM=1` (the default) serves deterministic proposals with zero API calls. The live path is
-built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` with `ANTHROPIC_API_KEY` set makes
-one real Anthropic call, routed monitoring→Haiku / others→Sonnet, bounded by the 60-call /
-150k-token per-run caps.
+built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` makes one real call, routed
+monitoring→fast model / others→reasoning model, bounded by the 60-call / 150k-token per-run caps.
+The live provider is chosen by `LLM_PROVIDER` (D-056): **`anthropic`** (default, needs
+`ANTHROPIC_API_KEY`, Sonnet/Haiku) or **`gemini`** (needs `GEMINI_API_KEY`, `gemini-2.5-pro` /
+`gemini-2.5-flash`, overridable via `GEMINI_MODEL_*`). Both run at temperature 0 and degrade to
+`no_action` on failure; `MOCK_LLM=1` remains the default everywhere including CI.
 
 ### Orchestrator (control loop)
 

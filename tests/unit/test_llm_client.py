@@ -2,8 +2,12 @@
 
 import datetime as dt
 
+import pytest
+
+from acde.config import Settings
 from acde.contracts import TelemetrySnapshot
-from acde.llm.client import BudgetTracker, LLMClient
+from acde.llm import client as client_mod
+from acde.llm.client import BudgetTracker, LLMClient, LLMResult
 
 NOW = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
 
@@ -27,6 +31,64 @@ class TestRouting:
         client = LLMClient()
         for agent in ("recovery", "optimization", "schema"):
             assert client.model_for(agent) == "claude-sonnet-4-6"
+
+
+class TestProviderRouting:
+    def test_gemini_provider_uses_gemini_models(self, monkeypatch):
+        monkeypatch.setattr(
+            client_mod, "get_settings", lambda: Settings(_env_file=None, llm_provider="gemini")
+        )
+        client = LLMClient()
+        assert client.model_for("monitoring") == "gemini-2.5-flash"
+        assert client.model_for("schema") == "gemini-2.5-pro"
+
+    def test_live_call_dispatches_to_configured_provider(self, monkeypatch):
+        monkeypatch.setattr(
+            client_mod, "get_settings", lambda: Settings(_env_file=None, llm_provider="gemini")
+        )
+        called = {}
+        sentinel = LLMResult({"action_type": "no_action"}, 3, 4, "gemini-2.5-pro")
+
+        def _fake_gemini_once(self, snapshot, system_prompt, model):
+            called["provider"] = "gemini"
+            return (lambda: sentinel), (lambda exc: False)
+
+        def _fake_anthropic_once(self, snapshot, system_prompt, model):
+            called["provider"] = "anthropic"
+            return (lambda: sentinel), (lambda exc: False)
+
+        monkeypatch.setattr(LLMClient, "_gemini_once", _fake_gemini_once)
+        monkeypatch.setattr(LLMClient, "_anthropic_once", _fake_anthropic_once)
+        out = LLMClient()._live_call("schema", _snap(), "sys", "gemini-2.5-pro")
+        assert called["provider"] == "gemini"
+        assert out is sentinel
+
+    def test_unknown_provider_raises(self, monkeypatch):
+        monkeypatch.setattr(
+            client_mod, "get_settings", lambda: Settings(_env_file=None, llm_provider="bogus")
+        )
+        with pytest.raises(ValueError, match="unknown llm_provider"):
+            LLMClient()._live_call("schema", _snap(), "sys", "m")
+
+    def test_degrade_on_final_failure(self):
+        def _boom() -> LLMResult:
+            raise RuntimeError("provider exploded")
+
+        out = LLMClient()._run_with_degrade("schema", _snap(), "m", _boom, lambda exc: False)
+        assert out.action_json["action_type"] == "no_action"
+        assert out.tokens_in == 0
+
+    def test_mock_path_is_provider_independent(self, monkeypatch):
+        # MOCK_LLM stays deterministic regardless of the selected live provider
+        monkeypatch.setattr(
+            client_mod,
+            "get_settings",
+            lambda: Settings(_env_file=None, llm_provider="gemini", mock_llm=True),
+        )
+        out = LLMClient(budget=BudgetTracker(max_calls=10, max_tokens=1_000_000)).propose(
+            "schema", _snap(), "sys"
+        )
+        assert out.action_json["action_type"] == "quarantine_partition"
 
 
 class TestBudget:

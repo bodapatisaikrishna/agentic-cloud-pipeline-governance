@@ -3,6 +3,19 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [1.1.0] — 2026-07-15 — Multi-provider live LLM (Anthropic + Gemini)
+
+### Added
+- **Gemini live LLM provider (D-056):** `LLM_PROVIDER=gemini` routes real agent calls through the
+  Google `google-genai` SDK (`gemini-2.5-pro` / `gemini-2.5-flash`, overridable via `GEMINI_MODEL_*`;
+  key via `GEMINI_API_KEY`). `LLMClient._live_call` now dispatches to a per-provider `_once()` behind
+  a shared retry-then-degrade wrapper; the Anthropic path is unchanged and remains the default.
+- **Config:** `llm_provider`, `gemini_api_key`, `gemini_model_reasoning`, `gemini_model_fast`;
+  `.env.example` documents them. **Dep:** `google-genai`.
+- **Tests:** +5 unit (provider routing, live-call dispatch, unknown-provider guard, shared degrade,
+  mock provider-independence). Live Gemini call stays opt-in / user-run (paid), like the Anthropic
+  path; `MOCK_LLM=1` remains the default everywhere and the automated gate stays offline.
+
 ## [1.0.0] — 2026-07-15 — Phase 9: hardening & reproducibility package
 
 ### Added

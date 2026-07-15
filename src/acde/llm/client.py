@@ -2,14 +2,16 @@
 
 Agents call :meth:`LLMClient.propose` with a snapshot + system prompt and get back an
 ``action_json`` (validated into a ``ProposedAction`` by the agent). Under ``MOCK_LLM`` this is
-served deterministically by :mod:`acde.llm.mock` — no API calls. Live calls route monitoring →
-``MODEL_FAST`` and everyone else → ``MODEL_REASONING`` (temperature=0), retry 429/5xx up to 3x,
-and degrade to ``no_action`` (logged ``llm_unavailable``) on final failure or budget exhaustion.
+served deterministically by :mod:`acde.llm.mock` — no API calls. Live calls go to the configured
+provider (``LLM_PROVIDER``: ``anthropic`` default or ``gemini``, D-056), routing monitoring →
+fast model and everyone else → reasoning model (temperature=0), retry 429/5xx up to 3x, and degrade
+to ``no_action`` (logged ``llm_unavailable``) on final failure or budget exhaustion.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -77,10 +79,14 @@ class LLMClient:
         )
         self._cache: dict[tuple[str, str], LLMResult] = {}
         self._anthropic: Any = None
+        self._gemini: Any = None
 
     def model_for(self, agent: AgentName) -> str:
         settings = get_settings()
-        return settings.model_fast if agent == "monitoring" else settings.model_reasoning
+        fast = agent == "monitoring"
+        if settings.llm_provider == "gemini":
+            return settings.gemini_model_fast if fast else settings.gemini_model_reasoning
+        return settings.model_fast if fast else settings.model_reasoning
 
     def propose(
         self, agent: AgentName, snapshot: TelemetrySnapshot, system_prompt: str
@@ -117,44 +123,37 @@ class LLMClient:
         self._cache[key] = result
         return result
 
-    def _live_call(  # pragma: no cover - requires the Anthropic API
+    def _live_call(
         self, agent: AgentName, snapshot: TelemetrySnapshot, system_prompt: str, model: str
     ) -> LLMResult:
-        import anthropic
+        """Dispatch to the configured provider, retrying transient errors then degrading."""
+        provider = get_settings().llm_provider
+        if provider == "anthropic":
+            once, retryable = self._anthropic_once(snapshot, system_prompt, model)
+        elif provider == "gemini":
+            once, retryable = self._gemini_once(snapshot, system_prompt, model)
+        else:
+            raise ValueError(f"unknown llm_provider: {provider!r}")
+        return self._run_with_degrade(agent, snapshot, model, once, retryable)
+
+    def _run_with_degrade(
+        self,
+        agent: AgentName,
+        snapshot: TelemetrySnapshot,
+        model: str,
+        once: Callable[[], LLMResult],
+        retryable: Callable[[BaseException], bool],
+    ) -> LLMResult:
         from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
-        settings = get_settings()
-        if self._anthropic is None:
-            self._anthropic = anthropic.Anthropic()
-
-        def _retryable(exc: BaseException) -> bool:
-            if isinstance(exc, anthropic.APIConnectionError):
-                return True
-            return isinstance(exc, anthropic.APIStatusError) and (
-                exc.status_code == 429 or exc.status_code >= 500
-            )
-
-        @retry(
-            retry=retry_if_exception(_retryable),
+        runner = retry(
+            retry=retry_if_exception(retryable),
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=0.5, max=8),
             reraise=True,
-        )
-        def _once() -> LLMResult:
-            resp = self._anthropic.messages.create(
-                model=model,
-                max_tokens=settings.llm_max_tokens_per_call,
-                temperature=0,
-                system=system_prompt,
-                messages=[{"role": "user", "content": snapshot.model_dump_json()}],
-            )
-            text = "".join(block.text for block in resp.content if block.type == "text")
-            return LLMResult(
-                _extract_json(text), resp.usage.input_tokens, resp.usage.output_tokens, resp.model
-            )
-
+        )(once)
         try:
-            return _once()
+            return runner()
         except Exception as exc:  # final failure → degrade
             log.warning(
                 "llm_unavailable",
@@ -168,3 +167,71 @@ class LLMClient:
             return LLMResult(
                 _no_action(agent, "LLM unavailable; degraded to no_action"), 0, 0, model
             )
+
+    def _anthropic_once(  # pragma: no cover - requires the Anthropic API
+        self, snapshot: TelemetrySnapshot, system_prompt: str, model: str
+    ) -> tuple[Callable[[], LLMResult], Callable[[BaseException], bool]]:
+        import anthropic
+
+        settings = get_settings()
+        if self._anthropic is None:
+            self._anthropic = anthropic.Anthropic()
+
+        def _retryable(exc: BaseException) -> bool:
+            if isinstance(exc, anthropic.APIConnectionError):
+                return True
+            return isinstance(exc, anthropic.APIStatusError) and (
+                exc.status_code == 429 or exc.status_code >= 500
+            )
+
+        def _once() -> LLMResult:
+            resp = self._anthropic.messages.create(
+                model=model,
+                max_tokens=settings.llm_max_tokens_per_call,
+                temperature=0,
+                system=system_prompt,
+                messages=[{"role": "user", "content": snapshot.model_dump_json()}],
+            )
+            text = "".join(block.text for block in resp.content if block.type == "text")
+            return LLMResult(
+                _extract_json(text), resp.usage.input_tokens, resp.usage.output_tokens, resp.model
+            )
+
+        return _once, _retryable
+
+    def _gemini_once(  # pragma: no cover - requires the Gemini API
+        self, snapshot: TelemetrySnapshot, system_prompt: str, model: str
+    ) -> tuple[Callable[[], LLMResult], Callable[[BaseException], bool]]:
+        from google import genai
+        from google.genai import errors as genai_errors
+        from google.genai import types
+
+        settings = get_settings()
+        if self._gemini is None:
+            self._gemini = genai.Client(api_key=settings.gemini_api_key or None)
+
+        def _retryable(exc: BaseException) -> bool:
+            code = getattr(exc, "code", None)
+            return isinstance(exc, genai_errors.APIError) and (
+                code == 429 or (isinstance(code, int) and code >= 500)
+            )
+
+        def _once() -> LLMResult:
+            resp = self._gemini.models.generate_content(
+                model=model,
+                contents=snapshot.model_dump_json(),
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=0,
+                    max_output_tokens=settings.llm_max_tokens_per_call,
+                ),
+            )
+            usage = resp.usage_metadata
+            return LLMResult(
+                _extract_json(resp.text or ""),
+                usage.prompt_token_count or 0,
+                usage.candidates_token_count or 0,
+                model,
+            )
+
+        return _once, _retryable

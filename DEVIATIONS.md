@@ -506,3 +506,17 @@ auto-included in the final report.
   data plane → telemetry → agents → gate → executor → experiment runner → analysis.
 - **Rationale:** Phase 9 ships the reproducibility package; the diagram should reflect the finished
   system, not the Phase-0 scaffold.
+
+## D-056 — Multi-provider live LLM path (Anthropic + Gemini)
+
+- **Decision:** The live LLM call is provider-selectable via `llm_provider` (`"anthropic"` default |
+  `"gemini"`). `LLMClient._live_call` dispatches to `_anthropic_once` (unchanged Claude path) or
+  `_gemini_once` (Google `google-genai` SDK: `generate_content` with `system_instruction`,
+  `temperature=0`, `max_output_tokens=llm_max_tokens_per_call`), sharing one retry-then-degrade
+  wrapper. Gemini defaults `gemini-2.5-pro` / `gemini-2.5-flash`, overridable via `GEMINI_MODEL_*` in
+  `.env`; key via `GEMINI_API_KEY` only. `MOCK_LLM=1` stays the default and is provider-independent.
+- **Rationale:** User-requested — they have a Gemini key and want the agents to run live without an
+  Anthropic key. This is a deviation from the otherwise Claude-standardized replication; Anthropic
+  remains the default (honoring CLAUDE.md), Gemini is strictly opt-in and never touches the automated
+  gate (which is mock-only). Model IDs are config-driven because provider model names change over
+  time — a rejected ID is fixed in `.env`, not in code.

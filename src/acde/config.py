@@ -53,9 +53,15 @@ class Settings(BaseSettings):
     airflow_password: str = "admin"
 
     # --- LLM layer ---
+    # Live-call provider: "anthropic" (default) or "gemini" (D-056). Ignored under MOCK_LLM.
+    llm_provider: str = "anthropic"
     anthropic_api_key: str = ""
     model_reasoning: str = "claude-sonnet-4-6"
     model_fast: str = "claude-haiku-4-5"
+    # Gemini live provider (opt-in; key + models via .env). IDs are overridable if they change.
+    gemini_api_key: str = ""
+    gemini_model_reasoning: str = "gemini-2.5-pro"
+    gemini_model_fast: str = "gemini-2.5-flash"
     mock_llm: bool = True  # default everywhere; live runs must opt out explicitly
     llm_max_calls_per_run: int = 60
     llm_max_tokens_per_run: int = 150_000
