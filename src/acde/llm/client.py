@@ -3,9 +3,10 @@
 Agents call :meth:`LLMClient.propose` with a snapshot + system prompt and get back an
 ``action_json`` (validated into a ``ProposedAction`` by the agent). Under ``MOCK_LLM`` this is
 served deterministically by :mod:`acde.llm.mock` — no API calls. Live calls go to the configured
-provider (``LLM_PROVIDER``: ``anthropic`` default or ``gemini``, D-056), routing monitoring →
-fast model and everyone else → reasoning model (temperature=0), retry 429/5xx up to 3x, and degrade
-to ``no_action`` (logged ``llm_unavailable``) on final failure or budget exhaustion.
+provider (``LLM_PROVIDER``: ``anthropic`` default, ``gemini`` D-056, or ``openai_compatible`` D-057
+for NVIDIA NIM / Groq / OpenRouter / z.ai), routing monitoring → fast model and everyone else →
+reasoning model (temperature=0), retry 429/5xx up to 3x, and degrade to ``no_action`` (logged
+``llm_unavailable``) on final failure or budget exhaustion.
 """
 
 from __future__ import annotations
@@ -80,12 +81,15 @@ class LLMClient:
         self._cache: dict[tuple[str, str], LLMResult] = {}
         self._anthropic: Any = None
         self._gemini: Any = None
+        self._oai: Any = None
 
     def model_for(self, agent: AgentName) -> str:
         settings = get_settings()
         fast = agent == "monitoring"
         if settings.llm_provider == "gemini":
             return settings.gemini_model_fast if fast else settings.gemini_model_reasoning
+        if settings.llm_provider == "openai_compatible":
+            return settings.oai_model_fast if fast else settings.oai_model_reasoning
         return settings.model_fast if fast else settings.model_reasoning
 
     def propose(
@@ -132,6 +136,8 @@ class LLMClient:
             once, retryable = self._anthropic_once(snapshot, system_prompt, model)
         elif provider == "gemini":
             once, retryable = self._gemini_once(snapshot, system_prompt, model)
+        elif provider == "openai_compatible":
+            once, retryable = self._openai_compatible_once(snapshot, system_prompt, model)
         else:
             raise ValueError(f"unknown llm_provider: {provider!r}")
         return self._run_with_degrade(agent, snapshot, model, once, retryable)
@@ -231,6 +237,46 @@ class LLMClient:
                 _extract_json(resp.text or ""),
                 usage.prompt_token_count or 0,
                 usage.candidates_token_count or 0,
+                model,
+            )
+
+        return _once, _retryable
+
+    def _openai_compatible_once(  # pragma: no cover - requires the API
+        self, snapshot: TelemetrySnapshot, system_prompt: str, model: str
+    ) -> tuple[Callable[[], LLMResult], Callable[[BaseException], bool]]:
+        import openai
+
+        settings = get_settings()
+        if self._oai is None:
+            self._oai = openai.OpenAI(
+                base_url=settings.oai_base_url, api_key=settings.oai_api_key or "missing"
+            )
+
+        def _retryable(exc: BaseException) -> bool:
+            if isinstance(exc, openai.APIConnectionError):
+                return True
+            return isinstance(exc, openai.APIStatusError) and (
+                exc.status_code == 429 or exc.status_code >= 500
+            )
+
+        def _once() -> LLMResult:
+            # Larger cap than the other providers: "thinking" models (e.g. GLM-5.2) spend tokens
+            # reasoning before the JSON; _extract_json pulls the object out of the surrounding text.
+            resp = self._oai.chat.completions.create(
+                model=model,
+                temperature=0,
+                max_tokens=settings.oai_max_tokens_per_call,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": snapshot.model_dump_json()},
+                ],
+            )
+            usage = resp.usage
+            return LLMResult(
+                _extract_json(resp.choices[0].message.content or ""),
+                usage.prompt_tokens if usage else 0,
+                usage.completion_tokens if usage else 0,
                 model,
             )
 

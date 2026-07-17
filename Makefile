@@ -79,7 +79,7 @@ chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_
 agents:  ## Run one agent cycle (all four agents), MOCK_LLM=1
 	MOCK_LLM=1 $(UV) python -m acde.agents.run --experiment-run $${EXPERIMENT_RUN:-adhoc}
 
-agents-live-smoke:  ## One live LLM cycle (MOCK_LLM=0) — needs the provider key (ANTHROPIC_API_KEY, or GEMINI_API_KEY with LLM_PROVIDER=gemini); you run this
+agents-live-smoke:  ## One live LLM cycle (MOCK_LLM=0) — needs the provider key (ANTHROPIC_API_KEY / GEMINI_API_KEY / OAI_API_KEY per LLM_PROVIDER); you run this
 	MOCK_LLM=0 $(UV) python -m acde.agents.run --experiment-run $${EXPERIMENT_RUN:-live-smoke}
 
 ## --- Orchestrator (Phase 6) ---

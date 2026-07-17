@@ -3,6 +3,19 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [1.2.0] — 2026-07-17 — Generic OpenAI-compatible LLM provider (NVIDIA NIM / GLM-5.2)
+
+### Added
+- **`LLM_PROVIDER=openai_compatible` (D-057):** live agent calls through the `openai` SDK against a
+  configurable `OAI_BASE_URL` (default NVIDIA NIM) with `OAI_API_KEY` + `OAI_MODEL_REASONING`/`_FAST`
+  (defaults `z-ai/glm-5.2` / `meta/llama-3.1-8b-instruct`). One provider covers NVIDIA NIM, Groq,
+  OpenRouter, and z.ai. `LLMClient._live_call` gains an `_openai_compatible_once` branch under the
+  shared retry-then-degrade wrapper.
+- **`OAI_MAX_TOKENS_PER_CALL` (default 8192):** larger cap so "thinking" models (GLM-5.2) can reach
+  the JSON, which `_extract_json` extracts from the surrounding reasoning text. temperature=0 kept.
+- **Dep:** `openai`. **Tests:** +2 unit (openai_compatible routing + dispatch). `.env.example`,
+  README, Makefile smoke help updated. `MOCK_LLM=1` stays the default; live path is opt-in / off-gate.
+
 ## [1.1.0] — 2026-07-15 — Multi-provider live LLM (Anthropic + Gemini)
 
 ### Added

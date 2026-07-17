@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model_reasoning: str = "gemini-2.5-pro"
     gemini_model_fast: str = "gemini-2.5-flash"
+    # Generic OpenAI-compatible provider (NVIDIA NIM / Groq / OpenRouter / z.ai) — D-057.
+    # Larger per-call cap so "thinking" models (e.g. GLM-5.2) can reach the JSON.
+    oai_base_url: str = "https://integrate.api.nvidia.com/v1"
+    oai_api_key: str = ""
+    oai_model_reasoning: str = "z-ai/glm-5.2"
+    oai_model_fast: str = "meta/llama-3.1-8b-instruct"
+    oai_max_tokens_per_call: int = 8192
     mock_llm: bool = True  # default everywhere; live runs must opt out explicitly
     llm_max_calls_per_run: int = 60
     llm_max_tokens_per_run: int = 150_000

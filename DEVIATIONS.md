@@ -520,3 +520,17 @@ auto-included in the final report.
   remains the default (honoring CLAUDE.md), Gemini is strictly opt-in and never touches the automated
   gate (which is mock-only). Model IDs are config-driven because provider model names change over
   time — a rejected ID is fixed in `.env`, not in code.
+
+## D-057 — Generic OpenAI-compatible live LLM provider
+
+- **Decision:** `llm_provider="openai_compatible"` routes live calls through the `openai` SDK against a
+  configurable `oai_base_url` (default NVIDIA NIM `https://integrate.api.nvidia.com/v1`) with
+  `oai_api_key` and `oai_model_reasoning`/`oai_model_fast` (defaults `z-ai/glm-5.2` /
+  `meta/llama-3.1-8b-instruct`). One provider covers NVIDIA NIM, Groq, OpenRouter, and z.ai — any
+  vendor exposing the OpenAI `chat/completions` API — by changing base_url + key in `.env`. A separate
+  `oai_max_tokens_per_call` (default 8192, vs 1024 for the other providers) gives "thinking" models
+  (e.g. GLM-5.2) room to emit their reasoning and still reach the JSON, which the existing
+  `_extract_json` pulls out of the surrounding text. temperature=0 is kept (Rule 5).
+- **Rationale:** User has an NVIDIA NIM key and wanted GLM-5.2; a generic OpenAI-compatible branch is
+  the same effort as a vendor-specific one but avoids lock-in and unlocks the many free open models
+  (Llama/GLM/DeepSeek/Qwen). Anthropic stays the default; this path is opt-in and never in the gate.

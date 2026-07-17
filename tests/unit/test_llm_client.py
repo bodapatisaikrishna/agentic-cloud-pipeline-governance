@@ -23,6 +23,13 @@ def _snap(fault="schema_drift", compat="breaking"):
 
 
 class TestRouting:
+    @pytest.fixture(autouse=True)
+    def _default_provider(self, monkeypatch):
+        # pin the anthropic default so these don't depend on the developer's local .env
+        monkeypatch.setattr(
+            client_mod, "get_settings", lambda: Settings(_env_file=None, llm_provider="anthropic")
+        )
+
     def test_monitoring_uses_fast_model(self):
         client = LLMClient()
         assert client.model_for("monitoring") == "claude-haiku-4-5"
@@ -61,6 +68,34 @@ class TestProviderRouting:
         monkeypatch.setattr(LLMClient, "_anthropic_once", _fake_anthropic_once)
         out = LLMClient()._live_call("schema", _snap(), "sys", "gemini-2.5-pro")
         assert called["provider"] == "gemini"
+        assert out is sentinel
+
+    def test_openai_compatible_uses_oai_models(self, monkeypatch):
+        monkeypatch.setattr(
+            client_mod,
+            "get_settings",
+            lambda: Settings(_env_file=None, llm_provider="openai_compatible"),
+        )
+        client = LLMClient()
+        assert client.model_for("monitoring") == "meta/llama-3.1-8b-instruct"
+        assert client.model_for("schema") == "z-ai/glm-5.2"
+
+    def test_live_call_dispatches_to_openai_compatible(self, monkeypatch):
+        monkeypatch.setattr(
+            client_mod,
+            "get_settings",
+            lambda: Settings(_env_file=None, llm_provider="openai_compatible"),
+        )
+        called = {}
+        sentinel = LLMResult({"action_type": "no_action"}, 5, 6, "z-ai/glm-5.2")
+
+        def _fake_oai_once(self, snapshot, system_prompt, model):
+            called["provider"] = "openai_compatible"
+            return (lambda: sentinel), (lambda exc: False)
+
+        monkeypatch.setattr(LLMClient, "_openai_compatible_once", _fake_oai_once)
+        out = LLMClient()._live_call("schema", _snap(), "sys", "z-ai/glm-5.2")
+        assert called["provider"] == "openai_compatible"
         assert out is sentinel
 
     def test_unknown_provider_raises(self, monkeypatch):
