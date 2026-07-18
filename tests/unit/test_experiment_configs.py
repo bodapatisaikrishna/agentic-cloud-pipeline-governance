@@ -4,17 +4,16 @@ import pytest
 
 from acde.experiments.configs import ALL_CONFIGS, profile_runs
 from acde.experiments.scenarios import SCENARIOS
-from acde.orchestrator.configs import AGENT_CONFIGS
 
 
-def test_quick_is_72_runs():
+def test_quick_is_96_runs():
     runs = profile_runs("quick")
-    assert len(runs) == 6 * 4 * 3  # 6 configs x 4 scenarios x N=3
+    assert len(runs) == 8 * 4 * 3  # 8 configs x 4 scenarios x N=3
 
 
-def test_paper_is_320_runs():
+def test_paper_run_count():
     runs = profile_runs("paper")
-    assert len(runs) == (2 * 4 * 20) + (4 * 4 * 10)  # baseline+full N=20, 4 ablations N=10
+    assert len(runs) == (4 * 4 * 20) + (4 * 4 * 10)  # 3 baselines+full N=20, 4 ablations N=10
 
 
 def test_smoke_is_small():
@@ -23,7 +22,7 @@ def test_smoke_is_small():
 
 def test_runs_reference_valid_configs_and_scenarios():
     for run in profile_runs("quick"):
-        assert run.config in AGENT_CONFIGS
+        assert run.config in ALL_CONFIGS
         assert run.scenario in SCENARIOS
         assert run.replicate >= 0
 
@@ -47,7 +46,6 @@ def test_seeds_distinct_across_matrix_cells():
         (r.config, r.scenario, r.replicate): run_seed(r.config, r.scenario, r.replicate)
         for r in runs
     }
-    # identical fault seed for the SAME (scenario, replicate) across configs is intentional? No —
     # seed keys on config too, so every cell has its own seed. Just assert no accidental collisions
-    # beyond the birthday-bound noise: all 72 keys map to values, mostly distinct.
-    assert len(set(seeds.values())) >= 70
+    # beyond the birthday-bound noise: nearly all 96 keys map to distinct values.
+    assert len(set(seeds.values())) >= 94

@@ -12,16 +12,28 @@ from dataclasses import dataclass
 from acde.experiments.scenarios import SCENARIOS
 from acde.orchestrator.configs import AGENT_CONFIGS, enabled_agents
 
-__all__ = ["AGENT_CONFIGS", "PROFILES", "Run", "enabled_agents", "profile_runs"]
+__all__ = [
+    "AGENT_CONFIGS",
+    "ALL_CONFIGS",
+    "BASELINE_CONFIGS",
+    "PROFILES",
+    "Run",
+    "enabled_agents",
+    "profile_runs",
+]
 
 ALL_CONFIGS = (
     "baseline",
+    "rule_based",
+    "autoscale",
     "monitor_only",
     "recovery_only",
     "optimization_only",
     "schema_only",
     "full",
 )
+# Non-agent comparison points (static+human, rule-based automation, autoscaling).
+BASELINE_CONFIGS = ("baseline", "rule_based", "autoscale")
 SINGLE_ABLATIONS = ("monitor_only", "recovery_only", "optimization_only", "schema_only")
 
 
@@ -40,13 +52,13 @@ def _matrix(configs: tuple[str, ...], n: int) -> list[Run]:
     ]
 
 
-# quick: all 6 configs x 4 scenarios x N=3 = 72 runs (smoke of the full matrix).
-# paper: baseline & full at N=20, the four single-agent ablations at N=10 = 320 runs.
+# quick: all 8 configs x 4 scenarios x N=3 = 96 runs (smoke of the full matrix).
+# paper: the 3 baselines + full at N=20, the four single-agent ablations at N=10 = 480 runs.
 # smoke: a tiny 2-run profile for the automated gate.
 PROFILES: dict[str, list[Run]] = {
     "smoke": [Run("baseline", "upstream_delay", 0), Run("full", "upstream_delay", 0)],
     "quick": _matrix(ALL_CONFIGS, 3),
-    "paper": (_matrix(("baseline", "full"), 20) + _matrix(SINGLE_ABLATIONS, 10)),
+    "paper": (_matrix((*BASELINE_CONFIGS, "full"), 20) + _matrix(SINGLE_ABLATIONS, 10)),
 }
 
 

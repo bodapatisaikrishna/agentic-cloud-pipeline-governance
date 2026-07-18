@@ -22,6 +22,7 @@ from acde import db
 from acde.config import get_settings
 from acde.experiments.baseline import resolve_via_human
 from acde.experiments.configs import Run, profile_runs
+from acde.experiments.decision_quality import is_correct
 from acde.experiments.scenarios import TIMINGS, RunTimings, run_seed
 from acde.logging import get_logger
 
@@ -55,10 +56,17 @@ def _sample_resources(experiment_run: str) -> None:  # pragma: no cover - docker
 
 
 def _respond(run: Run, seed: int, timings: RunTimings) -> None:  # pragma: no cover - live loop
+    from acde.experiments.baselines import resolve_via_autoscale, resolve_via_rules
     from acde.orchestrator.loop import ControlLoop
 
     if run.config == "baseline":
         resolve_via_human(run_id_for(run), seed)
+        return
+    if run.config == "rule_based":
+        resolve_via_rules(run_id_for(run), seed)
+        return
+    if run.config == "autoscale":
+        resolve_via_autoscale(run_id_for(run), seed)
         return
     loop = ControlLoop(experiment_run=run_id_for(run), config=run.config)
     loop.interval_s = min(2.0, timings.loop_s / 3)
@@ -66,7 +74,7 @@ def _respond(run: Run, seed: int, timings: RunTimings) -> None:  # pragma: no co
     resolve_via_human(run_id_for(run), seed)  # fallback for faults no agent resolved
 
 
-def harvest_metrics(experiment_run: str, wall_s: float) -> dict[str, float]:
+def harvest_metrics(experiment_run: str, wall_s: float, scenario: str = "") -> dict[str, float]:
     """Compute the §5.4 metrics for a completed run from the telemetry tables."""
     events = db.fetch_all(
         "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr "
@@ -94,12 +102,19 @@ def harvest_metrics(experiment_run: str, wall_s: float) -> dict[str, float]:
         "WHERE experiment_run = %s AND metric = 'freshness_s' ORDER BY ts DESC LIMIT 1",
         (experiment_run,),
     )
+    executed = db.fetch_all(
+        "SELECT action_type FROM telemetry.agent_actions "
+        "WHERE experiment_run = %s AND executed = TRUE",
+        (experiment_run,),
+    )
+    decision_correct = is_correct(scenario, [r["action_type"] for r in executed])
     return {
         "mttr_s": statistics.median(mttrs) if mttrs else 0.0,
         "cost_units": float(cost["c"]) if cost else 0.0,
         "manual_interventions": float(interventions["n"]) if interventions else 0.0,
         "llm_tokens": float(tokens["t"]) if tokens else 0.0,
         "freshness_s": float(freshness["value"]) if freshness else 0.0,
+        "decision_correct": 1.0 if decision_correct else 0.0,
         "wall_clock_s": wall_s,
     }
 
@@ -168,7 +183,7 @@ def run_one(run: Run, timings: RunTimings, results_dir: Path) -> dict[str, float
 
     compute_cost_windows(experiment_run=experiment_run, window_s=5)
 
-    metrics = harvest_metrics(experiment_run, time.monotonic() - t0)
+    metrics = harvest_metrics(experiment_run, time.monotonic() - t0, run.scenario)
     _write_rows(results_dir / "raw.csv", run, seed, metrics)
     _append_manifest(results_dir / "manifest.jsonl", run, seed, metrics)
     log.info("run_complete", extra={"experiment_run": experiment_run, **metrics})

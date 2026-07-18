@@ -34,23 +34,30 @@ class TestManifest:
 class TestHarvest:
     def test_computes_metrics(self, monkeypatch):
         fake = MagicMock()
-        fake.fetch_all.return_value = [{"mttr": 10.0}, {"mttr": 20.0}, {"mttr": 30.0}]
+        # fetch_all is called twice: mttr events, then executed agent actions.
+        fake.fetch_all.side_effect = [
+            [{"mttr": 10.0}, {"mttr": 20.0}, {"mttr": 30.0}],
+            [{"action_type": "replay"}],
+        ]
         fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"t": 800}, {"value": 25.0}]
         monkeypatch.setattr(runner, "db", fake)
-        m = runner.harvest_metrics("run", wall_s=12.5)
+        m = runner.harvest_metrics("run", wall_s=12.5, scenario="upstream_delay")
         assert m["mttr_s"] == 20.0  # median
         assert m["cost_units"] == 5.0
         assert m["manual_interventions"] == 2.0
         assert m["llm_tokens"] == 800.0
         assert m["freshness_s"] == 25.0
+        assert m["decision_correct"] == 1.0  # replay is a valid upstream_delay mitigation
         assert m["wall_clock_s"] == 12.5
 
     def test_no_events_zero_mttr(self, monkeypatch):
         fake = MagicMock()
-        fake.fetch_all.return_value = []
+        fake.fetch_all.side_effect = [[], []]
         fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 0}, None]
         monkeypatch.setattr(runner, "db", fake)
-        assert runner.harvest_metrics("run", 1.0)["mttr_s"] == 0.0
+        m = runner.harvest_metrics("run", 1.0, scenario="upstream_delay")
+        assert m["mttr_s"] == 0.0
+        assert m["decision_correct"] == 0.0  # no executed action → incorrect
 
 
 class TestRunOne:
@@ -60,7 +67,7 @@ class TestRunOne:
         monkeypatch.setattr(runner, "_respond", lambda run, seed, timings: None)
         monkeypatch.setattr(runner.time, "sleep", lambda s: None)
         monkeypatch.setattr(
-            runner, "harvest_metrics", lambda r, w: {"mttr_s": 4.0, "wall_clock_s": w}
+            runner, "harvest_metrics", lambda r, w, s="": {"mttr_s": 4.0, "wall_clock_s": w}
         )
         monkeypatch.setattr("acde.chaos.injector.FaultInjector", MagicMock())
         monkeypatch.setattr("acde.telemetry.cost.compute_cost_windows", lambda **k: 0)

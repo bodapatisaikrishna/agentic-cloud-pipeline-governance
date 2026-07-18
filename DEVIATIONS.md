@@ -534,3 +534,24 @@ auto-included in the final report.
 - **Rationale:** User has an NVIDIA NIM key and wanted GLM-5.2; a generic OpenAI-compatible branch is
   the same effort as a vendor-specific one but avoids lock-in and unlocks the many free open models
   (Llama/GLM/DeepSeek/Qwen). Anthropic stays the default; this path is opt-in and never in the gate.
+
+## D-058 — Credible non-agent baselines (rule-based + autoscaling)
+
+- **Decision:** Beyond the paper's single static+human baseline, add two stronger, non-LLM baselines
+  drawn from the paper's own related work: `rule_based` (threshold → predefined remediation, §II.C —
+  auto-resolves `upstream_delay`/`resource_contention`/`ingress_burst` at a fixed `rule_remediation_s`,
+  escalates schema drift to the human) and `autoscale` (§II.B — resolves only resource-pressure faults
+  at `autoscale_reaction_s`, is data-blind so schema/upstream faults escalate). Both stamp fixed
+  detection and hand uncovered faults to the existing `resolve_via_human`. Now in `ALL_CONFIGS`
+  (quick=96 runs, paper=480). Verified ordering: agents ≪ rule/autoscale on covered faults ≪ human.
+- **Rationale:** A reviewer's first objection is "agents only beat a *slow human*." These baselines
+  answer "do agents beat cheap automation too?" — the single most likely rejection reason, front-loaded.
+
+## D-059 — Decision-quality metric (correct mitigation, not just fast)
+
+- **Decision:** Add a per-scenario ground-truth set of acceptable optimal mitigations
+  (`decision_quality.EXPECTED_ACTIONS`) and harvest `decision_correct` (1.0 if the run logged an
+  executed agent action in that set). Only meaningful for agent configs; non-agent baselines score 0
+  by construction (they resolve without an agentic decision).
+- **Rationale:** MTTR/cost measure *speed*, never whether the agent chose the *right* action. The paper
+  never measures decision quality; adding it is both a gap-fix and a novel, honest contribution.

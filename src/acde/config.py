@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     human_latency_median_s: float = 360.0
     human_latency_sigma: float = 0.5
 
+    # --- Non-agent baselines (Phase A credibility) ---
+    # Rule-based automation resolves faults it has a predefined rule for at a fixed remediation
+    # latency; autoscaling reacts to resource pressure only. Faults outside coverage escalate to
+    # the human. Both are stronger baselines than the raw human (DEVIATIONS D-058).
+    rule_remediation_s: float = 30.0
+    autoscale_reaction_s: float = 20.0
+
     # --- Agents / anomaly detection (§5.6) ---
     anomaly_z_threshold: float = 3.0  # z-score above which a metric point is anomalous
     cpu_high_pct: float = 80.0  # resource-contention detection threshold

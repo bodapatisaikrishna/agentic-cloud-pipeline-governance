@@ -21,7 +21,14 @@ from acde.logging import get_logger
 
 log = get_logger("analysis.analyze")
 
-METRICS = ["mttr_s", "cost_units", "manual_interventions", "llm_tokens", "freshness_s"]
+METRICS = [
+    "mttr_s",
+    "cost_units",
+    "manual_interventions",
+    "llm_tokens",
+    "freshness_s",
+    "decision_correct",
+]
 
 
 def load_raw(results_dir: Path) -> pd.DataFrame:
