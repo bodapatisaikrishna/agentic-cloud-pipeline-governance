@@ -74,10 +74,18 @@ def _respond(run: Run, seed: int, timings: RunTimings) -> None:  # pragma: no co
     resolve_via_human(run_id_for(run), seed)  # fallback for faults no agent resolved
 
 
-def harvest_metrics(experiment_run: str, wall_s: float, scenario: str = "") -> dict[str, float]:
+FRESHNESS_FAULTS = frozenset({"upstream_delay", "ingress_burst"})
+
+
+def harvest_metrics(
+    experiment_run: str, wall_s: float, scenario: str = "", config: str = ""
+) -> dict[str, float]:
     """Compute the §5.4 metrics for a completed run from the telemetry tables."""
+    from acde.telemetry.cost import provisioning_cost
+
     events = db.fetch_all(
-        "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr "
+        "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr, "
+        "EXTRACT(EPOCH FROM (resolved_ts - injected_ts)) AS stall, fault_type "
         "FROM telemetry.failure_events "
         "WHERE experiment_run = %s AND detected_ts IS NOT NULL AND resolved_ts IS NOT NULL",
         (experiment_run,),
@@ -97,11 +105,15 @@ def harvest_metrics(experiment_run: str, wall_s: float, scenario: str = "") -> d
         "FROM telemetry.agent_actions WHERE experiment_run = %s",
         (experiment_run,),
     )
-    freshness = db.fetch_one(
-        "SELECT value FROM telemetry.pipeline_metrics "
-        "WHERE experiment_run = %s AND metric = 'freshness_s' ORDER BY ts DESC LIMIT 1",
-        (experiment_run,),
-    )
+    # Freshness (A3, D-060): for streaming (ingestion-stall) faults, data-freshness lag equals how
+    # long ingestion was stalled = the fault's open duration (resolved - injected). Batch faults
+    # don't degrade streaming freshness → 0. Derived from independently-measured resolution timing.
+    stalls = [
+        float(e["stall"])
+        for e in events
+        if e["stall"] is not None and e["fault_type"] in FRESHNESS_FAULTS
+    ]
+    freshness_s = statistics.median(stalls) if stalls else 0.0
     executed = db.fetch_all(
         "SELECT action_type FROM telemetry.agent_actions "
         "WHERE experiment_run = %s AND executed = TRUE",
@@ -110,10 +122,11 @@ def harvest_metrics(experiment_run: str, wall_s: float, scenario: str = "") -> d
     decision_correct = is_correct(scenario, [r["action_type"] for r in executed])
     return {
         "mttr_s": statistics.median(mttrs) if mttrs else 0.0,
-        "cost_units": float(cost["c"]) if cost else 0.0,
+        # cost v2: measured compute/storage + the held-allocation (provisioning) cost (D-061).
+        "cost_units": (float(cost["c"]) if cost else 0.0) + provisioning_cost(config),
         "manual_interventions": float(interventions["n"]) if interventions else 0.0,
         "llm_tokens": float(tokens["t"]) if tokens else 0.0,
-        "freshness_s": float(freshness["value"]) if freshness else 0.0,
+        "freshness_s": freshness_s,
         "decision_correct": 1.0 if decision_correct else 0.0,
         "wall_clock_s": wall_s,
     }
@@ -183,7 +196,7 @@ def run_one(run: Run, timings: RunTimings, results_dir: Path) -> dict[str, float
 
     compute_cost_windows(experiment_run=experiment_run, window_s=5)
 
-    metrics = harvest_metrics(experiment_run, time.monotonic() - t0, run.scenario)
+    metrics = harvest_metrics(experiment_run, time.monotonic() - t0, run.scenario, run.config)
     _write_rows(results_dir / "raw.csv", run, seed, metrics)
     _append_manifest(results_dir / "manifest.jsonl", run, seed, metrics)
     log.info("run_complete", extra={"experiment_run": experiment_run, **metrics})

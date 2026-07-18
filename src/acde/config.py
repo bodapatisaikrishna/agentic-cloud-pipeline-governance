@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     rule_remediation_s: float = 30.0
     autoscale_reaction_s: float = 20.0
 
+    # --- Cost model v2: provisioning (Phase B, D-061) ---
+    # Static configs hold a fixed over-provisioned allocation; dynamically-scaling configs
+    # (autoscale + optimization agent) right-size to actual load. Provisioning cost is charged over
+    # a fixed horizon so it is comparable across profiles (independent of compressed run timings).
+    provisioned_units_static: float = 8.0
+    provisioned_units_rightsized: float = 3.0
+    provisioning_horizon_s: float = 300.0
+
     # --- Agents / anomaly detection (§5.6) ---
     anomaly_z_threshold: float = 3.0  # z-score above which a metric point is anomalous
     cpu_high_pct: float = 80.0  # resource-contention detection threshold

@@ -24,6 +24,26 @@ log = get_logger("telemetry.cost")
 COMPUTE_COMPONENTS = ("streaming", "batch")
 STORAGE_COMPONENT = "postgres"
 
+# Cost v2 (D-061): configs that dynamically right-size their allocation (autoscaling at the infra
+# level, or the optimization agent at the data level). Everything else holds a fixed
+# over-provisioned allocation, so it pays the full static provisioning cost.
+RIGHTSIZING_CONFIGS = frozenset({"autoscale", "optimization_only", "full"})
+
+
+def provisioning_units_for(config: str) -> float:
+    """Provisioned compute units held for the run: right-sized vs static over-provisioned."""
+    s = get_settings()
+    if config in RIGHTSIZING_CONFIGS:
+        return s.provisioned_units_rightsized
+    return s.provisioned_units_static
+
+
+def provisioning_cost(config: str) -> float:
+    """Cost of the held allocation over the fixed horizon (avoided over-provisioning, D-061)."""
+    s = get_settings()
+    unit_seconds = provisioning_units_for(config) * s.provisioning_horizon_s
+    return cost_units(unit_seconds, 0.0)
+
 
 def integrate_worker_seconds(
     samples: list[tuple[dt.datetime, float]],
