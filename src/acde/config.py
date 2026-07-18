@@ -104,6 +104,12 @@ class Settings(BaseSettings):
     provisioned_units_rightsized: float = 3.0
     provisioning_horizon_s: float = 300.0
 
+    # --- Bounded adaptation (Phase E, D-064) — off by default for a deterministic benchmark ---
+    adaptation_enabled: bool = False
+    adaptation_weight: float = 0.3  # how much logged outcomes move a proposal's confidence
+    adaptation_min_confidence: float = 0.1
+    adaptation_max_confidence: float = 0.99
+
     # --- Agents / anomaly detection (§5.6) ---
     anomaly_z_threshold: float = 3.0  # z-score above which a metric point is anomalous
     cpu_high_pct: float = 80.0  # resource-contention detection threshold
