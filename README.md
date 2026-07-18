@@ -246,6 +246,25 @@ Operational agents must survive a dependency outage, not crash. ACDE degrades on
 In every case the agent cycle completes and, where relevant, a `telemetry.manual_interventions` row
 hands the incident to the (simulated) human — the loop stays alive and resumable.
 
+## Beyond the paper (v1.3)
+
+ACDE goes past a faithful replica into a rigorous benchmark that also tests claims the paper asserts
+without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) and
+[`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) (section-by-section mapping).
+
+- **Credible baselines** — `rule_based` + `autoscale` alongside static+human, so the comparison is
+  "agents vs cheap automation," not just "agents vs a slow human" (D-058).
+- **Decision-quality metric** — `decision_correct`: did the agent pick the *right* mitigation, not
+  just a fast one (D-059)?
+- **Cost model v2** — credits avoided over-provisioning, making the paper's cost claim testable (D-061).
+- **Cross-LLM study** — `python -m acde.eval.cross_model` measures decision correctness/latency/tokens
+  across models, testing the paper's "model-agnostic" claim (D-063).
+- **Adversarial safety eval** — `python -m acde.eval.adversarial` injects unsafe proposals and measures
+  the OPA gate's containment rate (**1.0** against real OPA) — the first stress-test of the paper's
+  core safety thesis (D-062).
+- **Bounded adaptation** — `agents/adaptation.py` concretizes the paper's §V adaptation claim, off by
+  default for determinism (D-064).
+
 ## Phase status
 
 | Phase | Scope | Status |

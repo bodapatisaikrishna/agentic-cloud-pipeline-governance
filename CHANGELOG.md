@@ -3,18 +3,36 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
-## [Unreleased] — Phase A: scientific credibility (baselines + decision quality)
+## [1.3.0] — Publication-grade extensions (Phases A–F)
 
-### Added
-- **Credible non-agent baselines (D-058):** `rule_based` (predefined-remediation automation) and
-  `autoscale` (resource-only, data-blind) configs in `experiments/baselines.py`, alongside the
-  static+human baseline — answering "do agents beat cheap automation, not just a slow human?".
-  Matrix grows to quick=96 / paper=480 runs. Verified ordering agents ≪ rule/autoscale ≪ human.
-- **Decision-quality metric (D-059):** `experiments/decision_quality.py` ground-truth optimal
-  mitigations per scenario; runner harvests `decision_correct` into `raw.csv`; added to analysis
-  `METRICS`. Measures whether the agent picked the *correct* action, not just how fast.
-- **Config:** `rule_remediation_s`, `autoscale_reaction_s`. **Tests:** +9 unit (baselines coverage +
-  escalation, decision-quality ground truth, runner harvest w/ decision_correct). 304 unit @95%.
+Turns the faithful replication into a rigorous, open benchmark that also tests claims the paper
+asserted without evidence. See `REPORT.md` and `docs/PAPER_MAPPING.md`.
+
+### Added — scientific credibility (Phase A)
+- **Credible non-agent baselines (D-058):** `rule_based` and `autoscale` configs
+  (`experiments/baselines.py`), alongside static+human — "beat cheap automation, not just a slow
+  human?". Matrix grows to quick=96 / paper=480. Verified ordering agents ≪ rule/autoscale ≪ human.
+- **Decision-quality metric (D-059):** `experiments/decision_quality.py`; runner harvests
+  `decision_correct`; added to analysis `METRICS`. Correct mitigation, not just fast.
+- **Freshness as ingestion-stall (D-060):** streaming faults degrade `freshness_s` by their open
+  duration (non-circular), so the metric is no longer trivially zero.
+
+### Added — novel contributions (Phases B–E)
+- **Cost model v2 (D-061):** provisioning term credits avoided over-provisioning; makes the paper's
+  cost-reduction claim testable (`telemetry/cost.py`).
+- **Cross-LLM study (D-063):** `eval/cross_model.py` — decision correctness/latency/tokens per model,
+  testing the paper's model-agnostic claim. Injectable probe; live sweep opt-in.
+- **Adversarial safety eval (D-062):** `eval/adversarial.py` — OPA-gate containment of unsafe
+  proposals. **Live result: containment = 1.0** (denied/escalated) + contract-layer rejection.
+- **Bounded adaptation (D-064):** `agents/adaptation.py` — success-prior-blended confidence within
+  clamps; off by default to keep the benchmark deterministic.
+
+### Added — packaging (Phase F)
+- `docs/PAPER_MAPPING.md` (section-by-section), `REPORT.md` (what reproduces / what doesn't),
+  DEVIATIONS D-058…D-064. **Tests:** +21 unit (baselines, decision quality, cost v2, cross-model,
+  adversarial, adaptation). 317 unit @95%.
+
+## [1.2.0] — 2026-07-17 — Generic OpenAI-compatible LLM provider (NVIDIA NIM / GLM-5.2)
 
 ## [1.2.0] — 2026-07-17 — Generic OpenAI-compatible LLM provider (NVIDIA NIM / GLM-5.2)
 

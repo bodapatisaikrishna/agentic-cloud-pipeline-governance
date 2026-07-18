@@ -555,3 +555,43 @@ auto-included in the final report.
   by construction (they resolve without an agentic decision).
 - **Rationale:** MTTR/cost measure *speed*, never whether the agent chose the *right* action. The paper
   never measures decision quality; adding it is both a gap-fix and a novel, honest contribution.
+
+## D-060 — Freshness modeled as ingestion-stall duration
+
+- **Decision:** For streaming (ingestion-stall) faults (`upstream_delay`, `ingress_burst`),
+  `freshness_s` = the fault's open duration (`resolved_ts − injected_ts`); batch faults don't degrade
+  streaming freshness → 0. Derived from independently-measured resolution timing (not fabricated).
+- **Rationale:** Data-freshness lag *is* how long ingestion was stalled; this makes the previously
+  trivially-zero metric meaningful without circularity.
+
+## D-061 — Cost model v2: avoided over-provisioning
+
+- **Decision:** Add a provisioning cost term: static configs hold `provisioned_units_static` for a
+  fixed horizon; right-sizing configs (`autoscale`, `optimization_only`, `full`) hold
+  `provisioned_units_rightsized`. Total cost = measured compute/storage (D-006) + provisioning.
+- **Rationale:** The paper's cost reduction comes from the optimization agent right-sizing during low
+  utilization, which the compute-only model (D-006) couldn't capture. v2 makes the ↓cost claim
+  testable. The result depends on the provisioning gap assumption (disclosed), not tuned to the paper.
+
+## D-062 — Adversarial safety evaluation
+
+- **Decision:** `eval/adversarial.py` injects unsafe proposals and measures the OPA gate's containment
+  rate (contained = denied or escalated, never silently allowed), plus contract-layer rejection of
+  out-of-allowlist action types. Live result vs real OPA: containment = 1.0.
+- **Rationale:** Operationalizes the paper's central "policy-bounded ⇒ safe" thesis, which the paper
+  asserts but never stress-tests.
+
+## D-063 — Cross-LLM reasoning study
+
+- **Decision:** `eval/cross_model.py` runs each scenario through many models and scores decision
+  correctness / latency / tokens, empirically testing the paper's §VI.A "model-agnostic" claim.
+  Injectable probe (unit-tested); live sweep is opt-in/user-run.
+- **Rationale:** The paper asserts model-agnosticism with zero data; this provides the data.
+
+## D-064 — Bounded adaptation from logged outcomes
+
+- **Decision:** `agents/adaptation.py` blends the empirical success prior of a (fault_type,
+  action_type) pair into proposal confidence within fixed clamps; off by default
+  (`adaptation_enabled=False`) so the benchmark stays deterministic.
+- **Rationale:** Concretizes the paper's §V "outcomes incorporated into future reasoning cycles"
+  claim, which it never specifies or evaluates. Gate still bounds every action.
