@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     airflow_url: str = "http://localhost:8080/api/v1"
     airflow_user: str = "admin"
     airflow_password: str = "admin"
+    airflow_auth_token: str = ""  # bearer token; used instead of basic auth when set (prod SSO)
+    airflow_verify_tls: bool = True  # verify TLS certs on the customer's Airflow endpoint
+    # Which orchestrator connector the runtime attaches to: "airflow" (their Airflow) or "noop"
+    # (observe-only — propose + gate + log, never act). See docs/CONNECTING.md (D-066).
+    connector_kind: str = "airflow"
 
     # --- LLM layer ---
     # Live-call provider: "anthropic" (default) or "gemini" (D-056). Ignored under MOCK_LLM.
