@@ -207,34 +207,77 @@ def _escalate(action: ProposedAction, decision: PolicyDecision, experiment_run: 
     )
 
 
+# Side-effect-free acknowledgements: always run regardless of execution mode (nothing to gate).
+AUTO_ACTIONS = frozenset({"no_action", "raise_anomaly", "allow_compatible"})
+
+
+def apply_action(action: ProposedAction, experiment_run: str) -> ExecutionOutcome:
+    """Run an action's side-effect handler (the real execution core, mode-agnostic).
+
+    On a bounded-retry-exhausted infra error, returns ``executed=False`` with an
+    ``execution_failed`` outcome (caller decides whether to escalate). Reused by :func:`execute`
+    and the approval workflow (`acde.human.approvals`).
+    """
+    handler = _HANDLERS.get(action.action_type, _noop)
+    try:
+        return ExecutionOutcome(executed=True, outcome=handler(action, experiment_run))
+    except httpx.HTTPError as exc:
+        log.warning(
+            "action_execution_failed",
+            extra={
+                "action_id": str(action.action_id),
+                "action_type": action.action_type,
+                "error": str(exc),
+                "experiment_run": experiment_run,
+            },
+        )
+        return ExecutionOutcome(executed=False, outcome=f"execution_failed: {exc}")
+
+
+def _effective_mode(action_type: str) -> str:
+    """Resolve the execution mode for an allowed action (autonomous can be upgraded to approval)."""
+    settings = get_settings()
+    mode = settings.acde_mode
+    if mode == "autonomous" and action_type in settings.approval_required_set:
+        return "approval"  # high-blast-radius action always needs sign-off
+    return mode
+
+
 def execute(
     action: ProposedAction, decision: PolicyDecision, experiment_run: str
 ) -> ExecutionOutcome:
-    """Apply an action's side effects when allowed; escalate when the decision says so."""
+    """Carry out a gated action per the execution mode (shadow / approval / autonomous)."""
+    from acde.notify.webhook import notify
+
     parts: list[str] = []
     executed = False
     if decision.allowed:
-        handler = _HANDLERS.get(action.action_type, _noop)
-        try:
-            parts.append(handler(action, experiment_run))
-            executed = True
-        except httpx.HTTPError as exc:
-            # Infra (Airflow) unreachable after bounded retry: degrade to escalate, never crash.
-            _escalate(action, decision, experiment_run)
-            log.warning(
-                "action_execution_failed",
-                extra={
-                    "action_id": str(action.action_id),
-                    "action_type": action.action_type,
-                    "error": str(exc),
-                    "experiment_run": experiment_run,
-                },
-            )
-            return ExecutionOutcome(
-                executed=False, outcome=f"execution_failed: {exc}; escalated_to_human"
-            )
+        if action.action_type in AUTO_ACTIONS:
+            out = apply_action(action, experiment_run)  # side-effect-free ack, always runs
+            executed = out.executed
+            parts.append(out.outcome)
+        else:
+            mode = _effective_mode(action.action_type)
+            if mode == "shadow":
+                parts.append(f"shadow: would execute {action.action_type} on {action.target}")
+                notify("shadow_proposal", action, decision, experiment_run)
+            elif mode == "approval":
+                from acde.human.approvals import create_pending
+
+                aid = create_pending(action, decision, experiment_run)
+                parts.append(f"pending_approval:{aid}")
+                notify("pending_approval", action, decision, experiment_run, approval_id=aid)
+            else:  # autonomous
+                out = apply_action(action, experiment_run)
+                executed = out.executed
+                parts.append(out.outcome)
+                if not out.executed:  # infra failure after retries → escalate, never crash
+                    _escalate(action, decision, experiment_run)
+                    notify("execution_failure", action, decision, experiment_run)
+                    parts.append("escalated_to_human")
     if decision.escalate:
         _escalate(action, decision, experiment_run)
+        notify("escalation", action, decision, experiment_run)
         parts.append("escalated_to_human")
     if not decision.allowed and not decision.escalate:
         parts.append(f"denied: {decision.reason}")

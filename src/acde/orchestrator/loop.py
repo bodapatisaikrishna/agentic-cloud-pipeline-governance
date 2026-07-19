@@ -19,6 +19,7 @@ from acde.agents.run import AGENTS
 from acde.config import get_settings
 from acde.llm.client import LLMClient
 from acde.logging import get_logger
+from acde.orchestrator import control
 from acde.orchestrator.configs import enabled_agents
 from acde.orchestrator.locks import target_advisory_lock
 
@@ -64,6 +65,8 @@ class ControlLoop:
                     },
                 )
                 return f"skipped: {action.target} locked"
+            if control.blast_radius_exceeded(self.experiment_run, action.target):
+                return f"skipped: blast-radius cap reached for {action.target}"
             cycle = agent.act(action, result, snapshot)
             return cycle.outcome
 
@@ -76,6 +79,9 @@ class ControlLoop:
         return int(row["n"]) if row else 0
 
     async def _tick(self) -> None:
+        if control.is_paused():  # global kill switch — take no actions until resumed
+            log.info("loop_paused", extra={"experiment_run": self.experiment_run})
+            return
         if "monitoring" in self.enabled:
             await asyncio.to_thread(self._run_agent, "monitoring")
         # Reactive agents only when there is something to react to.

@@ -595,3 +595,20 @@ auto-included in the final report.
   (`adaptation_enabled=False`) so the benchmark stays deterministic.
 - **Rationale:** Concretizes the paper's §V "outcomes incorporated into future reasoning cycles"
   claim, which it never specifies or evaluates. Gate still bounds every action.
+
+## D-065 — Production trust core: execution modes, approvals, kill switch (v2, P1)
+
+- **Decision:** Add a graduated-autonomy layer so companies can adopt safely. `acde_mode`:
+  `shadow` (log proposals, never touch the pipeline), `approval` (queue allowed actions to
+  `telemetry.action_approvals`; a human `approve`/`reject`, and approval re-runs via
+  `executor.apply_action`), `autonomous` (execute). Side-effect-free acks always run; high-blast
+  action types (`approval_required_action_types`) force approval even in autonomous. A durable kill
+  switch (`control.desired_state['acde.paused']`, checked each loop tick) and a per-target hourly
+  blast-radius cap bound the agents independent of policy. Slack-compatible webhook notifications
+  fire on a daemon thread (never block the loop) with `params` redacted.
+- **Code default stays `autonomous`** so the research benchmark's determinism and existing tests are
+  unchanged; the production env template and `acde run` entrypoint select `shadow`. This is a
+  deliberate split between the research default and the safe *production* default.
+- **Rationale:** No company grants agents prod write-access on day one. Shadow → approval →
+  autonomous is the standard trust ladder for AI ops tooling; the kill switch and blast-radius cap
+  are non-negotiable production safety controls.

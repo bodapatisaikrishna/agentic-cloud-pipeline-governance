@@ -141,6 +141,30 @@ class Settings(BaseSettings):
     stress_use_container: bool = False
     stress_image: str = "ghcr.io/colinianking/stress-ng:latest"
 
+    # --- Production trust core (v2, P1) ---
+    # Execution mode: "shadow" (log, never touch the pipeline), "approval" (queue for human sign-off
+    # before executing), "autonomous" (execute allowed actions). Code default stays autonomous for
+    # the research benchmark's determinism; the prod env template ships ACDE_MODE=shadow and the
+    # `acde run` entrypoint defaults to shadow when unset. See docs/OPERATIONS.md (D-065).
+    acde_mode: str = "autonomous"
+    # Allowed actions of these types always require human approval, even in autonomous mode (CSV of
+    # action_types, e.g. "rollback,quarantine_partition,block_ingestion"). Empty = none.
+    approval_required_action_types: str = ""
+    # Outbound webhook for operator notifications (Slack-compatible JSON). Empty disables.
+    webhook_url: str = ""
+    webhook_events: str = "pending_approval,escalation,execution_failure"
+    webhook_timeout_s: float = 5.0
+    # Blast-radius cap: max executed (side-effecting) actions per target per hour (0 = unlimited).
+    blast_radius_max_per_hour: int = 0
+
+    @property
+    def approval_required_set(self) -> set[str]:
+        return {a.strip() for a in self.approval_required_action_types.split(",") if a.strip()}
+
+    @property
+    def webhook_event_set(self) -> set[str]:
+        return {e.strip() for e in self.webhook_events.split(",") if e.strip()}
+
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
     telemetry_interval_s: float = 5.0  # collector sampling period
