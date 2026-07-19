@@ -161,6 +161,11 @@ class Settings(BaseSettings):
     webhook_timeout_s: float = 5.0
     # Blast-radius cap: max executed (side-effecting) actions per target per hour (0 = unlimited).
     blast_radius_max_per_hour: int = 0
+    # Operator API (acde.server): static API key required in the X-API-Key header (empty = the API
+    # refuses to start, so it is never accidentally exposed unauthenticated). TLS via reverse proxy.
+    api_key: str = ""
+    api_host: str = "127.0.0.1"
+    api_port: int = 8099
 
     @property
     def approval_required_set(self) -> set[str]:

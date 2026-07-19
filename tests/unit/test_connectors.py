@@ -45,9 +45,7 @@ class TestDoctor:
             "_check_connector",
             lambda: health.Check("connector:noop", True, "observe-only"),
         )
-        monkeypatch.setattr(
-            health, "get_settings", lambda: Settings(_env_file=None, mock_llm=True)
-        )
+        monkeypatch.setattr(health, "get_settings", lambda: Settings(_env_file=None, mock_llm=True))
         out = health.doctor()
         assert out["all_ok"] is True
         assert any(c["name"] == "llm" and c["ok"] for c in out["checks"])
@@ -56,7 +54,9 @@ class TestDoctor:
         monkeypatch.setattr(
             health,
             "get_settings",
-            lambda: Settings(_env_file=None, mock_llm=False, llm_provider="gemini", gemini_api_key=""),
+            lambda: Settings(
+                _env_file=None, mock_llm=False, llm_provider="gemini", gemini_api_key=""
+            ),
         )
         c = health._check_llm()
         assert not c.ok and "MISSING" in c.detail

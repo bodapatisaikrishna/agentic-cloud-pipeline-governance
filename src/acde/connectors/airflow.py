@@ -36,8 +36,11 @@ class AirflowConnector:
         else:
             auth = (s.airflow_user, s.airflow_password)
         return httpx.Client(
-            base_url=s.airflow_url, auth=auth, headers=headers,
-            timeout=30, verify=s.airflow_verify_tls,
+            base_url=s.airflow_url,
+            auth=auth,
+            headers=headers,
+            timeout=30,
+            verify=s.airflow_verify_tls,
         )
 
     def health(self) -> ConnectorHealth:  # pragma: no cover - network
