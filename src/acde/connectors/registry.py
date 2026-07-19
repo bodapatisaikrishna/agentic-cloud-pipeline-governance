@@ -6,9 +6,12 @@ from acde.config import get_settings
 from acde.connectors.base import Connector
 
 
-def get_connector(kind: str | None = None, is_production: bool = True) -> Connector:
+def get_connector(kind: str | None = None, is_production: bool | None = None) -> Connector:
     """Return the configured connector instance (``connector_kind``: airflow | noop)."""
-    kind = kind or get_settings().connector_kind
+    settings = get_settings()
+    kind = kind or settings.connector_kind
+    if is_production is None:
+        is_production = settings.connector_is_production
     if kind == "airflow":
         from acde.connectors.airflow import AirflowConnector
 

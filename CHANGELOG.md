@@ -29,6 +29,12 @@ ACDE becomes a tool companies can deploy to govern their own pipelines. See `doc
   with `acde[research]` extra. Slim `deploy/Dockerfile.server` + `deploy/docker-compose.prod.yml`
   (server + OPA + Postgres; external orchestrator) + `.env.prod.example`. Version 2.0.0.
 
+### Added — differentiators (P5, D-068)
+- **`acde report`** — ROI summary from the audit trail (actions executed, incidents auto-resolved,
+  MTTR p50/p90, tokens, estimated operator-hours saved). Always available (no research extra).
+- **`acde gameday --scenario …`** — rehearse a controlled incident in staging and get an evidence
+  report for *your* pipelines; hard staging-guard (`connector_is_production`), needs `acde[research]`.
+
 ## [1.3.0] — Publication-grade extensions (Phases A–F)
 
 Turns the faithful replication into a rigorous, open benchmark that also tests claims the paper

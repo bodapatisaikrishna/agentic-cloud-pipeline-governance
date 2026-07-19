@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     # Which orchestrator connector the runtime attaches to: "airflow" (their Airflow) or "noop"
     # (observe-only — propose + gate + log, never act). See docs/CONNECTING.md (D-066).
     connector_kind: str = "airflow"
+    # Whether the connected environment is production. Game-day/chaos refuses to run unless this is
+    # False (a staging connector), so incident rehearsals never hit prod.
+    connector_is_production: bool = True
 
     # --- LLM layer ---
     # Live-call provider: "anthropic" (default) or "gemini" (D-056). Ignored under MOCK_LLM.

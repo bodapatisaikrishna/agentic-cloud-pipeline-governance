@@ -632,3 +632,14 @@ auto-included in the final report.
 - **Rationale:** A smaller, dependency-light image and a permissive, patent-granting license remove
   the two biggest blockers to enterprise adoption; the research artifact remains fully reproducible
   via the extra.
+
+## D-068 — Differentiators: game-day rehearsal + ROI report
+
+- **Decision:** `acde gameday` (`ops/gameday.py`) injects a controlled fault into a **staging**
+  connector (hard-guarded by `connector_is_production`) and reports how the agents responded on the
+  customer's own pipelines. `acde report` (`ops/roi.py`) summarizes the audit trail into an ROI
+  artifact (auto-resolutions, MTTR p50/p90, tokens, an explicitly-labeled operator-hours-saved
+  estimate). ROI is core; game-day needs the research extra (chaos harness).
+- **Rationale:** These are the moat vs. observability tools (which only detect) and opaque AIOps
+  (which act without evidence): a policy-bounded rehearsal + a renewal-grade ROI report, both on the
+  customer's data. Reuses the existing chaos/agents/telemetry — high value, low new surface.

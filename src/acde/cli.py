@@ -85,6 +85,29 @@ def cmd_approvals(args: argparse.Namespace) -> int:
     return 2
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.ops.roi import roi_report
+
+    print(json.dumps(roi_report(since_hours=args.since_hours), indent=2))
+    return 0
+
+
+def cmd_gameday(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.ops.gameday import run_gameday
+
+    try:
+        report = run_gameday(args.scenario, env=args.env, force=args.force)
+    except RuntimeError as exc:
+        print(f"error: {exc}")
+        return 1
+    print(json.dumps(report, indent=2, default=str))
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:  # pragma: no cover - long-running loop
     import asyncio
 
@@ -134,6 +157,16 @@ def build_parser() -> argparse.ArgumentParser:
         sp = sub.add_parser(name, help=f"{name} the loop (kill switch)")
         sp.add_argument("--actor", default="operator")
         sp.set_defaults(func=cmd_pause if name == "pause" else cmd_resume)
+
+    rp = sub.add_parser("report", help="ROI report from the audit trail")
+    rp.add_argument("--since-hours", type=float, default=720.0)
+    rp.set_defaults(func=cmd_report)
+
+    gd = sub.add_parser("gameday", help="rehearse an incident in staging (research extra)")
+    gd.add_argument("--scenario", required=True)
+    gd.add_argument("--env", default="staging")
+    gd.add_argument("--force", action="store_true", help="allow against a production connector")
+    gd.set_defaults(func=cmd_gameday)
 
     ap = sub.add_parser("approvals", help="human approval queue")
     ap.add_argument("action", choices=["list", "approve", "reject"])
