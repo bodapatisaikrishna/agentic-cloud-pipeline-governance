@@ -1,0 +1,22 @@
+ACDE — Agentic Cloud Data Engineering
+Copyright 2026 The ACDE Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+ACDE is a research-grade and production tool for policy-bounded agentic governance of
+cloud data pipelines. It originated as an open replication of and extension to:
+
+  "Governing Cloud Data Pipelines with Agentic AI" (arXiv:2512.23737),
+  Kirubakaran et al., 2025.
+
+ACDE is an independent implementation and is not affiliated with or endorsed by the
+paper's authors or their institutions.
+
+Third-party data sources used by the optional research/benchmark components are described
+in DATA_LICENSES.md (TPC-DS is a trademark of the TPC; NYC TLC trip data is public data of
+the City of New York). ACDE ships none of that data; it is generated or fetched on demand.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. ACDE proposes and (when
+configured to do so) executes operational actions against data pipelines; operators are
+responsible for reviewing policies, choosing an execution mode, and validating behavior in
+a non-production environment before granting write access to production systems.

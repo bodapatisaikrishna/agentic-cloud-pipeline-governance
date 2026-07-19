@@ -1,0 +1,51 @@
+# Production deployment (v2, P4): ACDE server + OPA + Postgres only.
+# The company's orchestrator (Airflow) is EXTERNAL — ACDE attaches to it via connectors, so no demo
+# Airflow/Redpanda here. Bring your own managed Postgres in real deployments (point ACDE_DB_* at it)
+# and terminate TLS at a reverse proxy in front of the acde-server. See docs/OPERATIONS.md.
+services:
+  postgres:
+    image: postgres:16.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-acde}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-acde}
+    volumes:
+      - acde_pgdata:/var/lib/postgresql/data
+      - ../infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-acde}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:0.68.0
+    command: ["run", "--server", "--addr", "0.0.0.0:8181", "/policies"]
+    volumes:
+      - ../infra/opa/policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  acde-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    env_file:
+      - path: ../.env.prod
+        required: false   # create it from .env.prod.example before deploying
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      OPA_URL: http://opa:8181
+    depends_on:
+      postgres: {condition: service_healthy}
+      opa: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:8099:8099"   # bind localhost; put a TLS reverse proxy in front
+    restart: unless-stopped
+
+volumes:
+  acde_pgdata:

@@ -612,3 +612,23 @@ auto-included in the final report.
 - **Rationale:** No company grants agents prod write-access on day one. Shadow → approval →
   autonomous is the standard trust ladder for AI ops tooling; the kill switch and blast-radius cap
   are non-negotiable production safety controls.
+
+## D-066 — Connector boundary (attach to their orchestrator)
+
+- **Decision:** External systems are reached only through a `Connector` (`src/acde/connectors/`):
+  Airflow (configurable base_url, basic/bearer auth, TLS-verify) and noop (observe-only). Selected by
+  `connector_kind`. `acde doctor` (`ops/health.py`) validates DB/OPA/connector/LLM/mode/webhook.
+- **Rationale:** A production tool must attach to the *company's* stack, not require ours. The narrow
+  interface makes Dagster/Prefect a new class, not a rewrite.
+
+## D-067 — Product / research dependency split + Apache-2.0 license
+
+- **Decision:** The lean production core (agents, gate, connectors, server, CLI) depends only on
+  pydantic/psycopg/httpx/LLM SDKs/fastapi. The benchmark, chaos harness, analysis, and demo data
+  plane move to the optional `acde[research]` extra (pandas/scipy/matplotlib/pyarrow/confluent-kafka),
+  kept in the dev group so the full test suite still runs. The code is licensed **Apache-2.0**
+  (LICENSE + NOTICE), **superseding D-054's "no code license"** now that this is a product companies
+  adopt. Version bumped to 2.0.0.
+- **Rationale:** A smaller, dependency-light image and a permissive, patent-granting license remove
+  the two biggest blockers to enterprise adoption; the research artifact remains fully reproducible
+  via the extra.

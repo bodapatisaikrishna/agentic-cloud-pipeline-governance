@@ -1,0 +1,27 @@
+# Slim production image for the ACDE operator API + control loop (v2, P4).
+# Ships the lean core only (no research/benchmark/data-plane extras). Multi-stage: build a venv with
+# uv, then copy it into a small runtime image.
+FROM python:3.11-slim AS build
+
+RUN pip install --no-cache-dir uv
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+# Install ONLY the core project (no dev group, no [research] extra) into a self-contained venv.
+RUN uv sync --no-dev --frozen --no-editable
+
+FROM python:3.11-slim AS runtime
+
+# Non-root runtime user
+RUN useradd --create-home --uid 10001 acde
+WORKDIR /app
+COPY --from=build /app/.venv /app/.venv
+COPY infra/opa/policies ./infra/opa/policies
+ENV PATH="/app/.venv/bin:$PATH" \
+    ACDE_MODE=shadow \
+    MOCK_LLM=1
+USER acde
+
+EXPOSE 8099
+# Default: the operator API. Override the command with `acde run ...` to run the control loop.
+CMD ["acde", "serve", "--host", "0.0.0.0"]

@@ -1,13 +1,33 @@
 # ACDE — Agentic Cloud Data Engineering
 
-A research-grade, reproducible replication of *"Governing Cloud Data Pipelines with
-Agentic AI"* (arXiv:2512.23737): four bounded AI agents (**monitoring**, **optimization**,
-**schema**, **recovery**) observe pipeline telemetry, reason via LLM, and **propose**
-operational actions that an OPA policy gate validates **before** execution. Agents never
-execute anything directly and never generate code. The system is benchmarked against a
-static-orchestration baseline with a deterministic failure-injection harness, a seeded
-experiment matrix, and a statistical analysis pipeline (paired tests, corrections, effect
-sizes, CIs).
+**Policy-bounded agentic governance for cloud data pipelines** — Apache-2.0. Four bounded AI agents
+(**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline telemetry, reason via
+LLM, and **propose** operational actions that an OPA policy gate validates **before** execution.
+Agents never execute anything directly and never generate code.
+
+ACDE is both a **production tool** companies deploy to govern their own pipelines (v2) and a
+**reproducible research artifact** (v1.3) that replicates and extends arXiv:2512.23737.
+
+### Production (v2) — deploy against your own Airflow
+
+Graduated autonomy (**shadow → approval → autonomous**), a connector that attaches to *your*
+orchestrator, an operator API + `acde` CLI, a kill switch, and blast-radius caps. Start here:
+
+```bash
+cp .env.prod.example .env.prod   # set API_KEY, POSTGRES_PASSWORD, AIRFLOW_*, LLM key
+docker compose -f deploy/docker-compose.prod.yml up -d --build
+acde doctor                      # validate the deployment; then `acde run` (shadow by default)
+```
+
+See [`docs/OPERATIONS.md`](docs/OPERATIONS.md), [`docs/CONNECTING.md`](docs/CONNECTING.md),
+[`docs/POLICY_AUTHORING.md`](docs/POLICY_AUTHORING.md), [`docs/SECURITY.md`](docs/SECURITY.md).
+
+### Research (v1.3) — reproduce the paper
+
+The benchmark, chaos harness, and analysis install with the `acde[research]` extra; it is
+benchmarked against a static-orchestration baseline with a deterministic failure-injection harness, a
+seeded experiment matrix, and a statistical analysis pipeline (paired tests, corrections, effect
+sizes, CIs). See [`REPORT.md`](REPORT.md).
 
 ## Architecture
 

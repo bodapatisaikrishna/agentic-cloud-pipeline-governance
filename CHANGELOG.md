@@ -3,6 +3,32 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [2.0.0] — Production release: from research artifact to deployable tool
+
+ACDE becomes a tool companies can deploy to govern their own pipelines. See `docs/OPERATIONS.md`,
+`docs/CONNECTING.md`, `docs/POLICY_AUTHORING.md`, `docs/SECURITY.md`.
+
+### Added — trust core (P1, D-065)
+- **Execution modes** `shadow` / `approval` / `autonomous` (`acde_mode`); allowed actions are logged,
+  queued, or executed accordingly. High-blast action types force approval even in autonomous.
+- **Approval workflow** (`human/approvals.py`, `telemetry.action_approvals`): queue → approve/reject →
+  execute via the executor core. **Kill switch** (`acde pause/resume`) + per-target **blast-radius**
+  cap. **Slack-compatible webhook** notifications (non-blocking, redacted).
+
+### Added — attach to their stack (P2, D-066)
+- **Connectors** (`connectors/`): Airflow (basic/bearer auth, TLS-verify) + noop (observe-only),
+  selected by `connector_kind`. **`acde doctor`** preflight (`ops/health.py`).
+
+### Added — operational surface (P3)
+- **Operator API** (`server/`, FastAPI): `/health`, `/metrics` (Prometheus), `/proposals`, `/audit`,
+  `/approvals/*`; mandatory `X-API-Key`, fail-closed. **`acde` CLI** (console script): run/serve/
+  status/doctor/pause/resume/approvals.
+
+### Added — packaging (P4, D-067)
+- **Apache-2.0** LICENSE + NOTICE (supersedes the research artifact's no-license choice). Lean core
+  with `acde[research]` extra. Slim `deploy/Dockerfile.server` + `deploy/docker-compose.prod.yml`
+  (server + OPA + Postgres; external orchestrator) + `.env.prod.example`. Version 2.0.0.
+
 ## [1.3.0] — Publication-grade extensions (Phases A–F)
 
 Turns the faithful replication into a rigorous, open benchmark that also tests claims the paper

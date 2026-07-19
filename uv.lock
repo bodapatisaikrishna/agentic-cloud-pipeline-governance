@@ -9,61 +9,76 @@ resolution-markers = [
 
 [[package]]
 name = "acde"
-version = "0.1.0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
-    { name = "confluent-kafka" },
     { name = "fastapi" },
     { name = "google-genai" },
     { name = "httpx" },
-    { name = "matplotlib" },
     { name = "openai" },
-    { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
-    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "scipy" },
     { name = "tenacity" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+research = [
+    { name = "confluent-kafka" },
+    { name = "matplotlib" },
+    { name = "pandas" },
+    { name = "pyarrow" },
+    { name = "scipy" },
+]
+
 [package.dev-dependencies]
 dev = [
+    { name = "confluent-kafka" },
+    { name = "matplotlib" },
     { name = "mypy" },
+    { name = "pandas" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "scipy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.116.0" },
-    { name = "confluent-kafka", specifier = ">=2.15.0" },
+    { name = "confluent-kafka", marker = "extra == 'research'", specifier = ">=2.15.0" },
     { name = "fastapi", specifier = ">=0.139.2" },
     { name = "google-genai", specifier = ">=2.11.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "matplotlib", specifier = ">=3.11.0" },
+    { name = "matplotlib", marker = "extra == 'research'", specifier = ">=3.11.0" },
     { name = "openai", specifier = ">=2.46.0" },
-    { name = "pandas", specifier = ">=3.0.3" },
+    { name = "pandas", marker = "extra == 'research'", specifier = ">=3.0.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "psycopg-pool", specifier = ">=3.2,<4" },
-    { name = "pyarrow", specifier = ">=25.0.0" },
+    { name = "pyarrow", marker = "extra == 'research'", specifier = ">=25.0.0" },
     { name = "pydantic", specifier = ">=2.7,<3" },
     { name = "pydantic-settings", specifier = ">=2.3,<3" },
-    { name = "scipy", specifier = ">=1.17.1" },
+    { name = "scipy", marker = "extra == 'research'", specifier = ">=1.17.1" },
     { name = "tenacity", specifier = ">=8.4,<10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
 ]
+provides-extras = ["research"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "confluent-kafka", specifier = ">=2.15.0" },
+    { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "mypy", specifier = ">=1.11" },
+    { name = "pandas", specifier = ">=3.0.3" },
+    { name = "pyarrow", specifier = ">=25.0.0" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "ruff", specifier = ">=0.6" },
+    { name = "scipy", specifier = ">=1.17.1" },
 ]
 
 [[package]]
