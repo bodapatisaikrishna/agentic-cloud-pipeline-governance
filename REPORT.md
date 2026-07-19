@@ -14,17 +14,38 @@ metric, a cross-LLM study, and an adversarial safety evaluation.
 
 ## What reproduces / what doesn't
 
-| Paper claim | Result | Verdict |
+Definitive numbers from the **96-run matrix** (8 configs × 4 scenarios × N=3, deterministic),
+`full` vs `baseline`, all significant after Holm–Bonferroni:
+
+| Paper claim | Measured (full vs baseline) | Verdict |
 |---|---|---|
-| MTTR ↓~45% | full vs baseline ↓~99.98% (significant; Cliff's δ=1.0) | ✅ direction reproduces, magnitude larger |
-| Manual interventions ↓>70% | ↓~100% (significant) | ✅ reproduces and exceeds |
-| Data freshness maintained | maintained (streaming-stall model, D-060) | ✅ |
-| Operational cost ↓~25% | compute-only model: cost **rises** (agents add compute) | ⚠️ does **not** reproduce as-is |
-| Operational cost ↓~25% | provisioning-aware model v2 (D-061): cost **falls** | ✅ reproduces under disclosed model |
+| MTTR ↓~45% | **↓100%** (360 s → 0.06 s), p=0.0005, δ=1.0 | ✅ direction reproduces, magnitude larger |
+| Manual interventions ↓>70% | **↓100%** (1 → 0), p=0.004, δ=0.75 | ✅ reproduces and exceeds |
+| Operational cost ↓~25% | **↓57.3%** (123 → 52.5), p=0.0005, δ=1.0 | ✅ reproduces under cost model v2 (D-061) |
+| Data freshness maintained | **maintained** (baseline 64 s stale → full 0.04 s), D-060 | ✅ |
+| Decision quality *(new)* | full **1.0** vs baseline **0.0** correct mitigation, p=0.0005 | ➕ beyond the paper |
+
+**All three headline claims now reproduce in direction.** The cost claim only reproduces under the
+provisioning-aware cost model (v2, D-061) — the compute-only model (v1, D-006) shows cost *rising*
+because agents add compute without a way to book right-sizing savings.
+
+**Credible-baseline context (the key honesty check).** Agents beat not just the slow human but also
+cheap automation — and by how much varies:
+
+| config | MTTR vs baseline | cost vs baseline | interventions |
+|---|---|---|---|
+| rule_based | ↓91.7% | ±0% | ↓100% |
+| autoscale | ↓55.1% | ↓61.0% | ↓50% |
+| optimization_only | ↓62.6% | ↓57.3% | ↓50% |
+| **full** | **↓100%** | **↓57.3%** | **↓100%** |
+
+So `full` dominates every baseline, but rule-based automation is already strong on MTTR/interventions
+(it just can't right-size cost or handle schema drift) — an honest, nuanced result the paper's
+single-baseline design could never show.
 
 **Why MTTR/interventions come out larger than the paper.** Our baseline resolves via a simulated
 human (lognormal median ≈360 s) while the mock agent resolves near-instantly. The paper's real agents
-still took real time. This is why we added **credible baselines** — see below.
+still took real time. The credible baselines above put this in context.
 
 **Why cost needed two models.** The paper never defines its cost model. Our first model (D-006) is
 compute-only, so running agents only *adds* cost — it cannot book the savings the paper's optimization

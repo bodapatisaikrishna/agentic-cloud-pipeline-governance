@@ -72,12 +72,13 @@ def _vs_paper_table(summary: dict[str, Any]) -> str:
     ]
     for name, claim, measured in rows:
         lines.append(f"| {name} | ↓{claim:.0f}% | {measured:+.1f}% |")
-    lines += [
-        "",
-        "> Our cost model is compute-only (DEVIATIONS D-006), so cost may rise with agent scaling; "
-        "reported as measured.",
-        "",
-    ]
+    caveat = (
+        "> Cost uses model v2 (DEVIATIONS D-061): measured compute/storage plus a provisioning "
+        "term that credits avoided over-provisioning, so right-sizing configs (autoscale, "
+        "optimization, full) reduce cost. Positive = reduction; magnitude depends on the disclosed "
+        "provisioning gap."
+    )
+    lines += ["", caveat, ""]
     return "\n".join(lines)
 
 
