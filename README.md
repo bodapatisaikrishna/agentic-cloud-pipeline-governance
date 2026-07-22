@@ -16,9 +16,9 @@ Safety comes from the architecture, not the model.
 
 ACDE is both:
 
-- 🏭 **A production tool** (v2.0) that companies deploy to govern their own Airflow pipelines, with
+-  **A production tool** (v2.0) that companies deploy to govern their own Airflow pipelines, with
   graduated autonomy, an approval workflow, a kill switch, and an operator API.
-- 🔬 **A reproducible research artifact** (v1.3) that replicates and rigorously extends
+-  **A reproducible research artifact** (v1.3) that replicates and rigorously extends
   *["Governing Cloud Data Pipelines with Agentic AI"](https://arxiv.org/abs/2512.23737)*
   (arXiv:2512.23737).
 
