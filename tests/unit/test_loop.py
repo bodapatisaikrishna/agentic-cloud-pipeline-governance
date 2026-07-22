@@ -51,6 +51,7 @@ class TestRunAgent:
 
     def test_real_action_locks_then_acts(self, monkeypatch):
         monkeypatch.setattr(loop_mod, "target_advisory_lock", _lock(True))
+        monkeypatch.setattr(loop_mod.control, "blast_radius_exceeded", lambda run, target: False)
         cl = ControlLoop("t", "full")
         agent = self._agent_returning(_action("scale_workers", "streaming"))
         cl.agents["optimization"] = agent
@@ -67,13 +68,24 @@ class TestRunAgent:
         agent.act.assert_not_called()
         assert "locked" in out
 
+    def test_blast_radius_exceeded_skips_action(self, monkeypatch):
+        monkeypatch.setattr(loop_mod, "target_advisory_lock", _lock(True))
+        monkeypatch.setattr(loop_mod.control, "blast_radius_exceeded", lambda run, target: True)
+        cl = ControlLoop("t", "full")
+        agent = self._agent_returning(_action("scale_workers", "streaming"))
+        cl.agents["optimization"] = agent
+        out = cl._run_agent("optimization")
+        agent.act.assert_not_called()
+        assert "blast-radius" in out
+
 
 class TestTick:
-    def _loop_recording(self, monkeypatch, open_faults, config="full"):
+    def _loop_recording(self, monkeypatch, open_faults, config="full", paused=False):
         cl = ControlLoop("t", config)
         calls: list[str] = []
         monkeypatch.setattr(cl, "_run_agent", lambda name: calls.append(name) or "x")
         monkeypatch.setattr(cl, "_open_faults", lambda: open_faults)
+        monkeypatch.setattr(loop_mod.control, "is_paused", lambda: paused)
         return cl, calls
 
     def test_no_faults_only_monitoring(self, monkeypatch):
@@ -94,5 +106,12 @@ class TestTick:
 
     def test_baseline_runs_nothing(self, monkeypatch):
         cl, calls = self._loop_recording(monkeypatch, open_faults=2, config="baseline")
+        asyncio.run(cl._tick())
+        assert calls == []
+
+    def test_paused_runs_nothing(self, monkeypatch):
+        # kill switch: even with open faults on a fully-enabled config, a paused loop takes no
+        # actions at all (checked before monitoring even runs).
+        cl, calls = self._loop_recording(monkeypatch, open_faults=2, paused=True)
         asyncio.run(cl._tick())
         assert calls == []

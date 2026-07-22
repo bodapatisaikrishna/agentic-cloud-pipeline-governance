@@ -643,3 +643,22 @@ auto-included in the final report.
 - **Rationale:** These are the moat vs. observability tools (which only detect) and opaque AIOps
   (which act without evidence): a policy-bounded rehearsal + a renewal-grade ROI report, both on the
   customer's data. Reuses the existing chaos/agents/telemetry — high value, low new surface.
+
+## D-069 — Fixed a real test-isolation gap: `ControlLoop` unit tests were hitting a live database
+
+- **What happened:** The P1 kill-switch/blast-radius integration added `control.is_paused()` (in
+  `loop._tick`) and `control.blast_radius_exceeded()` (in `loop._run_agent`) as new calls in the
+  control loop. `acde.orchestrator.control` does its own `from acde import db` import, so mocking
+  `db` on the `loop` module (as `tests/unit/test_loop.py` already did) never intercepted these new
+  calls — they reached a *real* Postgres. Every run during development had a live stack reachable via
+  `DOCKER_CONTEXT=desktop-linux`, so the real calls silently succeeded and the bug was invisible
+  locally; it would have failed in CI (no live DB there) and in any clean environment — a real
+  violation of the project's "unit tests: no docker, no network" rule.
+- **Fix:** `test_loop.py` now mocks `control.is_paused` / `control.blast_radius_exceeded` directly,
+  plus two new tests exercise the integration itself (`test_paused_runs_nothing`,
+  `test_blast_radius_exceeded_skips_action`) — this wiring had zero unit coverage before, only the
+  `orchestrator/control.py` functions were tested in isolation. Verified by re-running the full unit
+  suite with `POSTGRES_PORT=1` (guaranteed-unreachable), confirming true isolation this time.
+- **Lesson:** a local shell with a live dev stack can mask test-isolation bugs that a real CI runner
+  would catch immediately. Verifying "tests pass" against a live stack is not sufficient evidence for
+  unit-test hygiene — periodically run the suite with the database *actually* unreachable.

@@ -6,7 +6,7 @@
 [![CI](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/tag/bodapatisaikrishna/agentic-cloud-pipeline-governance?label=release)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/tags)
-[![Unit tests](https://img.shields.io/badge/unit%20tests-358%20passing-brightgreen.svg)](tests/unit)
+[![Unit tests](https://img.shields.io/badge/unit%20tests-360%20passing-brightgreen.svg)](tests/unit)
 [![Policy containment](https://img.shields.io/badge/adversarial%20containment-1.0-brightgreen.svg)](docs/SECURITY.md)
 
 Four bounded AI agents (**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline
@@ -88,7 +88,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv incl. the benchmark/chaos/analysis extras
 cp .env.example .env          # defaults work; MOCK_LLM=1 is the default everywhere
-make lint && make test-unit   # gate: ruff+mypy clean, 358 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 360 unit tests, coverage ≥ 80%
 make up && make seed          # full stack (postgres, opa, redpanda, airflow) + seeded data
 make experiment-quick         # 96-run matrix (8 configs × 4 scenarios × N=3)
 make report                   # → results/results.md + results/figures/*.png
@@ -406,7 +406,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv from the committed uv.lock, incl. research deps
 cp .env.example .env          # defaults work; add ANTHROPIC_API_KEY only for optional live runs
-make lint && make test-unit   # gate: ruff+mypy clean, 358 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 360 unit tests, coverage ≥ 80%
 
 make up                       # full stack: postgres, opa, redpanda, airflow
 make seed                     # seeded TPC-DS + open-gov data, then migrate the DB
