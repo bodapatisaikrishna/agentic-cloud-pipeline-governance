@@ -22,6 +22,11 @@ def test_registry_selects_by_kind():
     assert isinstance(registry.get_connector("noop"), NoopConnector)
     air = registry.get_connector("airflow")
     assert air.name == "airflow" and air.can_act is True
+    from acde.connectors.prefect import PrefectConnector
+
+    pf = registry.get_connector("prefect")
+    assert isinstance(pf, PrefectConnector)
+    assert pf.name == "prefect" and pf.can_act is True
 
 
 def test_registry_unknown_kind_raises():
@@ -31,9 +36,45 @@ def test_registry_unknown_kind_raises():
 
 def test_connectors_satisfy_protocol():
     from acde.connectors.airflow import AirflowConnector
+    from acde.connectors.prefect import PrefectConnector
 
     assert isinstance(NoopConnector(), Connector)
     assert isinstance(AirflowConnector(), Connector)
+    assert isinstance(PrefectConnector(), Connector)
+
+
+class TestPrefectConnector:
+    """Second Connector implementation — proves the protocol generalizes beyond Airflow (T2.4)."""
+
+    def test_is_production_flag_propagates(self):
+        from acde.connectors.prefect import PrefectConnector
+
+        assert PrefectConnector(is_production=False).is_production is False
+        assert PrefectConnector().is_production is True  # default
+
+    def test_clear_tasks_is_a_noop_with_no_runs(self, monkeypatch):
+        # the one piece of real (non-HTTP-passthrough) logic: must not error when there's
+        # nothing to retry, and must never call the network layer in that case.
+        from acde.connectors.prefect import PrefectConnector
+
+        conn = PrefectConnector()
+        monkeypatch.setattr(conn, "get_task_runs", lambda pipeline_id: [])
+        monkeypatch.setattr(
+            conn, "_client", lambda: (_ for _ in ()).throw(AssertionError("should not connect"))
+        )
+        conn.clear_tasks("some-deployment-id", task_ids=["ignored"])  # must not raise
+
+    def test_health_reports_unreachable_gracefully(self, monkeypatch):
+        from acde.connectors.prefect import PrefectConnector
+
+        conn = PrefectConnector()
+
+        def _boom():
+            raise ConnectionError("refused")
+
+        monkeypatch.setattr(conn, "_client", _boom)
+        h = conn.health()
+        assert h.ok is False and h.can_act is True and "refused" in h.detail
 
 
 class TestDoctor:

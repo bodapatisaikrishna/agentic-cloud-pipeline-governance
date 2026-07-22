@@ -53,9 +53,14 @@ class Settings(BaseSettings):
     airflow_password: str = "admin"
     airflow_auth_token: str = ""  # bearer token; used instead of basic auth when set (prod SSO)
     airflow_verify_tls: bool = True  # verify TLS certs on the customer's Airflow endpoint
-    # Which orchestrator connector the runtime attaches to: "airflow" (their Airflow) or "noop"
-    # (observe-only — propose + gate + log, never act). See docs/CONNECTING.md (D-066).
+    # Which orchestrator connector the runtime attaches to: "airflow" (their Airflow), "prefect"
+    # (their Prefect Server/Cloud, T2.4), or "noop" (observe-only — propose + gate + log, never
+    # act). See docs/CONNECTING.md (D-066, D-073).
     connector_kind: str = "airflow"
+    # Prefect connector (T2.4): REST API base URL; api_key is optional (Prefect Cloud only — a
+    # self-hosted Prefect Server typically has no auth by default).
+    prefect_api_url: str = "http://localhost:4200/api"
+    prefect_api_key: str = ""
     # Whether the connected environment is production. Game-day/chaos refuses to run unless this is
     # False (a staging connector), so incident rehearsals never hit prod.
     connector_is_production: bool = True

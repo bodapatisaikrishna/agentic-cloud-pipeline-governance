@@ -662,3 +662,49 @@ auto-included in the final report.
 - **Lesson:** a local shell with a live dev stack can mask test-isolation bugs that a real CI runner
   would catch immediately. Verifying "tests pass" against a live stack is not sufficient evidence for
   unit-test hygiene — periodically run the suite with the database *actually* unreachable.
+
+## D-070 — Multi-actor operator API auth (Tier 2, T2.1)
+
+- **Decision:** the JSON operator API's `actor` field on `/approvals/*` was client-supplied
+  (`actor: str = "api"`) — anyone holding the one shared `X-API-Key` could claim to be anyone in the
+  audit trail. New `api_keys` setting (CSV `actor:key,actor:key`) plus a unified `_authenticate`
+  dependency (X-API-Key header **or** HTTP Basic, both checked against the same `api_key_map`)
+  resolves every request to a real actor name; `/approvals/*` now take `actor: str =
+  Depends(actor_dep)` instead of a writable field. The legacy single `api_key` keeps working
+  unchanged (maps to actor `"operator"`) — fully backward compatible.
+- **Rationale:** "who approved what" only means something if the identity can't be spoofed. Verified
+  live against the real stack: authenticated as `alice`, approved a real pending action, confirmed
+  `telemetry.action_approvals.decided_by = 'alice'` in the database.
+
+## D-071 — Server-rendered operator dashboard (Tier 2, T2.2)
+
+- **Decision:** `GET /ui` + `POST /ui/approvals/{id}/approve|reject` (Jinja2, no JS, no external
+  assets/CDN — works air-gapped), authenticated via the same `_authenticate` dependency as the JSON
+  API (HTTP Basic for a native browser credential prompt), calling the exact same
+  `acde.human.approvals` functions as the JSON endpoints — no separate, weaker write path. Upgraded
+  from a purely read-only dashboard (the original Tier 2 description) to an actionable one, since
+  D-070 already ties every request to a real identity, making approve/reject exactly as safe as the
+  JSON API.
+- **Rationale:** the single feature most likely to make ACDE usable by a non-CLI stakeholder.
+
+## D-072 — Integration tests proven in CI, not just claimed (Tier 2, T2.3)
+
+- **Decision:** new `integration` CI job runs `make up && make seed && make test-integration && make
+  down` against the real stack (Postgres/OPA/Redpanda/Airflow) — the exact same Makefile targets as
+  local dev, not a reimplementation as native Actions `services:` containers. Runs on push to `main`
+  only (not every PR): building the Airflow image and waiting for the full stack takes real minutes
+  and is slower/flakier on fork-PR runners with no build cache, so fast PR-blocking checks
+  (quality/opa-test/docker-build) stay unaffected.
+- **Rationale:** "production ready" was previously a doc claim, never verified by CI. Verified live:
+  the job passed in 4m11s on a completely fresh GitHub Actions runner (26/26 integration tests).
+
+## D-073 — Second connector: Prefect, not Dagster (Tier 2, T2.4)
+
+- **Decision:** `connectors/prefect.py` implements the same `Connector` protocol as the Airflow
+  connector against Prefect's REST API (deployments, flow runs, work-pool concurrency limits).
+  Chosen over Dagster because Dagster's primary control surface is GraphQL, which would need a
+  materially different client shape; Prefect maps directly onto the existing REST-shaped protocol.
+  One honest, documented gap: Prefect has no per-task "clear failed tasks" concept like Airflow, so
+  `clear_tasks` retries the whole flow run instead (not silently faked as finer-grained).
+- **Rationale:** proves the `Connector` abstraction generalizes beyond the one system it was
+  originally built against, without inventing a second, incompatible integration pattern.
