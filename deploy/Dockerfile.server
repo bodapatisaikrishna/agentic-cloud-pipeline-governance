@@ -12,6 +12,11 @@ RUN uv sync --no-dev --frozen --no-editable
 
 FROM python:3.11-slim AS runtime
 
+# The base image's system Python ships pip/setuptools/wheel that lag behind fixed CVEs (scanned by
+# CI's Trivy step) — upgrade them so the shipped image carries no known vulnerabilities.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && rm -rf /root/.cache
+
 # Non-root runtime user
 RUN useradd --create-home --uid 10001 acde
 WORKDIR /app
