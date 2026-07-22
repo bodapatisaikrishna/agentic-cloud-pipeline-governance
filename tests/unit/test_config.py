@@ -51,3 +51,24 @@ class TestEnvOverrides:
         get_settings.cache_clear()
         assert get_settings() is get_settings()
         get_settings.cache_clear()
+
+
+class TestApiKeyMap:
+    def test_empty_when_nothing_configured(self):
+        assert Settings(_env_file=None, api_key="", api_keys="").api_key_map == {}
+
+    def test_legacy_single_key_maps_to_operator(self):
+        s = Settings(_env_file=None, api_key="secret", api_keys="")
+        assert s.api_key_map == {"operator": "secret"}
+
+    def test_multi_key_csv_parses_each_pair(self):
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1, bob:key2")
+        assert s.api_key_map == {"alice": "key1", "bob": "key2"}
+
+    def test_legacy_and_multi_merge(self):
+        s = Settings(_env_file=None, api_key="opkey", api_keys="alice:key1")
+        assert s.api_key_map == {"operator": "opkey", "alice": "key1"}
+
+    def test_malformed_pairs_are_skipped(self):
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1, no-colon-here, :novalue")
+        assert s.api_key_map == {"alice": "key1"}

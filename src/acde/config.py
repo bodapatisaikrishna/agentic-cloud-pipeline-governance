@@ -164,9 +164,13 @@ class Settings(BaseSettings):
     webhook_timeout_s: float = 5.0
     # Blast-radius cap: max executed (side-effecting) actions per target per hour (0 = unlimited).
     blast_radius_max_per_hour: int = 0
-    # Operator API (acde.server): static API key required in the X-API-Key header (empty = the API
-    # refuses to start, so it is never accidentally exposed unauthenticated). TLS via reverse proxy.
+    # Operator API (acde.server): requires either api_key (single legacy key, resolves to actor
+    # "operator") or api_keys (multi-user: "actor1:key1,actor2:key2") — at least one must be set,
+    # or the API refuses to start, so it is never accidentally exposed unauthenticated. Accepted
+    # via the X-API-Key header (JSON/CLI clients) or HTTP Basic (actor=username, key=password;
+    # lets a browser hit the dashboard with a native credential prompt). TLS via reverse proxy.
     api_key: str = ""
+    api_keys: str = ""
     api_host: str = "127.0.0.1"
     api_port: int = 8099
 
@@ -177,6 +181,22 @@ class Settings(BaseSettings):
     @property
     def webhook_event_set(self) -> set[str]:
         return {e.strip() for e in self.webhook_events.split(",") if e.strip()}
+
+    @property
+    def api_key_map(self) -> dict[str, str]:
+        """actor -> key, merging the legacy ``api_key`` (actor "operator") with ``api_keys``."""
+        keys: dict[str, str] = {}
+        if self.api_key:
+            keys["operator"] = self.api_key
+        for pair in self.api_keys.split(","):
+            pair = pair.strip()
+            if not pair or ":" not in pair:
+                continue
+            actor, _, key = pair.partition(":")
+            actor, key = actor.strip(), key.strip()
+            if actor and key:
+                keys[actor] = key
+        return keys
 
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
