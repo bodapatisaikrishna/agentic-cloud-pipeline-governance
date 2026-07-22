@@ -29,7 +29,7 @@ research = [
     "pyarrow>=25.0.0",
     "confluent-kafka>=2.15.0",
     "scipy>=1.17.1",
-    "matplotlib>=3.11.0",
+    "matplotlib>=3.11.1",
 ]
 
 [project.scripts]
@@ -46,7 +46,7 @@ dev = [
     "pyarrow>=25.0.0",
     "confluent-kafka>=2.15.0",
     "scipy>=1.17.1",
-    "matplotlib>=3.11.0",
+    "matplotlib>=3.11.1",
 ]
 
 [build-system]
