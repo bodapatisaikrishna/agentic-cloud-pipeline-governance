@@ -1,17 +1,73 @@
 # ACDE — Agentic Cloud Data Engineering
 
-**Policy-bounded agentic governance for cloud data pipelines** — Apache-2.0. Four bounded AI agents
-(**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline telemetry, reason via
-LLM, and **propose** operational actions that an OPA policy gate validates **before** execution.
-Agents never execute anything directly and never generate code.
+**Policy-bounded agentic governance for cloud data pipelines.**
 
-ACDE is both a **production tool** companies deploy to govern their own pipelines (v2) and a
-**reproducible research artifact** (v1.3) that replicates and extends arXiv:2512.23737.
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
+[![Release](https://img.shields.io/github/v/tag/bodapatisaikrishna/agentic-cloud-pipeline-governance?label=release)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/tags)
+[![Unit tests](https://img.shields.io/badge/unit%20tests-358%20passing-brightgreen.svg)](tests/unit)
+[![Policy containment](https://img.shields.io/badge/adversarial%20containment-1.0-brightgreen.svg)](docs/SECURITY.md)
 
-### Production (v2) — deploy against your own Airflow
+Four bounded AI agents (**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline
+telemetry, reason via an LLM, and **propose** operational actions. An **OPA policy gate validates
+every proposal before execution** — agents never touch a pipeline directly and never generate code.
+Safety comes from the architecture, not the model.
+
+ACDE is both:
+
+- 🏭 **A production tool** (v2.0) that companies deploy to govern their own Airflow pipelines, with
+  graduated autonomy, an approval workflow, a kill switch, and an operator API.
+- 🔬 **A reproducible research artifact** (v1.3) that replicates and rigorously extends
+  *["Governing Cloud Data Pipelines with Agentic AI"](https://arxiv.org/abs/2512.23737)*
+  (arXiv:2512.23737).
+
+---
+
+## Table of contents
+
+- [Why ACDE](#why-acde)
+- [Production quickstart](#production-quickstart-deploy-against-your-own-airflow)
+- [Research quickstart](#research-quickstart-reproduce-the-paper)
+- [Architecture](#architecture)
+- [Documentation](#documentation)
+- [Deep dive](#deep-dive)
+  - [Data plane](#data-plane) · [Telemetry & cost](#telemetry--cost) · [Policy plane](#policy-plane) ·
+    [Agents](#agents) · [Orchestrator](#orchestrator-control-loop) · [Experiments](#experiments) ·
+    [Analysis & report](#analysis--report) · [Chaos harness](#chaos-harness)
+- [Fault tolerance](#fault-tolerance)
+- [Beyond the paper](#beyond-the-paper-v13)
+- [Repository map](#repository-map)
+- [Phase status](#phase-status)
+- [Reproduction](#reproduction)
+- [License & citation](#license--citation)
+
+---
+
+## Why ACDE
+
+Most tools in this space pick one of two extremes: **observability platforms detect** problems and
+stop there, or **generic AIOps automation acts** on infrastructure with no policy boundary and no
+audit trail. ACDE is neither — it's a **governed control plane**:
+
+| | Observability tools | Opaque AIOps | **ACDE** |
+|---|---|---|---|
+| Detects anomalies | ✅ | ✅ | ✅ |
+| Proposes a fix | ❌ | ✅ | ✅ |
+| Every action validated by declarative policy first | — | ❌ | ✅ (OPA, fail-safe) |
+| Graduated autonomy (shadow → approval → autonomous) | — | ❌ | ✅ |
+| Full audit trail of proposal + verdict + outcome | partial | rarely | ✅ |
+| Attaches to *your* orchestrator, not a bundled one | — | varies | ✅ (connector boundary) |
+| Adversarially tested containment | — | — | ✅ measured **1.0** |
+| Rehearsal on your own pipelines with an ROI report | ❌ | ❌ | ✅ `acde gameday` / `acde report` |
+
+Every claim above is backed by code in this repo, not marketing copy — see
+[Beyond the paper](#beyond-the-paper-v13) and [`docs/SECURITY.md`](docs/SECURITY.md).
+
+## Production quickstart (deploy against your own Airflow)
 
 Graduated autonomy (**shadow → approval → autonomous**), a connector that attaches to *your*
-orchestrator, an operator API + `acde` CLI, a kill switch, and blast-radius caps. Start here:
+orchestrator, an operator API + `acde` CLI, a kill switch, and blast-radius caps.
 
 ```bash
 cp .env.prod.example .env.prod   # set API_KEY, POSTGRES_PASSWORD, AIRFLOW_*, LLM key
@@ -19,15 +75,28 @@ docker compose -f deploy/docker-compose.prod.yml up -d --build
 acde doctor                      # validate the deployment; then `acde run` (shadow by default)
 ```
 
-See [`docs/OPERATIONS.md`](docs/OPERATIONS.md), [`docs/CONNECTING.md`](docs/CONNECTING.md),
-[`docs/POLICY_AUTHORING.md`](docs/POLICY_AUTHORING.md), [`docs/SECURITY.md`](docs/SECURITY.md).
+ACDE ships **shadow-mode by default** in production — it logs what it would do and never touches
+your pipeline until you graduate it. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) (deploy, trust
+ladder, kill switch), [`docs/CONNECTING.md`](docs/CONNECTING.md) (Airflow setup),
+[`docs/POLICY_AUTHORING.md`](docs/POLICY_AUTHORING.md) (Rego policies), and
+[`docs/SECURITY.md`](docs/SECURITY.md) (threat model).
 
-### Research (v1.3) — reproduce the paper
+## Research quickstart (reproduce the paper)
 
-The benchmark, chaos harness, and analysis install with the `acde[research]` extra; it is
-benchmarked against a static-orchestration baseline with a deterministic failure-injection harness, a
-seeded experiment matrix, and a statistical analysis pipeline (paired tests, corrections, effect
-sizes, CIs). See [`REPORT.md`](REPORT.md).
+```bash
+git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance.git
+cd agentic-cloud-pipeline-governance
+uv sync --extra research      # venv incl. the benchmark/chaos/analysis extras
+cp .env.example .env          # defaults work; MOCK_LLM=1 is the default everywhere
+make lint && make test-unit   # gate: ruff+mypy clean, 358 unit tests, coverage ≥ 80%
+make up && make seed          # full stack (postgres, opa, redpanda, airflow) + seeded data
+make experiment-quick         # 96-run matrix (8 configs × 4 scenarios × N=3)
+make report                   # → results/results.md + results/figures/*.png
+```
+
+The `acde[research]` extra installs the benchmark, chaos harness, and analysis pipeline (pandas /
+scipy / matplotlib) on top of the lean production core. See [`REPORT.md`](REPORT.md) for what
+reproduces from the paper and what we extend beyond it.
 
 ## Architecture
 
@@ -53,6 +122,13 @@ stream + workers]
     EXE[executor
 side effects · retry · escalate]
   end
+  subgraph trust [Trust core — v2]
+    MODE[execution mode
+shadow · approval · autonomous]
+    APR[approval queue]
+    KILL[kill switch
+blast radius]
+  end
   CHAOS[chaos harness
 seeded faults] -.-> AF & RP
   AF & RP --> COL --> PG[(Postgres
@@ -61,8 +137,12 @@ telemetry / warehouse / control)]
   AG <-->|propose| LLM
   AG -->|ProposedAction| GATE
   OPA -->|PolicyDecision| EXE
-  EXE -->|allowed| AF & RP & PG
-  EXE -->|escalate / fail-safe| HUM[human simulator]
+  EXE --> MODE
+  MODE -->|shadow| PG
+  MODE -->|approval| APR --> EXE
+  MODE -->|autonomous| AF & RP & PG
+  KILL -.->|pause| control
+  EXE -->|escalate / fail-safe| HUM[human / webhook]
   PG --> RUN[experiment runner
 config × scenario × seed] --> CSV[results/raw.csv]
   CSV --> AN[analysis
@@ -70,26 +150,26 @@ stats · figures · report] --> MD[results/results.md]
 ```
 
 Agents only ever emit a pydantic `ProposedAction`; the OPA gate decides; the executor is the sole
-component with side effects (and it retries then escalates rather than crash — see **Fault
-tolerance**). Everything durable lives in Postgres, so the loop is stateless and resumable.
+component with side effects, and in production it routes through the execution mode (shadow queues
+nothing, approval queues for a human, autonomous executes) before ever reaching a real system — see
+[Fault tolerance](#fault-tolerance). Everything durable lives in Postgres, so the loop is stateless
+and resumable.
 
-## Quickstart
+## Documentation
 
-Prereqs: [uv](https://docs.astral.sh/uv/), Docker Desktop (Compose v2), GNU make.
+| Doc | What it covers |
+|---|---|
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Deploying, the trust ladder, kill switch, observability, upgrades |
+| [`docs/CONNECTING.md`](docs/CONNECTING.md) | Attaching ACDE to your Airflow (least-privilege service account) |
+| [`docs/POLICY_AUTHORING.md`](docs/POLICY_AUTHORING.md) | Writing/testing OPA policies, shipped policy packs |
+| [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, design guarantees, operator responsibilities |
+| [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) | Paper section → implementation → measured result |
+| [`REPORT.md`](REPORT.md) | What reproduces from the paper, what doesn't, and why |
+| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (68 entries) |
+| [`DATA_LICENSES.md`](DATA_LICENSES.md) | Provenance & licensing of the TPC-DS / NYC TLC datasets |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history, v0.1 → v2.0.0 |
 
-```bash
-cp .env.example .env        # defaults work for local dev; add ANTHROPIC_API_KEY for live runs
-uv sync                     # create venv from committed uv.lock
-make up                     # full stack: postgres, opa, redpanda, airflow (builds the image)
-make test-unit              # unit tests, MOCK_LLM=1, zero API calls, coverage >= 80%
-make seed                   # generate seeded datasets + migrate the DB
-make test-integration       # batch DAG + streaming session + stack smoke
-make down
-```
-
-`make up-core` starts only postgres + OPA (fast) when you don't need the data plane.
-Postgres is published on host port **5433** (so it coexists with a local Postgres on 5432).
-`MOCK_LLM=1` is the default everywhere (tests, CI, local runs); live LLM runs are opt-in.
+## Deep dive
 
 ### Data plane
 
@@ -115,8 +195,8 @@ make cost                     # (re)aggregate the cost ledger from resource_usag
 
 The collector fills `telemetry.task_runs` (Airflow REST), `telemetry.resource_usage`
 (`docker stats` + logical `streaming`/`batch` resource units), and `telemetry.pipeline_metrics`
-(freshness). `cost.py` writes `telemetry.cost_ledger` per the disclosed model above
-(`compute_unit_seconds × 0.05 + storage_gb_hours × 0.01`). All rows are tagged `experiment_run`.
+(freshness). `cost.py` writes `telemetry.cost_ledger` per the disclosed model below. All rows are
+tagged `experiment_run`.
 
 ### Policy plane
 
@@ -126,8 +206,8 @@ Every agent action is a `ProposedAction` that the **gate** evaluates against OPA
 ```
 ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.decision ──▶ PolicyDecision
                                                                                 │
-                        allowed ─▶ executor side effect (rollback / scale / retry / quarantine …)
-                        escalate ─▶ telemetry.manual_interventions ─▶ human simulator resolves
+                        allowed ─▶ execution mode (shadow / approval / autonomous)
+                        escalate ─▶ telemetry.manual_interventions ─▶ human / webhook resolves
 ```
 
 - Four Rego policies (`infra/opa/policies/`): `cost_budget`, `recovery_approval`,
@@ -135,10 +215,13 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
   (20 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
 - The gate **fails safe** — if OPA is unreachable it escalates rather than allowing.
 - The executor **retries then escalates** — an Airflow-REST side effect that fails is retried with
-  bounded backoff and, if it still fails, degrades to a human escalation (see **Fault tolerance**).
-- The human simulator (`acde.human.simulator`) resolves escalations after a seeded
-  lognormal(360 s, σ0.5) delay; run it with
-  `python -m acde.human.simulator --duration 600 --experiment-run <run>`.
+  bounded backoff and, if it still fails, degrades to a human escalation (see [Fault tolerance](#fault-tolerance)).
+- In production, an *allowed* action still passes through the **execution mode** (`acde_mode`):
+  `shadow` logs it, `approval` queues it for a human (`acde approvals approve <id>`), `autonomous`
+  executes it. High-blast-radius action types can be forced to `approval` even in autonomous mode.
+- The human simulator (`acde.human.simulator`, research-only) resolves escalations after a seeded
+  lognormal(360 s, σ0.5) delay for the deterministic benchmark; in production, escalations and
+  pending approvals go out via [webhook](docs/OPERATIONS.md) instead.
 
 ### Agents
 
@@ -158,11 +241,11 @@ EXPERIMENT_RUN=demo make agents    # one cycle of all four agents (MOCK_LLM=1)
 built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` makes one real call, routed
 monitoring→fast model / others→reasoning model, bounded by the 60-call / 150k-token per-run caps.
 The live provider is chosen by `LLM_PROVIDER`: **`anthropic`** (default, needs `ANTHROPIC_API_KEY`,
-Sonnet/Haiku), **`gemini`** (D-056, needs `GEMINI_API_KEY`, `gemini-2.5-pro`/`gemini-2.5-flash`,
-overridable via `GEMINI_MODEL_*`), or **`openai_compatible`** (D-057 — NVIDIA NIM / Groq / OpenRouter
-/ z.ai via `OAI_BASE_URL` + `OAI_API_KEY` + `OAI_MODEL_*`; defaults to NVIDIA NIM's `z-ai/glm-5.2`).
-The `openai_compatible` provider uses a larger `OAI_MAX_TOKENS_PER_CALL` so "thinking" models can
-reach the JSON. All providers run at temperature 0 and degrade to `no_action` on failure; `MOCK_LLM=1`
+Sonnet/Haiku), **`gemini`** (needs `GEMINI_API_KEY`, `gemini-2.5-pro`/`gemini-2.5-flash`,
+overridable via `GEMINI_MODEL_*`), or **`openai_compatible`** (NVIDIA NIM / Groq / OpenRouter / z.ai
+via `OAI_BASE_URL` + `OAI_API_KEY` + `OAI_MODEL_*`; defaults to NVIDIA NIM's `z-ai/glm-5.2`). The
+`openai_compatible` provider uses a larger `OAI_MAX_TOKENS_PER_CALL` so "thinking" models can reach
+the JSON. All providers run at temperature 0 and degrade to `no_action` on failure; `MOCK_LLM=1`
 remains the default everywhere including CI.
 
 ### Orchestrator (control loop)
@@ -171,7 +254,8 @@ remains the default everywhere including CI.
 `MONITORING_INTERVAL_S`, the reactive agents (schema → recovery → optimization) only when faults
 are open. A **Postgres advisory lock per target** guarantees no two agents act on the same target
 at once, and the act order makes **recovery outrank optimization** on a shared target. Which agents
-run is set by the ablation config (`baseline`, `monitor_only`, `recovery_only`, …, `full`).
+run is set by the ablation config (`baseline`, `rule_based`, `autoscale`, `monitor_only`,
+`recovery_only`, `optimization_only`, `schema_only`, `full`).
 
 ```bash
 CONFIG=full DURATION=1200 EXPERIMENT_RUN=demo make orchestrator   # run the loop
@@ -179,24 +263,26 @@ CONFIG=full DURATION=1200 EXPERIMENT_RUN=soak make soak            # inject 2 fa
 ```
 
 The loop keeps no durable state (everything is in Postgres), so **killing and restarting it resumes
-cleanly** — the basis for the resumable experiment runner in Phase 7.
+cleanly** — the same property that makes the resumable experiment runner and the production
+`acde pause`/`acde resume` kill switch possible.
 
 ### Experiments
 
 The runner sweeps the config × scenario × seed matrix, and for each run injects the seeded fault,
-lets the agents (or, for `baseline`, the simulated human) respond, and harvests the §5.4 metrics
-into `results/raw.csv` (one row per metric) with a `results/manifest.jsonl` checkpoint.
+lets the agents (or the `baseline`/`rule_based`/`autoscale` responders) respond, and harvests the
+metrics into `results/raw.csv` (one row per metric) with a `results/manifest.jsonl` checkpoint.
 
 ```bash
-make experiment-smoke   # 2 runs (the gate)          make experiment-quick   # 72 runs, ~15–25 min
-make experiment-paper   # 320 runs (the publication run; launch overnight)
+make experiment-smoke   # 2 runs (the automated gate)
+make experiment-quick   # 96 runs — 8 configs × 4 scenarios × N=3 (~45–90 min on Docker Compose)
+make experiment-paper   # 480 runs — 4 baselines × N=20 + 4 ablations × N=10 (launch overnight)
 ```
 
 Every run is keyed by `experiment_run = "{config}__{scenario}__r{replicate}"` and isolated; the
 runner **skips runs already in the manifest**, so a killed matrix resumes where it left off. The
 seed policy `sha256("{config}:{scenario}:{replicate}") % 2³²` gives each cell reproducible fault
-conditions. First reproduced signal (smoke, `upstream_delay`): **baseline MTTR ≈ 312 s** (human) vs
-**full MTTR ≈ 0.2 s** (recovery agent). Phase 8 turns `raw.csv` into the paper's figures.
+conditions. On the full 96-run matrix: **MTTR ↓100%, manual interventions ↓100%, cost ↓57.3%**
+(`full` vs `baseline`, all significant) — see [`REPORT.md`](REPORT.md) for the full breakdown.
 
 ### Analysis & report
 
@@ -214,8 +300,7 @@ reductions to the paper's **45% / 25% / 70%** claims, and an appended `DEVIATION
 
 ### Chaos harness
 
-Four seeded failure scenarios (§6) degrade the running pipelines and record
-`telemetry.failure_events`:
+Four seeded failure scenarios degrade the running pipelines and record `telemetry.failure_events`:
 
 ```bash
 make chaos-schema_drift        # corrupt the batch source → next DAG run fails validation
@@ -228,29 +313,45 @@ python -m acde.chaos.injector --scenario ingress_burst --seed 42 --plan-only
 
 The fault plan is a **pure seeded function** — the same seed always yields the same plan
 (`run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`), so the experiment runner can
-replay identical fault conditions across configs. `make seed` restores the source CSV after a
+replay identical fault conditions across configs, and `acde gameday` can rehearse a specific
+scenario against a customer's staging environment. `make seed` restores the source CSV after a
 `schema_drift`.
 
 ## Cost model (disclosed)
 
-The paper does not define its cost model. Ours (see DEVIATIONS.md D-006):
+The paper does not define its cost model. Ours has two layers (see `DEVIATIONS.md` D-006, D-061):
 
 ```
-cost_units = compute_unit_seconds × 0.05 + storage_gb_hours × 0.01
-compute_unit_seconds = Σ over components: (active workers or pool slots in use) × wall seconds
+cost_units = compute_unit_seconds × 0.05 + storage_gb_hours × 0.01     # measured compute/storage
+           + provisioning_units × provisioning_horizon_s × 0.05        # avoided-over-provisioning term
 ```
+
+Static configs hold a fixed over-provisioned allocation; configs that dynamically right-size
+(`autoscale`, `optimization_only`, `full`) pay less — this is what makes the paper's cost-reduction
+claim testable rather than structurally impossible to reproduce.
 
 ## Repository map
 
 Key entry points — full tree in the project spec:
 
-- `src/acde/contracts/` — pydantic contracts (§5.2): `ProposedAction`, `PolicyDecision`, …
+**Core (production):**
+- `src/acde/agents/`, `src/acde/policy/` — the four agents, the OPA gate, the executor
+- `src/acde/connectors/` — attach to your orchestrator (`airflow`, `noop`); `src/acde/ops/health.py` — `acde doctor`
+- `src/acde/human/approvals.py` — the approval workflow; `src/acde/orchestrator/control.py` — kill switch + blast radius
+- `src/acde/server/` — the operator API (FastAPI); `src/acde/cli.py` — the `acde` CLI
+- `src/acde/contracts/` — pydantic contracts: `ProposedAction`, `PolicyDecision`, …
 - `src/acde/config.py` — every knob, from env/`.env` only
 - `infra/postgres/init/` — idempotent DDL: `telemetry`, `warehouse`, `control` schemas
-- `infra/opa/policies/` — Rego policies (Phase 3)
+- `infra/opa/policies/` — Rego policies
+
+**Research (`acde[research]` extra):**
+- `src/acde/experiments/`, `src/acde/analysis/`, `src/acde/chaos/` — the benchmark, stats, and fault injection
+- `src/acde/eval/` — adversarial safety eval + cross-LLM study
+- `src/acde/dataplane/` — the demo Airflow/Redpanda data plane used for reproduction
+
+**Everywhere:**
 - `tests/unit` (no docker) · `tests/integration` (needs `make up`)
-- `DEVIATIONS.md` — every assumption vs. the paper (research artifact)
-- `DATA_LICENSES.md` — provenance & licensing of the TPC-DS and NYC TLC data sources
+- `DEVIATIONS.md` — every assumption vs. the paper · `DATA_LICENSES.md` — dataset provenance
 
 ## Fault tolerance
 
@@ -260,11 +361,12 @@ Operational agents must survive a dependency outage, not crash. ACDE degrades on
 | Dependency down | Behaviour | Where |
 |---|---|---|
 | **OPA** unreachable | gate fails safe → **escalate** (never allow) | `policy/gate.py` |
-| **Airflow** unreachable | executor **retries with bounded backoff**, then escalates; returns an `execution_failed` outcome instead of raising | `policy/executor.py` (D-052) |
+| **Airflow** unreachable | executor **retries with bounded backoff**, then escalates; returns an `execution_failed` outcome instead of raising | `policy/executor.py` |
 | **Postgres** transient blip | `acde.db` **retries** the statement (tenacity) and recovers | `db.py` |
 
-In every case the agent cycle completes and, where relevant, a `telemetry.manual_interventions` row
-hands the incident to the (simulated) human — the loop stays alive and resumable.
+In every case the agent cycle completes and, where relevant, an approval or escalation record hands
+the incident to a human — the loop stays alive and resumable, and in production you can always hit
+the [kill switch](docs/OPERATIONS.md#kill-switch--blast-radius) (`acde pause`).
 
 ## Beyond the paper (v1.3)
 
@@ -273,32 +375,25 @@ without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) 
 [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) (section-by-section mapping).
 
 - **Credible baselines** — `rule_based` + `autoscale` alongside static+human, so the comparison is
-  "agents vs cheap automation," not just "agents vs a slow human" (D-058).
+  "agents vs cheap automation," not just "agents vs a slow human."
 - **Decision-quality metric** — `decision_correct`: did the agent pick the *right* mitigation, not
-  just a fast one (D-059)?
-- **Cost model v2** — credits avoided over-provisioning, making the paper's cost claim testable (D-061).
+  just a fast one?
+- **Cost model v2** — credits avoided over-provisioning, making the paper's cost claim testable.
 - **Cross-LLM study** — `python -m acde.eval.cross_model` measures decision correctness/latency/tokens
-  across models, testing the paper's "model-agnostic" claim (D-063).
+  across models, testing the paper's "model-agnostic" claim.
 - **Adversarial safety eval** — `python -m acde.eval.adversarial` injects unsafe proposals and measures
-  the OPA gate's containment rate (**1.0** against real OPA) — the first stress-test of the paper's
-  core safety thesis (D-062).
+  the OPA gate's containment rate — **1.0** against real OPA — the first stress-test of the paper's
+  core safety thesis.
 - **Bounded adaptation** — `agents/adaptation.py` concretizes the paper's §V adaptation claim, off by
-  default for determinism (D-064).
+  default for determinism.
 
 ## Phase status
 
 | Phase | Scope | Status |
 |---|---|---|
-| 0 | Scaffold, contracts, postgres+OPA, CI | ✅ verified |
-| 1 | Data plane: Airflow, Redpanda, datasets | ✅ verified |
-| 2 | Telemetry, cost ledger, freshness | ✅ verified |
-| 3 | Policy plane (OPA) & executor | ✅ verified |
-| 4 | Failure-injection harness | ✅ verified |
-| 5 | Agents & LLM layer | ✅ verified |
-| 6 | Control-loop orchestrator | ✅ verified |
-| 7 | Baseline & experiment runner | ✅ verified |
-| 8 | Analysis, figures, report | ✅ verified |
-| 9 | Hardening & reproducibility package | ✅ verified |
+| 0–9 | Scaffold → agents/LLM → orchestrator → experiments → analysis → hardening (v1.0) | ✅ verified |
+| A–F | Credible baselines, decision quality, cost v2, cross-LLM study, adversarial eval, packaging (v1.3) | ✅ verified |
+| P1–P5 | Trust core, connectors, operator API/CLI, prod packaging, game-day + ROI (v2.0) | ✅ verified |
 
 ## Reproduction
 
@@ -307,16 +402,17 @@ From a clean clone to the paper's figures. Every stochastic component is seeded
 the pipeline is deterministic and needs zero API calls.
 
 ```bash
-git clone <repo> && cd cloudagent
-uv sync                       # venv from the committed uv.lock
+git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance.git
+cd agentic-cloud-pipeline-governance
+uv sync --extra research      # venv from the committed uv.lock, incl. research deps
 cp .env.example .env          # defaults work; add ANTHROPIC_API_KEY only for optional live runs
-make lint && make test-unit   # gate: ruff+mypy clean, ~290 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 358 unit tests, coverage ≥ 80%
 
 make up                       # full stack: postgres, opa, redpanda, airflow
 make seed                     # seeded TPC-DS + open-gov data, then migrate the DB
 make test-integration         # optional: stack smoke, agents e2e, failure modes
 
-make experiment-paper         # the publication matrix (320 runs) → results/raw.csv (launch overnight)
+make experiment-paper         # the publication matrix (480 runs) → results/raw.csv (launch overnight)
 make report                   # analyze + figures → results/results.md + results/figures/*.png
 make down
 ```
@@ -324,5 +420,23 @@ make down
 Open `results/results.md` for the per-metric tables, the ablation heatmap, and the comparison of our
 full-vs-baseline reductions to the paper's **45% / 25% / 70%** claims. All experiment metrics are
 reconstructable from the `telemetry` schema and the JSON logs; data provenance/licensing is in
-`DATA_LICENSES.md`. Prefer a fast smoke first: `make experiment-quick` (72 runs, ~15–25 min) then
-`make report`.
+`DATA_LICENSES.md`. Prefer a fast smoke first: `make experiment-quick` (96 runs) then `make report`.
+
+## License & citation
+
+ACDE is licensed under the [Apache License 2.0](LICENSE) (see also [`NOTICE`](NOTICE)). Dataset
+provenance/licensing is documented separately in [`DATA_LICENSES.md`](DATA_LICENSES.md).
+
+This project is an independent replication and extension of the paper below, and is not affiliated
+with or endorsed by its authors:
+
+```bibtex
+@article{kirubakaran2025governing,
+  title   = {Governing Cloud Data Pipelines with Agentic AI},
+  author  = {Kirubakaran, Aswathnarayan Muthukrishnan and Parthasarathy, Adithya and Saksena, Nitin
+             and Bodala, Ram Sekhar and Deshpande, Akshay and Malempati, Suhas and
+             Carimireddy, Shiva and Mazumder, Abhirup},
+  journal = {arXiv preprint arXiv:2512.23737},
+  year    = {2025}
+}
+```
