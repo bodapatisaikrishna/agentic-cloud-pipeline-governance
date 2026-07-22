@@ -73,3 +73,38 @@ jobs:
           severity: "HIGH,CRITICAL"
           exit-code: "1"
           ignore-unfixed: true
+
+  integration:
+    # The full stack (build Airflow's image, boot Postgres/OPA/Redpanda/Airflow, seed data) takes
+    # real minutes and is slower/flakier on fork PRs with no build cache — so this runs on pushes to
+    # main only, as the authoritative "the real thing works together" proof. Fast PR checks
+    # (quality/opa-test/docker-build) stay unblocked. Mirrors local dev exactly: `make up && make
+    # seed && make test-integration`, not a reimplementation as native Actions `services:` containers.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MOCK_LLM: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Sync dependencies (incl. research extras: chaos/dataplane/analysis)"
+        run: uv sync --frozen --extra research
+
+      - name: Bring up the full stack
+        run: make up
+
+      - name: Seed datasets + migrate the DB
+        run: make seed
+
+      - name: Integration test suite
+        run: make test-integration
+
+      - name: Tear down the stack
+        if: always()
+        run: make down
