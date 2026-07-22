@@ -19,7 +19,7 @@ from acde.config import get_settings
 from acde.human import approvals
 from acde.logging import get_logger
 from acde.ops.health import doctor
-from acde.server import metrics
+from acde.server import dashboard, metrics
 
 log = get_logger("server.app")
 
@@ -95,6 +95,7 @@ def create_app(require_key: bool = True) -> FastAPI:
     def reject(approval_id: int, note: str = "", actor: str = Depends(actor_dep)) -> dict[str, Any]:
         return approvals.reject(approval_id, actor=actor, note=note)
 
+    dashboard.add_routes(app, actor_dep)
     return app
 
 

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ACDE{% endblock %}</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 960px; margin: 2rem auto; padding: 0 1rem;
+      background: Canvas; color: CanvasText;
+    }
+    h1 { font-size: 1.4rem; }
+    h1 small { font-weight: normal; opacity: 0.6; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 15%, transparent); }
+    th { font-size: 0.8rem; text-transform: uppercase; opacity: 0.6; }
+    .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0 1.5rem; }
+    .card {
+      border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
+      border-radius: 8px; padding: 0.75rem 1rem; min-width: 8rem;
+    }
+    .card .n { font-size: 1.6rem; font-weight: 600; display: block; }
+    .card .label { font-size: 0.8rem; opacity: 0.65; }
+    .actions form { display: inline; }
+    button {
+      font-size: 0.85rem; padding: 0.3rem 0.7rem; border-radius: 6px; border: 1px solid transparent;
+      cursor: pointer;
+    }
+    button.approve { background: #16a34a; color: white; }
+    button.reject { background: #dc2626; color: white; margin-left: 0.4rem; }
+    .empty { opacity: 0.6; font-style: italic; }
+    .flash { padding: 0.5rem 0.8rem; border-radius: 6px; margin: 0.5rem 0; font-size: 0.9rem; }
+    .flash.ok { background: color-mix(in srgb, #16a34a 20%, transparent); }
+    .flash.err { background: color-mix(in srgb, #dc2626 20%, transparent); }
+    footer { margin-top: 2rem; font-size: 0.75rem; opacity: 0.5; }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+  <footer>ACDE operator dashboard &mdash; read the audit trail via <code>/audit</code>, metrics via <code>/metrics</code>.</footer>
+</body>
+</html>
