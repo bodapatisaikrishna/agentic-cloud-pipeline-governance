@@ -708,3 +708,20 @@ auto-included in the final report.
   `clear_tasks` retries the whole flow run instead (not silently faked as finer-grained).
 - **Rationale:** proves the `Connector` abstraction generalizes beyond the one system it was
   originally built against, without inventing a second, incompatible integration pattern.
+
+## D-074 — Known occasional flake: `test_batch_dag_materializes_versioned_partition`
+
+- **What happens:** this integration test triggers a real Airflow DAG run and polls for a terminal
+  state; it has failed with a genuine Airflow `failed` DAG state (not a client-side poll timeout) on
+  two separate occasions this project — once locally under load, once on a cold, cache-less GitHub
+  Actions runner. Both times it passed cleanly on an immediate retry with no code change.
+- **Decision:** treat as a known, occasional, timing/resource-contention-sensitive flake rather than
+  a deterministic bug, since it is not reproducible on demand and both failures self-resolved on
+  retry. Added a CI diagnostics step (dump `airflow-scheduler`/`airflow-webserver` logs on
+  `integration` job failure) so a future occurrence is debuggable from the CI logs instead of
+  requiring local reproduction. Did not increase the test's poll timeout or add automatic retries —
+  that would mask a real regression just as easily as a real flake, and there isn't yet a captured
+  failure log to root-cause definitively.
+- **If this recurs with logs captured:** check the dumped Airflow logs first; likely causes are
+  scheduler/webserver CPU starvation on a cold/shared CI runner during the DAG's transform step,
+  not application logic.

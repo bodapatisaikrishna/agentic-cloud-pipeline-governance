@@ -105,6 +105,10 @@ jobs:
       - name: Integration test suite
         run: make test-integration
 
+      - name: Dump service logs on failure (diagnostics — Airflow scheduler/webserver most likely)
+        if: failure()
+        run: docker compose logs --no-color --tail=300 airflow-scheduler airflow-webserver
+
       - name: Tear down the stack
         if: always()
         run: make down
