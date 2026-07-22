@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in ACDE isn't behaving as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. For security vulnerabilities, please see
+        [`docs/SECURITY.md`](../../docs/SECURITY.md) instead of filing a public issue.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Production (agents / gate / connectors / server / CLI)
+        - Research (experiments / analysis / chaos harness)
+        - Docs
+        - CI / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse HEAD` or the release tag (e.g. v2.0.0)
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands run (e.g. `make up`, `acde doctor`, `make experiment-quick`)
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: ACDE logs JSON lines (`ts/level/component/event`) — paste the relevant ones
+      render: shell
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Docker version, `MOCK_LLM` value, `LLM_PROVIDER` if relevant

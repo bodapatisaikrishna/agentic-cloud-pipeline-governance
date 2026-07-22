@@ -32,3 +32,44 @@ jobs:
 
       - name: Unit tests (MOCK_LLM=1, no docker, coverage >= 80%)
         run: uv run pytest tests/unit --cov --cov-report=term-missing
+
+      - name: Python dependency vulnerability scan
+        run: |
+          uv export --frozen --format requirements-txt --no-emit-project > requirements.lock.txt
+          uvx pip-audit -r requirements.lock.txt
+
+  opa-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: "0.68.0"
+
+      - name: Rego policy test suite
+        run: opa test infra/opa/policies -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the production image (no push — validates the Dockerfile only)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.server
+          push: false
+          load: true
+          tags: acde-server:ci
+
+      - name: Scan the image for known CVEs
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: acde-server:ci
+          severity: "HIGH,CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true

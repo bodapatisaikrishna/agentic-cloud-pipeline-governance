@@ -66,8 +66,6 @@ asserted without evidence. See `REPORT.md` and `docs/PAPER_MAPPING.md`.
 
 ## [1.2.0] — 2026-07-17 — Generic OpenAI-compatible LLM provider (NVIDIA NIM / GLM-5.2)
 
-## [1.2.0] — 2026-07-17 — Generic OpenAI-compatible LLM provider (NVIDIA NIM / GLM-5.2)
-
 ### Added
 - **`LLM_PROVIDER=openai_compatible` (D-057):** live agent calls through the `openai` SDK against a
   configurable `OAI_BASE_URL` (default NVIDIA NIM) with `OAI_API_KEY` + `OAI_MODEL_REASONING`/`_FAST`
