@@ -54,7 +54,7 @@ def create_app(require_key: bool = True) -> FastAPI:
             "ACDE has no api_key/api_keys configured — refusing to start unauthenticated"
         )
 
-    app = FastAPI(title="ACDE Operator API", version="2.0")
+    app = FastAPI(title="ACDE Operator API", version="2.1")
     auth = [Depends(_authenticate)] if require_key else []
     # In no-auth test mode there's no identity to resolve; fall back to a fixed actor name.
     actor_dep = _authenticate if require_key else (lambda: "api")

@@ -3,6 +3,43 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [2.1.0] — Repo maturity + real capability (Tier 1 & Tier 2 hardening)
+
+Everything needed to go from "a repo that works" to "a repo you'd trust and could actually operate
+with more than one person." No breaking changes; the legacy single `api_key` keeps working.
+
+### Added — Tier 1: publish, release, harden CI, OSS hygiene
+- **Docker image published** to `ghcr.io/bodapatisaikrishna/agentic-cloud-pipeline-governance`
+  (`docker-release.yml`, tag-triggered + manual dispatch) — `docker pull` now actually works.
+- **GitHub Releases** backfilled for all tags with real notes from this file.
+- **CI hardened**: `opa-test` job (20 Rego cases), `docker-build` job (build validation + Trivy CVE
+  scan — caught and fixed two real HIGH-severity CVEs in the base image's bundled pip/setuptools),
+  `pip-audit` dependency vulnerability scan.
+- **OSS hygiene**: `CONTRIBUTING.md`, issue/PR templates, `dependabot.yml` (uv, github-actions,
+  docker).
+- **Fixed a real test-isolation bug (D-069)**: `ControlLoop` unit tests were silently hitting a live
+  database because the P1 kill-switch check wasn't mocked — invisible locally (a dev stack happened
+  to be reachable), would have failed in CI. Verified the fix with the database genuinely
+  unreachable, not just re-run against a live one.
+
+### Added — Tier 2: multi-user auth, dashboard, integration tests in CI, second connector
+- **Multi-actor operator API auth (D-070)**: `api_keys` (CSV `actor:key,...`) plus a unified
+  `_authenticate` dependency (X-API-Key or HTTP Basic) resolves every request to a real actor name —
+  `/approvals/*` no longer accept a client-supplied, spoofable `actor` field. Verified live:
+  authenticated as `alice`, approved a real action, confirmed `decided_by='alice'` in the database.
+- **Web dashboard (D-071)**: `GET /ui` + approve/reject forms — Jinja2, no JS, no external assets
+  (air-gapped friendly), same auth and same `acde.human.approvals` functions as the JSON API.
+- **Integration tests actually proven in CI (D-072)**: new `integration` job runs `make up && make
+  seed && make test-integration && make down` against the real stack on push to `main`. Verified: 26
+  passed in 4m11s on a fresh runner — "production ready" is now a CI fact, not just a doc claim.
+- **Prefect connector (D-073)**: second `Connector` implementation (deployments, flow runs,
+  work-pool concurrency), proving the abstraction generalizes beyond Airflow. One documented gap:
+  Prefect has no per-task clear, so `clear_tasks` retries the whole flow run.
+- **D-074**: root-caused and documented a pre-existing, intermittent integration-test flake (a
+  concurrent-DAG-run race between the recovery agent's `replay` and a Phase 1 test both triggering
+  `tpcds_ingest`) — added CI diagnostics (Airflow log dump on failure) and flagged a dedicated
+  follow-up rather than patching around it inside this release.
+
 ## [2.0.0] — Production release: from research artifact to deployable tool
 
 ACDE becomes a tool companies can deploy to govern their own pipelines. See `docs/OPERATIONS.md`,
