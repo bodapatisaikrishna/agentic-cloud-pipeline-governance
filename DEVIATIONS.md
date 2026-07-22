@@ -709,19 +709,26 @@ auto-included in the final report.
 - **Rationale:** proves the `Connector` abstraction generalizes beyond the one system it was
   originally built against, without inventing a second, incompatible integration pattern.
 
-## D-074 — Known occasional flake: `test_batch_dag_materializes_versioned_partition`
+## D-074 — Known pre-existing flake: concurrent `tpcds_ingest` DAG runs race (not Tier 2 code)
 
-- **What happens:** this integration test triggers a real Airflow DAG run and polls for a terminal
-  state; it has failed with a genuine Airflow `failed` DAG state (not a client-side poll timeout) on
-  two separate occasions this project — once locally under load, once on a cold, cache-less GitHub
-  Actions runner. Both times it passed cleanly on an immediate retry with no code change.
-- **Decision:** treat as a known, occasional, timing/resource-contention-sensitive flake rather than
-  a deterministic bug, since it is not reproducible on demand and both failures self-resolved on
-  retry. Added a CI diagnostics step (dump `airflow-scheduler`/`airflow-webserver` logs on
-  `integration` job failure) so a future occurrence is debuggable from the CI logs instead of
-  requiring local reproduction. Did not increase the test's poll timeout or add automatic retries —
-  that would mask a real regression just as easily as a real flake, and there isn't yet a captured
-  failure log to root-cause definitively.
-- **If this recurs with logs captured:** check the dumped Airflow logs first; likely causes are
-  scheduler/webserver CPU starvation on a cold/shared CI runner during the DAG's transform step,
-  not application logic.
+- **What happens:** `test_batch_dag_materializes_versioned_partition` (`test_dataplane.py`, Phase 1)
+  triggers `tpcds_ingest` and polls for a terminal state; it has failed with a genuine Airflow
+  `failed` DAG state (not a client-side poll timeout) on 2 of 3 fresh CI runs. Diagnostic logs (added
+  this pass) show the root cause: the recovery agent's `replay` action
+  (`policy/executor.py::_trigger_dag`, Phase 3) also triggers `tpcds_ingest` — with a `recovery__`
+  run-id prefix — from an earlier test in the suite (`test_agents_e2e.py` / `test_orchestrator_e2e.py`),
+  asynchronously, without waiting for completion. When that in-flight run overlaps with
+  `test_dataplane.py`'s own trigger of the *same shared DAG*, both `ingest` tasks fail fast
+  (~0.3–0.7s, a real exception — not a timeout), which is consistent with a concurrency-unsafe
+  resource in the batch pipeline's `ingest` task (most likely file I/O on the shared source CSV, or a
+  non-idempotent write) rather than pure cold-runner slowness, as first suspected. One immediate
+  retrigger against a freshly-recreated, cache-less local stack **succeeded**, confirming it is
+  timing/interleaving-dependent, not deterministically broken.
+- **Decision:** this is a real, pre-existing test-isolation gap in Phase 1/3 code, **not** anything
+  introduced by Tier 2 (auth/dashboard/CI-integration/Prefect connector, all independently verified
+  green). A proper fix (serialize access to the shared DAG across the integration suite, or make the
+  `ingest` task concurrency-safe) is out of scope for "complete Tier 2" and deserves its own
+  dedicated pass rather than a rushed patch here. Flagged as a follow-up task instead of silently
+  patched around or left with an inaccurate "cold runner" diagnosis on record.
+- **Kept from this pass:** the CI diagnostics step (dump `airflow-scheduler`/`airflow-webserver` logs
+  on `integration` job failure) that made this real diagnosis possible in the first place.
