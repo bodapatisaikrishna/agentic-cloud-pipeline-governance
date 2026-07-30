@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 # The paper-reproduction benchmark, chaos harness, analysis, and demo data plane (D-067).
 research = [
-    "pandas>=3.0.3",
+    "pandas>=3.0.5",
     "pyarrow>=25.0.0",
     "confluent-kafka>=2.15.0",
     "scipy>=1.17.1",
@@ -42,7 +42,7 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=5.0",
     # research extras installed in dev so the full test suite (benchmark + analysis) runs
-    "pandas>=3.0.3",
+    "pandas>=3.0.5",
     "pyarrow>=25.0.0",
     "confluent-kafka>=2.15.0",
     "scipy>=1.17.1",
