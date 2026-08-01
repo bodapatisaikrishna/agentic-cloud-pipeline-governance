@@ -13,8 +13,11 @@ RUN uv sync --no-dev --frozen --no-editable
 FROM python:3.11-slim AS runtime
 
 # The base image's system Python ships pip/setuptools/wheel that lag behind fixed CVEs (scanned by
-# CI's Trivy step) — upgrade them so the shipped image carries no known vulnerabilities.
+# CI's Trivy step) — upgrade them so the shipped image carries no known vulnerabilities. Python's
+# ensurepip module also carries its own separate, stale pip/setuptools wheel files (unrelated to the
+# active site-packages upgraded above) that Trivy scans directly off disk — purge those too.
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && rm -rf "$(python3 -c 'import ensurepip, os; print(os.path.dirname(ensurepip.__file__))')/_bundled" \
     && rm -rf /root/.cache
 
 # Non-root runtime user
