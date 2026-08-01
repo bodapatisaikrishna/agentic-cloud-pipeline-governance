@@ -12,13 +12,16 @@ RUN uv sync --no-dev --frozen --no-editable
 
 FROM python:3.11-slim AS runtime
 
-# The base image's system Python ships pip/setuptools/wheel that lag behind fixed CVEs (scanned by
-# CI's Trivy step) — upgrade them so the shipped image carries no known vulnerabilities. Python's
-# ensurepip module also carries its own separate, stale pip/setuptools wheel files (unrelated to the
-# active site-packages upgraded above) that Trivy scans directly off disk — purge those too.
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && rm -rf "$(python3 -c 'import ensurepip, os; print(os.path.dirname(ensurepip.__file__))')/_bundled" \
-    && rm -rf /root/.cache
+# The app runs entirely out of the self-contained venv copied in below (built by uv) -- system
+# Python's pip/setuptools/wheel are never used at runtime. They're also a recurring source of stale
+# CVEs (e.g. pip vendors its own pinned msgpack that lags behind fixed versions, and the base image's
+# original get-pip.py-installed setuptools isn't fully replaced by `pip install --upgrade`). Strip
+# them entirely rather than trying to keep unused packages patched.
+RUN find /usr/local/lib/python3.11/site-packages -maxdepth 1 \
+      \( -iname 'pip' -o -iname 'pip-*' -o -iname 'setuptools' -o -iname 'setuptools-*' \
+         -o -iname 'wheel' -o -iname 'wheel-*' -o -iname 'pkg_resources' -o -iname '_distutils_hack' \) \
+      -exec rm -rf {} + \
+    && rm -rf /usr/local/lib/python3.11/ensurepip /root/.cache
 
 # Non-root runtime user
 RUN useradd --create-home --uid 10001 acde
