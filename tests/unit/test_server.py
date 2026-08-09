@@ -134,6 +134,14 @@ def test_no_credentials_401s(multi_actor_client):
     assert r.status_code == 401
 
 
+def test_non_ascii_basic_password_401s_rather_than_erroring(multi_actor_client):
+    # Non-ASCII credentials must resolve to a clean 401, never a 500. FastAPI decodes the Basic
+    # header as ASCII and rejects it before _authenticate runs, so this locks in that end-to-end
+    # contract (the key comparison itself encodes its operands as a second line of defence).
+    r = multi_actor_client.get("/proposals", auth=("alice", "café-clé"))
+    assert r.status_code == 401
+
+
 def test_refuses_to_start_with_neither_key_configured(monkeypatch):
     monkeypatch.setattr(
         app_mod, "get_settings", lambda: Settings(_env_file=None, api_key="", api_keys="")

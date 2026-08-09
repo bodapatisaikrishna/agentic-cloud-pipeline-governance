@@ -9,6 +9,7 @@ accident. TLS is expected to be terminated by a reverse proxy (documented in doc
 
 from __future__ import annotations
 
+from secrets import compare_digest
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
@@ -30,15 +31,23 @@ def _authenticate(
     x_api_key: Annotated[str, Header()] = "",
     basic: Annotated[HTTPBasicCredentials | None, Depends(_basic)] = None,
 ) -> str:
-    """Resolve the caller to an actor name via X-API-Key or HTTP Basic; 401 on any mismatch."""
+    """Resolve the caller to an actor name via X-API-Key or HTTP Basic; 401 on any mismatch.
+
+    Key comparison goes through ``compare_digest`` so a wrong key takes the same time to reject
+    regardless of how many leading characters were right — a plain ``==`` leaks that prefix length
+    through timing and lets an attacker recover a key byte by byte. Operands are encoded to bytes
+    because ``compare_digest`` raises TypeError on non-ASCII *str*; both callers are already
+    ASCII-constrained upstream (HTTP header values, and FastAPI's ASCII decode of the Basic header),
+    so this is defence in depth rather than a reachable bug.
+    """
     key_map = get_settings().api_key_map
     if x_api_key:
         for actor, key in key_map.items():
-            if x_api_key == key:
+            if compare_digest(x_api_key.encode(), key.encode()):
                 return actor
     elif basic is not None:
         expected = key_map.get(basic.username)
-        if expected is not None and basic.password == expected:
+        if expected is not None and compare_digest(basic.password.encode(), expected.encode()):
             return basic.username
     raise HTTPException(
         status_code=401,
