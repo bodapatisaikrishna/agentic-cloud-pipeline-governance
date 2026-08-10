@@ -7,8 +7,9 @@ transactional pointer flip (no data movement), reused by the recovery agent in l
 
 from __future__ import annotations
 
+import hashlib
 import re
-from typing import Any
+from typing import Any, cast
 
 from acde import db
 from acde.logging import get_logger
@@ -21,6 +22,13 @@ _SAFE = re.compile(r"[^a-z0-9_]+")
 def _slug(text: str) -> str:
     """Lowercase identifier-safe slug for physical table names."""
     return _SAFE.sub("_", text.lower()).strip("_")
+
+
+def _lock_key(dataset: str, partition_key: str) -> int:
+    """Deterministic signed 32-bit key for a (dataset, partition_key) advisory lock."""
+    digest = hashlib.sha256(f"{dataset}:{partition_key}".encode()).digest()
+    unsigned = int.from_bytes(digest[:4], "big")
+    return unsigned - 2**31  # map to signed int4 range
 
 
 def table_name(dataset: str, partition_key: str, version: int) -> str:
@@ -55,22 +63,41 @@ class PartitionVersionManager:
 
         ``columns_ddl`` is the column definition for the new table (e.g. ``"d date, revenue
         double precision"``); ``insert_columns`` names the columns for the multi-row insert.
+
+        Version assignment, physical table creation, and the registry insert all run inside one
+        transaction holding a ``pg_advisory_xact_lock`` keyed on ``(dataset, partition_key)``.
+        Without this, two concurrent creators for the same partition (e.g. two DAG runs racing —
+        D-074) can both read the same ``MAX(version)``, then both ``DROP``/``CREATE`` the same
+        physical table concurrently and collide on ``partition_versions``' primary key. The lock
+        serializes them: the second caller blocks until the first commits, then correctly sees
+        the incremented version. ``pg_advisory_xact_lock`` auto-releases at transaction end, so a
+        crash mid-critical-section can't leak the lock the way a session-level lock could.
         """
-        version = self.next_version(dataset, partition_key)
-        tname = table_name(dataset, partition_key, version)
-        qualified = f"warehouse.{tname}"
-        db.execute(f"DROP TABLE IF EXISTS {qualified}")
-        db.execute(f"CREATE TABLE {qualified} ({columns_ddl})")
-        if rows:
-            placeholders = ", ".join(["%s"] * len(rows[0]))
-            db.execute_many(
-                f"INSERT INTO {qualified} ({insert_columns}) VALUES ({placeholders})", rows
+        with db.get_pool().connection() as conn, conn.transaction():
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (_lock_key(dataset, partition_key),))
+            row = cast(
+                "dict[str, Any] | None",
+                conn.execute(
+                    "SELECT COALESCE(MAX(version), 0) AS v FROM warehouse.partition_versions "
+                    "WHERE dataset = %s AND partition_key = %s",
+                    (dataset, partition_key),
+                ).fetchone(),
             )
-        db.execute(
-            "INSERT INTO warehouse.partition_versions "
-            "(dataset, partition_key, version, table_name, active) VALUES (%s, %s, %s, %s, %s)",
-            (dataset, partition_key, version, tname, False),
-        )
+            version = int(row["v"]) + 1 if row else 1
+            tname = table_name(dataset, partition_key, version)
+            qualified = f"warehouse.{tname}"
+            conn.execute(f"DROP TABLE IF EXISTS {qualified}")
+            conn.execute(f"CREATE TABLE {qualified} ({columns_ddl})")
+            if rows:
+                placeholders = ", ".join(["%s"] * len(rows[0]))
+                conn.cursor().executemany(
+                    f"INSERT INTO {qualified} ({insert_columns}) VALUES ({placeholders})", rows
+                )
+            conn.execute(
+                "INSERT INTO warehouse.partition_versions "
+                "(dataset, partition_key, version, table_name, active) VALUES (%s, %s, %s, %s, %s)",
+                (dataset, partition_key, version, tname, False),
+            )
         log.info(
             "partition_version_created",
             extra={

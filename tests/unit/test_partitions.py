@@ -30,7 +30,8 @@ class TestVersioning:
         assert PartitionVersionManager().next_version("d", "p") == 1
 
     def test_create_version_materializes_and_registers(self, fake_db):
-        fake_db.fetch_one.return_value = {"v": 0}  # next_version -> 1
+        conn = fake_db.get_pool.return_value.connection.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = {"v": 0}  # -> version 1
         mgr = PartitionVersionManager(experiment_run="run-1")
         version = mgr.create_version(
             "tpcds",
@@ -41,15 +42,18 @@ class TestVersioning:
             activate=True,
         )
         assert version == 1
-        # created the physical table and bulk-inserted rows
-        create_calls = [c.args[0] for c in fake_db.execute.call_args_list]
-        assert any("CREATE TABLE warehouse.tpcds__2026_01__v1" in s for s in create_calls)
-        fake_db.execute_many.assert_called_once()
+        # took the advisory lock before reading/writing anything else
+        statements = [c.args[0] for c in conn.execute.call_args_list]
+        assert "pg_advisory_xact_lock" in statements[0]
+        # created the physical table and bulk-inserted rows, all on the locked connection
+        assert any("CREATE TABLE warehouse.tpcds__2026_01__v1" in s for s in statements)
+        conn.cursor.return_value.executemany.assert_called_once()
         # registered the version row
-        assert any("INSERT INTO warehouse.partition_versions" in s for s in create_calls)
+        assert any("INSERT INTO warehouse.partition_versions" in s for s in statements)
 
     def test_create_version_without_rows_skips_insert(self, fake_db):
-        fake_db.fetch_one.return_value = {"v": 0}
+        conn = fake_db.get_pool.return_value.connection.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = {"v": 0}
         PartitionVersionManager().create_version(
             "d",
             "p",
@@ -58,7 +62,24 @@ class TestVersioning:
             insert_columns="x",
             activate=False,
         )
-        fake_db.execute_many.assert_not_called()
+        conn.cursor.return_value.executemany.assert_not_called()
+
+    def test_concurrent_creators_serialize_on_the_same_lock_key(self, fake_db):
+        # Two DAG runs racing the same (dataset, partition_key) must hash to the same advisory
+        # lock key so the second genuinely blocks on the first rather than racing it (D-074).
+        conn = fake_db.get_pool.return_value.connection.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = {"v": 0}
+        PartitionVersionManager().create_version(
+            "tpcds", "2026-01", "x int", rows=[], insert_columns="x", activate=False
+        )
+        key_a = conn.execute.call_args_list[0].args[1][0]
+        conn.reset_mock()
+        conn.execute.return_value.fetchone.return_value = {"v": 0}
+        PartitionVersionManager().create_version(
+            "tpcds", "2026-01", "x int", rows=[], insert_columns="x", activate=False
+        )
+        key_b = conn.execute.call_args_list[0].args[1][0]
+        assert key_a == key_b
 
 
 class TestRollback:

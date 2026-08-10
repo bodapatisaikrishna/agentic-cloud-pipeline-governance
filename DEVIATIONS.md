@@ -709,26 +709,43 @@ auto-included in the final report.
 - **Rationale:** proves the `Connector` abstraction generalizes beyond the one system it was
   originally built against, without inventing a second, incompatible integration pattern.
 
-## D-074 — Known pre-existing flake: concurrent `tpcds_ingest` DAG runs race (not Tier 2 code)
+## D-074 — Concurrent `tpcds_ingest` DAG runs race — root-caused and fixed
 
-- **What happens:** `test_batch_dag_materializes_versioned_partition` (`test_dataplane.py`, Phase 1)
-  triggers `tpcds_ingest` and polls for a terminal state; it has failed with a genuine Airflow
-  `failed` DAG state (not a client-side poll timeout) on 2 of 3 fresh CI runs. Diagnostic logs (added
-  this pass) show the root cause: the recovery agent's `replay` action
+- **What happened:** `test_batch_dag_materializes_versioned_partition` (`test_dataplane.py`, Phase 1)
+  triggers `tpcds_ingest` and polls for a terminal state; it failed with a genuine Airflow `failed`
+  DAG state (not a client-side poll timeout) on 2 of 3 fresh CI runs. Diagnostic logs (added in the
+  Tier 2 pass) showed the trigger: the recovery agent's `replay` action
   (`policy/executor.py::_trigger_dag`, Phase 3) also triggers `tpcds_ingest` — with a `recovery__`
   run-id prefix — from an earlier test in the suite (`test_agents_e2e.py` / `test_orchestrator_e2e.py`),
-  asynchronously, without waiting for completion. When that in-flight run overlaps with
-  `test_dataplane.py`'s own trigger of the *same shared DAG*, both `ingest` tasks fail fast
-  (~0.3–0.7s, a real exception — not a timeout), which is consistent with a concurrency-unsafe
-  resource in the batch pipeline's `ingest` task (most likely file I/O on the shared source CSV, or a
-  non-idempotent write) rather than pure cold-runner slowness, as first suspected. One immediate
-  retrigger against a freshly-recreated, cache-less local stack **succeeded**, confirming it is
-  timing/interleaving-dependent, not deterministically broken.
-- **Decision:** this is a real, pre-existing test-isolation gap in Phase 1/3 code, **not** anything
-  introduced by Tier 2 (auth/dashboard/CI-integration/Prefect connector, all independently verified
-  green). A proper fix (serialize access to the shared DAG across the integration suite, or make the
-  `ingest` task concurrency-safe) is out of scope for "complete Tier 2" and deserves its own
-  dedicated pass rather than a rushed patch here. Flagged as a follow-up task instead of silently
-  patched around or left with an inaccurate "cold runner" diagnosis on record.
-- **Kept from this pass:** the CI diagnostics step (dump `airflow-scheduler`/`airflow-webserver` logs
-  on `integration` job failure) that made this real diagnosis possible in the first place.
+  asynchronously, without waiting for completion. When that in-flight run overlapped with
+  `test_dataplane.py`'s own trigger of the *same shared DAG*, both `ingest` tasks failed fast
+  (~0.3–0.7s, a real exception, not a timeout).
+- **Actual root cause (found in this pass):** `PartitionVersionManager.create_version`
+  (`dataplane/partitions.py`) read `MAX(version)` and then, in separate unpooled statements,
+  `DROP TABLE IF EXISTS` → `CREATE TABLE` → insert → register — with no locking across that
+  sequence. Two concurrent callers for the same `(dataset, partition_key)` (`tpcds_daily_revenue`,
+  `2026-01` — the only partition either code path ever writes) both read the same `MAX(version)`,
+  computed the same "next version", and raced to `DROP`/`CREATE` the *identically-named* physical
+  table while the other was still inserting into it, colliding on `partition_versions`' primary key
+  or Postgres' internal type catalog. This is exactly the "concurrency-unsafe resource in the
+  `ingest` task" suspected in the original diagnosis, now identified precisely rather than left as
+  "most likely file I/O".
+- **Fix:** `create_version` now runs version assignment, table creation, row insert, and the
+  registry insert inside **one transaction** holding a `pg_advisory_xact_lock` keyed on
+  `(dataset, partition_key)`. A second concurrent caller for the same partition blocks until the
+  first commits, then correctly reads the incremented version — no more collision. The lock is
+  transaction-scoped (auto-releases on commit or rollback), so a crash mid-critical-section can't
+  leak it the way a session-level lock could. `next_version()` stays as a standalone read for
+  callers that just want to peek; `create_version` no longer calls it (its own locked read replaces
+  that call site).
+- **Verified against a real race, not just unit mocks:** spun up an ephemeral local Postgres
+  (`initdb` + `pg_ctl`, no Docker) with the actual `warehouse.partition_versions` DDL, then fired 12
+  threads at `create_version` for the exact same `(dataset, partition_key)` simultaneously.
+  - **Pre-fix code (reverted to `git show HEAD:...` for the test): 11/12 failed** —
+    `DuplicateTable: relation "tpcds_daily_revenue__2026_01__v1" already exists`,
+    `UniqueViolation: duplicate key value violates unique constraint "pg_type_typname_nsp_index"` —
+    reproducing the exact failure signature (fast, real exceptions) reported by CI.
+  - **Post-fix code: 12/12 succeeded**, versions `[1..12]` all unique, zero errors.
+- **Kept from the original diagnosis pass:** the CI diagnostics step (dump
+  `airflow-scheduler`/`airflow-webserver` logs on `integration` job failure) that made the original
+  root-causing possible.
