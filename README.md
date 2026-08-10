@@ -165,9 +165,9 @@ and resumable.
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, design guarantees, operator responsibilities |
 | [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) | Paper section → implementation → measured result |
 | [`REPORT.md`](REPORT.md) | What reproduces from the paper, what doesn't, and why |
-| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (68 entries) |
+| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (73 entries) |
 | [`DATA_LICENSES.md`](DATA_LICENSES.md) | Provenance & licensing of the TPC-DS / NYC TLC datasets |
-| [`CHANGELOG.md`](CHANGELOG.md) | Release history, v0.1 → v2.0.0 |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history, v0.1 → v2.2.0 |
 
 ## Deep dive
 
