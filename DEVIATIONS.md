@@ -709,8 +709,11 @@ auto-included in the final report.
 - **Rationale:** proves the `Connector` abstraction generalizes beyond the one system it was
   originally built against, without inventing a second, incompatible integration pattern.
 
-## D-074 — Concurrent `tpcds_ingest` DAG runs race — root-caused and fixed
+## D-074 — Concurrent `tpcds_ingest` DAG runs race — root-caused, fixed, verified
 
+- **Status: VERIFIED.** Fixed in `90a969a`; the `integration` job (the one this flake lived in) has
+  been green on every push since — `90a969a` (the fix itself), `4f305a5`, and `31373812852` — three
+  consecutive clean runs with zero recurrence, on top of the local reproduction below.
 - **What happened:** `test_batch_dag_materializes_versioned_partition` (`test_dataplane.py`, Phase 1)
   triggers `tpcds_ingest` and polls for a terminal state; it failed with a genuine Airflow `failed`
   DAG state (not a client-side poll timeout) on 2 of 3 fresh CI runs. Diagnostic logs (added in the
