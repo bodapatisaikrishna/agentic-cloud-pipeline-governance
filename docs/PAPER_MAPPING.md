@@ -14,6 +14,7 @@ Maps each section/claim of arXiv:2512.23737 *"Governing Cloud Data Pipelines wit
 | Agents never execute; all actions validated before execution (§III) | `contracts/actions.py` (pydantic) → `policy/gate.py` (OPA) → `policy/executor.py` | ✅ |
 | LLM as bounded reasoner, no code generation (§VI.A) | `llm/` — emits only a validated `ProposedAction` | ✅ |
 | Model-agnostic (GPT / Claude / Gemini interchangeable) (§VI.A) | `llm/client.py` provider abstraction: anthropic · gemini · openai_compatible (NVIDIA/Groq/…) | ➕ actually implemented + measured (§C below) |
+| "Execution remains deterministic and auditable" (§IV.A, Data Plane) | `dataplane/partitions.py::PartitionVersionManager.create_version` | ➕ paper asserts this, never discusses concurrency safety; ACDE found and closed a real gap (D-074) — two concurrent writers to the same partition (e.g. the recovery agent's `replay` racing a scheduled DAG run) could read the same next-version and collide. Fixed with a `pg_advisory_xact_lock`-scoped transaction; verified against a real reproduced race (11/12 failures pre-fix → 12/12 clean post-fix on an ephemeral Postgres, not just unit mocks) |
 
 ## Evaluation (paper §VII)
 

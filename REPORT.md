@@ -85,6 +85,15 @@ cost reduction then appears, but its magnitude depends on the over-provisioning 
   cloud-scale performance.
 - **Cost/freshness modeling.** Both depend on disclosed models (D-060/D-061); we report the model, not
   just the number.
+- **Concurrent partition writes (D-074, resolved).** `experiments/runner.py::run_profile` executes
+  replicates sequentially, so the 96-run matrix's own numbers were never exposed to this. The gap was
+  real elsewhere: `PartitionVersionManager.create_version` assigned versions and created the physical
+  table with no locking, so two concurrent writers to the *same* `(dataset, partition_key)` — e.g. the
+  recovery agent's `replay` action racing an independently-triggered DAG run, first surfaced as an
+  intermittent `integration` job flake — could read the same next-version and collide. Fixed with a
+  `pg_advisory_xact_lock`-scoped transaction around the whole critical section; verified against a
+  real reproduced race on an ephemeral Postgres (12 concurrent writers: 11/12 failed pre-fix with
+  `DuplicateTable`/`UniqueViolation`, 12/12 clean post-fix), not just unit-level mocks.
 
 ## Reproduce it
 
