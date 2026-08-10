@@ -3,6 +3,59 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [2.2.0] — Dependency refresh + a real concurrency fix
+
+Routine maintenance release: the docker-release `:latest` tag bug, the CI infra found chasing it, and
+~20 dependabot bumps — plus one real correctness bug (D-074) found and fixed along the way, not just
+dependency churn.
+
+### Fixed
+- **`docker-release.yml`'s `:latest` GHCR tag wasn't updating** — `actions/checkout@v4` defaulted to
+  `fetch-tags: false`, so the "is this the newest tag" step couldn't see the full tag list. Added
+  `fetch-depth: 0` + `fetch-tags: true`; verified live against the GHCR registry API.
+- **Unit suite was making real, billed LLM API calls.** `TestBudget`/`TestCache` in
+  `test_llm_client.py` constructed `LLMClient()` without patching settings, so a developer's local
+  `.env` (`MOCK_LLM=0` + a live provider key) leaked into `pytest tests/unit` runs. Added
+  `tests/unit/conftest.py` clearing every `Settings`-derived env var at import time — verified
+  hermetic against a hostile environment (`MOCK_LLM=0` + a bogus DB host exported): 382 passed, zero
+  outbound HTTP.
+- **API key comparison wasn't constant-time.** `_authenticate` used `==`, which leaks how many
+  leading characters were correct through response timing. Switched to `secrets.compare_digest`.
+- **`cryptography` 49.0.0 HIGH CVE** (CVE-2026-69247 / PYSEC-2026-3552, transitive via
+  `google-genai`) — bumped to 50.0.0.
+- **Stale `pip`/`setuptools`/`wheel` CVEs in the runtime image, for real this time.** The Tier 1 fix
+  (`pip install --upgrade`) didn't actually clear the Trivy findings — pip's own PyPI releases vendor
+  a pinned, unfixed `msgpack`, and the base image's original `setuptools` metadata survives the
+  upgrade. Since the app runs entirely out of a self-contained `uv`-built venv, system `pip` is never
+  needed at runtime — stripped it entirely instead of chasing upgrades release to release.
+- **D-074 — concurrent `tpcds_ingest` DAG runs race, root-caused and fixed.**
+  `PartitionVersionManager.create_version` read `MAX(version)` and then ran `DROP TABLE`/`CREATE
+  TABLE`/insert/register as separate, unlocked statements. Two concurrent writers to the same
+  `(dataset, partition_key)` — e.g. the recovery agent's `replay` racing an independently-triggered
+  DAG run — could compute the same "next version" and collide. Fixed with a
+  `pg_advisory_xact_lock`-scoped transaction around the whole critical section. Verified against a
+  real reproduced race on an ephemeral local Postgres (12 concurrent writers: 11/12 failed pre-fix
+  with `DuplicateTable`/`UniqueViolation`, 12/12 clean post-fix) and against 4 consecutive clean
+  `integration` CI runs post-fix.
+
+### Changed
+- Dependency refresh across Python deps (`fastapi`, `openai`, `anthropic`, `uvicorn`, `google-genai`,
+  `psycopg`, `ruff`, `mypy`, `pandas`, `matplotlib`) and GitHub Actions (`checkout`, `login-action`,
+  `setup-buildx-action`, `build-push-action`, `metadata-action`, `setup-uv`) — ~20 dependabot PRs,
+  all merged after re-verifying CI green post-rebase.
+- README's Phase status table and unit-test-count claims synced to actual shipped state (was
+  showing v2.0.0 and a stale "360 unit tests"; actual is 382). `.env.prod.example` gained the
+  `API_KEYS` and Prefect fields that shipped in v2.1.0 but were never added to the template.
+- `docs/PAPER_MAPPING.md` / `REPORT.md` updated to reflect the D-074 fix against the paper's §IV.A
+  "deterministic and auditable" Data Plane claim.
+
+### Not changed (deliberately)
+- **`python:3.11-slim` → `3.14-slim` base image bump** (dependabot PR #5) — closed, not merged. The
+  build stage's `uv sync` downloads its own managed Python 3.11 toolchain regardless of the base
+  image (per `requires-python = ">=3.11,<3.12"`), so bumping the base image's *system* Python changes
+  nothing about what code executes — pure inconsistency with the project's declared support range,
+  zero functional gain.
+
 ## [2.1.0] — Repo maturity + real capability (Tier 1 & Tier 2 hardening)
 
 Everything needed to go from "a repo that works" to "a repo you'd trust and could actually operate
