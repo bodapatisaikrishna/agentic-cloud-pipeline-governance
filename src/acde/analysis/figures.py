@@ -60,13 +60,12 @@ def _heatmap(summary: dict[str, Any], out: Path) -> None:
     plt.close(fig)
 
 
-def _cdf(summary: dict[str, Any], metric: str, out: Path, raw_by_config=None) -> None:
-    """CDF of a metric's medians across configs (or raw values if provided)."""
+def _cdf(summary: dict[str, Any], metric: str, out: Path) -> None:
+    """CDF of a metric's raw per-run values across configs."""
     fig, ax = plt.subplots(figsize=(7, 4))
     for config in summary["configs"]:
-        vals = (raw_by_config or {}).get(config)
-        if not vals:
-            vals = [summary["by_metric"][metric]["per_config"][config]["median"]]
+        per_config = summary["by_metric"][metric]["per_config"][config]
+        vals = per_config.get("raw") or [per_config["median"]]
         xs = np.sort(np.asarray(vals, dtype=float))
         ys = np.arange(1, len(xs) + 1) / len(xs)
         ax.step(xs, ys, where="post", label=config)

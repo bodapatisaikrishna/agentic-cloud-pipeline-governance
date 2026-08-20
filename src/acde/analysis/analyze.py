@@ -82,6 +82,7 @@ def analyze(results_dir: Path | None = None) -> dict[str, Any]:
                 "ci_lo": lo,
                 "ci_hi": hi,
                 "n": len(vals),
+                "raw": vals,
             }
         base, full = _paired(df, metric, "baseline", "full")
         stat, pval = stats.paired_wilcoxon(base, full)
