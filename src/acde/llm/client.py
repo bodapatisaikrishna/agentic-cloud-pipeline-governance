@@ -194,9 +194,15 @@ class LLMClient:
             resp = self._anthropic.messages.create(
                 model=model,
                 max_tokens=settings.llm_max_tokens_per_call,
-                temperature=0,
                 system=system_prompt,
                 messages=[{"role": "user", "content": snapshot.model_dump_json()}],
+                # anthropic-sdk-python v1.0 removed temperature/top_p/top_k as a typed kwarg on
+                # messages.create -- passing it directly is now a TypeError. Anthropic's own
+                # migration guide's example uses claude-sonnet-4-6 (this project's MODEL_REASONING)
+                # and recommends extra_body: current models ignore it (no sampling control exists
+                # any more), models that predate the change still honor it. Either way this is a
+                # no-op or the intended effect -- never an error -- so it's safe to always send.
+                extra_body={"temperature": 0},
             )
             text = "".join(block.text for block in resp.content if block.type == "text")
             return LLMResult(

@@ -775,3 +775,28 @@ auto-included in the final report.
   original unpinned Dockerfile would have hit this same tension once those provider packages'
   constraints and acde's core deps drifted far enough apart regardless — pinning didn't create it,
   it just surfaced it as a visible (non-fatal) warning instead of letting it fail silently later.
+
+## D-076 — `temperature=0` moved to `extra_body` for the Anthropic provider (SDK v1.0, API-level change)
+
+- **What happened:** `anthropic-sdk-python` v1.0 removed `temperature`/`top_p`/`top_k` as typed
+  keyword arguments on `messages.create()` — not an SDK-only deprecation, but reflecting a real API
+  change: "current models do not use these sampling parameters" (Anthropic's own migration guide,
+  whose own before/after example uses `model="claude-sonnet-4-6"` — this project's `MODEL_REASONING`).
+  Passing `temperature=0` directly is now a `TypeError` at the Python call layer, which would have
+  broken `_anthropic_once` — the default LLM provider — on the very first live (non-mock) call. CI
+  never caught it: this path is `# pragma: no cover - requires the Anthropic API`.
+- **Fix:** pass `extra_body={"temperature": 0}` instead of the removed keyword. Per the same migration
+  guide, this is a no-op on current models (which have no sampling parameter to set) and is honored on
+  older models that predate the change — never an error either way, so it's correct to send
+  unconditionally rather than branch on model version. Verified structurally: constructing the same
+  call against a real `anthropic.Anthropic()` client with a fake key raises `AuthenticationError`
+  (the request reached the server), not `TypeError` (which would mean the client rejected the call
+  shape before sending it) — confirms the fix is accepted at the call layer, the deepest check
+  possible without spending real API credits.
+- **What this means for D-035/D-036 (temperature=0 determinism, "both accept temperature=0"):** those
+  entries' premise — that the configured models honor an explicit `temperature=0` — is no longer
+  literally true for `claude-sonnet-4-6`/`claude-haiku-4-5` specifically; current Claude models have no
+  sampling parameter to set at all, i.e. they're deterministic (or run some fixed, unconfigurable
+  decoding) by default rather than by an explicit `temperature=0` request. The *intent* of D-035/D-036
+  (deterministic live-path behavior) is unaffected — this is a documentation-of-mechanism correction,
+  not a behavior change ACDE asked for or controls.
