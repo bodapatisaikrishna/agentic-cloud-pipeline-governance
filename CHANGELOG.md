@@ -3,6 +3,34 @@
 All notable changes to ACDE. Format loosely follows Keep a Changelog; versions are tagged
 per phase, `v1.0.0` at Phase 9.
 
+## [Unreleased]
+
+### Added
+- **Proactive concurrency fuzzing (D-077)**: `tests/integration/test_concurrency_fuzz.py` turns the
+  disposable script that found D-074 into a permanent regression test — 20 real concurrent workers
+  hammer `PartitionVersionManager.create_version` across shared targets. Verified both directions:
+  passes 3/3 against current code, fails 3/3 against the pre-D-074-fix code.
+- **OPA policy audit + exhaustive coverage (D-078)**: fixed real dead code (`rate_limit.rego` was
+  never delegated to from `main.rego` — two duplicate copies of the same check, only one reachable),
+  added a property test asserting all 18 legitimate `(agent, action_type)` pairs reach a real policy
+  branch (7 were previously untested), and closed two boundary-condition gaps (`cost_budget`'s
+  exact-equal case, `schema`'s compat-independent containment rule). Verified every new test actually
+  catches the bug it targets (each one confirmed to fail against a deliberately reintroduced mutation,
+  then restored), and re-verified against the exact CI-pinned `opa:0.68.0` — not just a newer local
+  install.
+
+### Fixed
+- **Real multi-agent conflict resolution (D-079, corrects D-038)**: found while implementing the
+  paper's §X negotiation future-work item that D-038's "recovery outranks optimization" guarantee
+  was never actually enforced — reactive agents run sequentially in `orchestrator/loop.py` with a
+  lock that releases between them, so both would execute regardless of order. `_tick()` now runs
+  explicit propose → resolve → act phases; contested targets resolve by `(agent priority,
+  confidence)` bid before anyone acts, not by accident of execution order. Verified the fix actually
+  fixes something (reverted to the old no-resolution behavior, confirmed the new tests fail exactly
+  as expected, restored). Honestly scoped: no current `MOCK_LLM=1` scenario produces same-target
+  contention between agent types, so this is a verified safety net for the live-LLM path, not
+  something exercised by today's integration tests.
+
 ## [2.2.0] — Dependency refresh + a real concurrency fix
 
 Routine maintenance release: the docker-release `:latest` tag bug, the CI infra found chasing it, and

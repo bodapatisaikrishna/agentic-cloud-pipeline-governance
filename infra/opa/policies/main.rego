@@ -7,6 +7,7 @@ package acde.policy
 import rego.v1
 
 import data.acde.cost_budget
+import data.acde.rate_limit
 import data.acde.recovery
 import data.acde.schema
 
@@ -19,15 +20,10 @@ default decision := {
 
 within_rate if input.context.actions_last_10min < 5
 
-# Runaway guard first, for all agents.
-decision := {
-	"allowed": false,
-	"escalate": false,
-	"reason": sprintf("rate limit: %v actions in the last 10 minutes", [input.context.actions_last_10min]),
-	"policy_id": "rate_limit",
-} if {
-	input.context.actions_last_10min >= 5
-}
+# Runaway guard first, for all agents. Delegates to acde.rate_limit rather than duplicating the
+# threshold check inline -- the two used to be separate, byte-identical copies with only one of
+# them ever reachable from `decision` (found while auditing for property-test coverage).
+decision := rate_limit.result if not within_rate
 
 # no_action is always permitted (below the rate limit).
 decision := {"allowed": true, "escalate": false, "reason": "no action", "policy_id": "noop"} if {

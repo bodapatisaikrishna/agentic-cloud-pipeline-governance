@@ -348,14 +348,23 @@ auto-included in the final report.
   cross-process mutual exclusion so two agents never act on the same target concurrently, and it
   survives a future multi-process runner.
 
-## D-038 — Conflict rule via act order + shared lock
+## D-038 — Conflict rule via act order + shared lock (CORRECTED — see D-079)
 
-- **Decision:** Reactive agents run `schema → recovery → optimization`; contending on the same
-  target's advisory lock, recovery (earlier) wins and optimization (later) skips — implementing
-  "recovery outranks optimization on the same target" with no special case. Distinct targets run
-  independently.
-- **Rationale:** Simple, correct, and emergent from the locking primitive rather than bespoke
-  priority bookkeeping.
+- **Original decision (wrong, kept here for the record):** Reactive agents run
+  `schema → recovery → optimization`; contending on the same target's advisory lock, recovery
+  (earlier) wins and optimization (later) skips — implementing "recovery outranks optimization on
+  the same target" with no special case. Distinct targets run independently.
+- **Original rationale (wrong):** Simple, correct, and emergent from the locking primitive rather
+  than bespoke priority bookkeeping.
+- **Why it was wrong:** this was never actually true. `orchestrator/loop.py::_tick()` runs reactive
+  agents strictly sequentially — `await`ing one `asyncio.to_thread(self._run_agent, name)` fully
+  before starting the next — and `target_advisory_lock` releases the moment `_run_agent` returns,
+  before the next agent even begins. There is no temporal overlap within one process's tick, so two
+  agents proposing on the same target both acquire the lock in turn and **both would execute** —
+  the exact opposite of "optimization skips." The lock is real and still needed (D-037), just not
+  for the property this entry claimed it provided; it protects against a *different process* acting
+  on the same target concurrently, not intra-tick contention. See D-079 for the fix and how it was
+  found and verified.
 
 ## D-039 — Event-driven reactive scheduling
 
@@ -800,3 +809,102 @@ auto-included in the final report.
   decoding) by default rather than by an explicit `temperature=0` request. The *intent* of D-035/D-036
   (deterministic live-path behavior) is unaffected — this is a documentation-of-mechanism correction,
   not a behavior change ACDE asked for or controls.
+
+## D-077 — Proactive concurrency fuzzing, not just a D-074 patch
+
+- **Decision:** `tests/integration/test_concurrency_fuzz.py` turns the disposable script that found
+  D-074 into a permanent regression test: `ThreadPoolExecutor` fires 20 real concurrent workers at
+  `PartitionVersionManager.create_version` across a small pool of shared `(dataset, partition_key)`
+  targets (randomly assigned via a seeded RNG — only the *target assignment* is seeded; real OS
+  thread interleaving is deliberately left alone, since genuine non-deterministic scheduling is what
+  a concurrency fuzzer needs to exercise the race window at all). Asserts no worker raised, every
+  target's version numbers are exactly `{1..N}` with no duplicates, `partition_versions` row counts
+  match exactly, and every created physical table is genuinely queryable.
+- **Verified both directions**, not just that it passes: ran 3x against the current (fixed) code —
+  clean every time — then temporarily reverted `partitions.py` to its pre-D-074-fix state and ran it
+  3x again — failed every time with the same collision. Confirms the test actually discriminates
+  fixed from broken, not just that it happens to pass.
+- **Rationale:** the user asked to go beyond the known-issues list and make the project genuinely
+  better, not just keep patching the D-074 instance whenever it resurfaces. A generic, reusable
+  concurrency-fuzz *methodology* (extendable to other shared-state mutators if one is ever found)
+  is worth more than a second one-off script that gets thrown away again.
+- **Disclosed, intentional risk:** if any *other* latent race exists in this code path, this test can
+  turn `integration` red on a run unrelated to whatever else changed. That is the point — catching a
+  future D-074-class bug before it ships is worth an occasional investigation, not something to
+  suppress by weakening the assertions.
+
+## D-078 — OPA policy audit: real dead code found and fixed, exhaustive coverage added
+
+- **Dead code found:** `infra/opa/policies/rate_limit.rego` (package `acde.rate_limit`) was never
+  imported or referenced by `main.rego` — the aggregating entrypoint reimplemented the exact same
+  `>= 5` threshold check inline instead of delegating. Two byte-identical copies of the same policy
+  logic, only one of them ever reachable from the real decision path; `rate_limit_test.rego` was
+  faithfully testing code no live request could ever exercise. Fixed: `main.rego` now delegates to
+  `data.acde.rate_limit.result`, matching the pattern already used for `cost_budget`/`recovery`/
+  `schema`. Verified behavior-preserving: all 20 pre-existing tests passed unchanged before and after.
+- **Exhaustive combination coverage added** (`coverage_test.rego`): a property test iterating all 18
+  legitimate `(agent, action_type)` pairs from `src/acde/contracts/actions.py::ACTION_TYPES` (the
+  actual runtime source of truth — a `ProposedAction` can't be constructed outside this set), asserting
+  every one reaches a real policy branch and never falls through to `default decision`. 7 of the 18
+  combinations had never been exercised by any test before this. **Verified it actually catches the
+  bug it exists for**, not just that it passes: temporarily deleted the `reprioritize_pipeline` branch
+  from `main.rego` — the new test failed exactly there (`policy_id == "default"`), confirmed via
+  `opa test`'s trace output; restored, re-confirmed 24/24 green.
+- **Boundary-condition gaps closed:** (1) `cost_budget`'s exact-equal case
+  (`projected_marginal_cost == budget_remaining_units`) was untested — the rule is `<=`, so an
+  accidental `<` would silently deny every action that spends a budget down to precisely zero;
+  verified the new test catches that exact mutation (`<=` → `<` locally, test failed, reverted). (2)
+  `schema.rego`'s `contain` rule (quarantine/block) has **no condition on `schema_compat` at all** —
+  it fires on `action_type` alone, allowing pre-emptive quarantine before compat is even classified.
+  This was true but never locked in by a test; added one asserting quarantine still allows+escalates
+  with `schema_compat: "backward"`, not just `"breaking"`.
+- **Verified against the exact CI-pinned OPA version**, not just a newer local install: ran
+  `make opa-test` against the live `openpolicyagent/opa:0.68.0-debug` container (same version CI's
+  `setup-opa` action installs) — 24/24 pass. Also queried the real running `/v1/data/acde/policy/
+  decision` HTTP endpoint directly (what `gate.py` actually calls in production) for the
+  `reprioritize_pipeline` case specifically, confirming the fix holds end-to-end, not just inside
+  `opa test`'s own test runner.
+- **Rationale:** this is the OPA-side counterpart to D-077 — going beyond "the known issues are
+  patched" to systematically audit the policy surface itself for the two failure modes a
+  hand-maintained decision table is most prone to: dead/duplicated branches, and untested boundary
+  conditions at the exact thresholds the logic depends on.
+
+## D-079 — Real bid-based conflict resolution, replacing D-038's non-functional lock-order claim
+
+- **Found while implementing the paper's §X "explicit multi-agent negotiation" future-work item**:
+  tracing `orchestrator/loop.py` to build genuine negotiation surfaced that D-038's existing
+  "recovery outranks optimization" guarantee was never actually enforced (see D-038's correction
+  above) — reactive agents run sequentially with a lock that releases between them, so both would
+  execute regardless of order. This was there to fix, not something introduced now.
+- **Fix:** `_tick()` now runs three explicit phases instead of one combined observe-reason-lock-act
+  call per agent. **Propose** — every enabled reactive agent's `observe()`+`reason()` runs first,
+  with no side effects, still in `schema → recovery → optimization` order for deterministic logging
+  (order no longer decides anything). **Resolve** (`_resolve_conflicts`) — proposals are grouped by
+  `action.target`; a target with one proposal passes through untouched; a target with 2+ resolves by
+  bid, `(AGENT_PRIORITY[agent], action.confidence)` compared as a tuple, highest wins. **Act** — only
+  winning proposals go through the unchanged lock-then-blast-radius-then-act sequence
+  (`_act_on`, extracted verbatim from the old `_run_agent`'s tail — `_run_agent` itself is untouched
+  and still used for `monitoring`, which never contends).
+- **Priority order** (`recovery=3 > schema=2 > optimization=1`, `confidence` a tiebreaker only): a
+  judgment call, not something to leave ambiguous — recovery is fixing a live failure, the most
+  time-critical action class in this system; schema is a real data-integrity concern but rarely as
+  urgent as an in-progress recovery; optimization is cost/performance, least urgent by construction.
+  `confidence` can't actually break a tie today (each reactive slot proposes at most once per tick),
+  but it's a real signal already on every `ProposedAction` and the interface is correct if that ever
+  changes. Losing proposals get `"outbid by {winner} on {target}"` — never confused with a lock-skip
+  or a blast-radius-skip, both of which already existed as separate, distinguishable outcomes.
+- **Verified the fix actually fixes something**, not just that it passes: `_resolve_conflicts`'s
+  logic was temporarily reverted to trivially return every proposal as a winner (simulating the
+  original bug precisely — no resolution at all) and the new negotiation tests failed exactly as
+  expected (`recovery`/`schema` no longer beating `optimization` on a shared target); restored,
+  re-confirmed 14/14 `test_loop.py` green. `TestRunAgent`'s 4 pre-existing tests needed zero changes
+  (pure extraction into `_act_on`, confirmed byte-for-byte behavior-preserving).
+- **Honest limitation, not glossed over:** traced `llm/mock.py`'s scenario handlers — `recovery`
+  always targets `"tpcds_ingest"`, `schema` always targets `"tpcds_daily_revenue"`,
+  `optimization` always targets `"streaming"`/`"default_pool"`. No combination of mock scenarios can
+  produce same-target contention between two different agent types, so this negotiation logic,
+  correct and unit-tested, is **not exercised by any current `MOCK_LLM=1` integration test** — it's
+  a safety net for the live-LLM reasoning path (where a real model could plausibly choose
+  overlapping targets that the deterministic mock never does), verified at the unit level with
+  hand-built proposals rather than fabricated into an integration scenario that doesn't reflect how
+  the mock actually behaves.
