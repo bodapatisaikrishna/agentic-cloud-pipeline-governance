@@ -142,6 +142,33 @@ class TestDecisionSemantics:
         assert "escalated_to_human" in out.outcome
 
 
+class TestInvalidTarget:
+    """D-082: a live model can echo the experiment_run id as target instead of a real
+    dag/dataset/pool. Caught before any real infra call, not after a doomed Airflow round-trip."""
+
+    def test_target_equal_to_experiment_run_escalates_without_network_call(self, fake_db):
+        client = MagicMock()
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(executor, "_airflow_client", lambda: client)
+            out = executor.execute(_action("recovery", "replay", target="run-1"), ALLOW, "run-1")
+        assert not out.executed
+        assert "invalid_target" in out.outcome
+        client.__enter__.assert_not_called()  # never even opened an Airflow connection
+
+    def test_real_target_unaffected(self, fake_db, monkeypatch):
+        monkeypatch.setattr(executor, "_trigger_dag", lambda dag: "run_123")
+        out = executor.execute(_action("recovery", "replay", target="tpcds_ingest"), ALLOW, "run-1")
+        assert out.executed
+        assert "run_123" in out.outcome
+
+    def test_auto_actions_exempt_even_if_target_equals_experiment_run(self, fake_db):
+        # raise_anomaly/no_action/allow_compatible never touch a real target; the guard would be
+        # a false positive here since these never call out to real infra either way.
+        out = executor.execute(_action("monitoring", "no_action", target="run-1"), ALLOW, "run-1")
+        assert out.executed
+        assert "invalid_target" not in out.outcome
+
+
 class TestInfraDegrade:
     """Airflow unreachable: bounded retry, then degrade to escalate instead of crashing (D-052)."""
 

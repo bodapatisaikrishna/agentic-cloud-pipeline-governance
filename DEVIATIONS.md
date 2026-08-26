@@ -957,3 +957,38 @@ appearing consistently across every agent config that hit this scenario, not jus
 real actions, no crashes — not decision *quality*. That's what the full `paper` profile (480 runs,
 ~28-30h live, real ongoing cost) would speak to; deliberately not run yet. This quick pass was
 the risk-reducing step before committing to that cost/duration, per plan.
+
+## D-082 — Recovery agent's live-model target hallucination: real infra guard + prompt fix
+
+**What was found**, digging into D-081's live-quick results: `decision_correct` for `full` dropped
+from 100% (mock) to 66.7% (live). Traced via `telemetry.agent_actions` and the executor's own
+logs: 13 of 28 (46%) real `recovery`-agent proposals set `target` to the run's own `experiment_run`
+scaffolding id (e.g. `full__ingress_burst__r0`) instead of a real dag/dataset — the model echoed a
+field it saw elsewhere in the `TelemetrySnapshot` JSON rather than reasoning to a real target,
+apparently when `task_runs` was too sparse (early in a fault) to give it one. The executor correctly
+tried the real Airflow call, got `404 NOT FOUND` on `/dags/{garbage}/dagRuns`, retried per the
+bounded-retry policy (pointless for a 404, which is permanent, not transient), then degraded to
+`escalate_to_human` — the system never crashed or acted on the bad target, but it wasted a live API
+round-trip + retries every time, and it's a real reasoning gap the mock could never surface.
+
+**Fix, two layers (defense in depth, matching this project's existing pattern of never trusting the
+model alone):**
+- **Prompt** (`llm/prompts/recovery.md`): added an explicit rule — if `task_runs` is empty or no
+  real dag_id/dataset is visible, output `escalate_to_human`/`target: none`, and never reuse an id
+  from elsewhere in the input. Soft signal; models don't reliably follow prose instructions.
+- **Deterministic guard** (`policy/executor.py::apply_action`): before dispatching to any
+  infra-touching handler, reject `target == experiment_run` outright — logs `invalid_target`,
+  returns `executed=False` immediately, skips the doomed live call. `AUTO_ACTIONS`
+  (`no_action`/`raise_anomaly`/`allow_compatible`) are exempt since they never touch a real target.
+  This is the layer that actually matters: it holds regardless of whether the model follows the
+  prompt fix, closing a semantic gap pydantic's structural `ProposedAction` validation can't catch
+  (a non-empty string is still a valid string even when it's the wrong one).
+
+**Verified the fix actually fixes something:** `TestInvalidTarget::test_target_equal_to_...` was
+run against the guard temporarily disabled (`if False and ...`) — it failed exactly as expected,
+the mocked Airflow client's `_trigger_dag` fired and "succeeded," reproducing the real bug's shape
+in miniature; restored, re-confirmed 18/18 `test_executor.py` green, then full `make lint &&
+make test-unit` (392/392). Note this does **not** raise `decision_correct` for a run where the
+model genuinely had nothing to recover with — correctly escalating with no target *is* correct
+behavior, it just doesn't count as a successful recovery under the paper's scoring, which is honest
+rather than something to paper over.

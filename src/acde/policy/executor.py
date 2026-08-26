@@ -217,7 +217,30 @@ def apply_action(action: ProposedAction, experiment_run: str) -> ExecutionOutcom
     On a bounded-retry-exhausted infra error, returns ``executed=False`` with an
     ``execution_failed`` outcome (caller decides whether to escalate). Reused by :func:`execute`
     and the approval workflow (`acde.human.approvals`).
+
+    ``target`` is LLM-proposed and pydantic only checks it's a non-empty string (D-081): a live
+    model can echo back the ``experiment_run`` scaffolding id instead of a real dag/dataset/pool
+    name when telemetry gives it nothing concrete to reason about. Caught here, before any real
+    infra call, rather than let it reach Airflow and 404.
     """
+    if action.action_type not in AUTO_ACTIONS and action.target == experiment_run:
+        log.warning(
+            "invalid_target",
+            extra={
+                "action_id": str(action.action_id),
+                "agent": action.agent,
+                "action_type": action.action_type,
+                "target": action.target,
+                "experiment_run": experiment_run,
+            },
+        )
+        return ExecutionOutcome(
+            executed=False,
+            outcome=(
+                f"invalid_target: '{action.target}' is the experiment_run id, not a real "
+                "dag/dataset/pool"
+            ),
+        )
     handler = _HANDLERS.get(action.action_type, _noop)
     try:
         return ExecutionOutcome(executed=True, outcome=handler(action, experiment_run))

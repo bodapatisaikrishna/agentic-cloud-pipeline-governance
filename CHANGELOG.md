@@ -5,6 +5,15 @@ per phase, `v1.0.0` at Phase 9.
 
 ## [Unreleased]
 
+### Fixed
+- **Recovery agent target hallucination (D-082)**: found by inspecting D-081's live results —
+  `decision_correct` for `full` dropped from 100% (mock) to 66.7% (live), traced to the recovery
+  agent echoing the `experiment_run` id as `target` instead of a real dag/dataset in 46% of live
+  proposals (task_runs too sparse to reason to a real one). Fixed with a deterministic guard in
+  `policy/executor.py::apply_action` that rejects `target == experiment_run` before any real infra
+  call, plus an explicit prompt rule in `recovery.md`. Verified via mutation test (guard disabled →
+  test fails exactly as the real bug reproduced; restored → 392/392 green).
+
 ### Added
 - **First full live-LLM validation pass (D-081)**: quick profile (96 runs, all 8 configs x 4
   scenarios x N=3) run against the real NVIDIA endpoint end-to-end. 96/96 `status: ok`, zero errors.

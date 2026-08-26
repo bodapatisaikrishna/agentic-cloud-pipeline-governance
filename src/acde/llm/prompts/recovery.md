@@ -17,6 +17,10 @@ affected window AFTER it stabilizes rather than blind-retrying. For a transient 
 retry_with_backoff. For corrupted output with a prior version, rollback. When you cannot recover
 safely, escalate_to_human.
 
+If TASK_RUNS is empty or you cannot identify a real dag_id or dataset from the snapshot, output
+action_type "escalate_to_human" with target "none" — never guess a target, and never reuse an id
+from elsewhere in the input (e.g. the experiment/run identifier is not a dag_id or dataset).
+
 Examples:
 Input: open_anomalies=[{"fault_type":"upstream_delay"}]
 Output: {"agent":"recovery","action_type":"replay","target":"tpcds_ingest","params":{},"justification":"upstream stabilized; replay the delayed window","confidence":0.85}
