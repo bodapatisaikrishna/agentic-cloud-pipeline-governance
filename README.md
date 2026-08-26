@@ -37,6 +37,7 @@ ACDE is both:
     [Analysis & report](#analysis--report) · [Chaos harness](#chaos-harness)
 - [Fault tolerance](#fault-tolerance)
 - [Beyond the paper](#beyond-the-paper-v13)
+- [LLM providers & live validation](#llm-providers--live-validation)
 - [Repository map](#repository-map)
 - [Phase status](#phase-status)
 - [Reproduction](#reproduction)
@@ -237,16 +238,10 @@ EXPERIMENT_RUN=demo make agents    # one cycle of all four agents (MOCK_LLM=1)
 # → schema agent quarantines the drifted partition; unaffected pipelines continue
 ```
 
-`MOCK_LLM=1` (the default) serves deterministic proposals with zero API calls. The live path is
-built but opt-in: `EXPERIMENT_RUN=smoke make agents-live-smoke` makes one real call, routed
-monitoring→fast model / others→reasoning model, bounded by the 60-call / 150k-token per-run caps.
-The live provider is chosen by `LLM_PROVIDER`: **`anthropic`** (default, needs `ANTHROPIC_API_KEY`,
-Sonnet/Haiku), **`gemini`** (needs `GEMINI_API_KEY`, `gemini-2.5-pro`/`gemini-2.5-flash`,
-overridable via `GEMINI_MODEL_*`), or **`openai_compatible`** (NVIDIA NIM / Groq / OpenRouter / z.ai
-via `OAI_BASE_URL` + `OAI_API_KEY` + `OAI_MODEL_*`; defaults to NVIDIA NIM's `z-ai/glm-5.2`). The
-`openai_compatible` provider uses a larger `OAI_MAX_TOKENS_PER_CALL` so "thinking" models can reach
-the JSON. All providers run at temperature 0 and degrade to `no_action` on failure; `MOCK_LLM=1`
-remains the default everywhere including CI.
+`MOCK_LLM=1` (the default) serves deterministic proposals with zero API calls. Provider config,
+model tiers, budget caps, and the first live-validation results (including a real reasoning gap
+found and fixed) are covered in full in
+[LLM providers & live validation](#llm-providers--live-validation).
 
 ### Orchestrator (control loop)
 
@@ -329,6 +324,69 @@ cost_units = compute_unit_seconds × 0.05 + storage_gb_hours × 0.01     # measu
 Static configs hold a fixed over-provisioned allocation; configs that dynamically right-size
 (`autoscale`, `optimization_only`, `full`) pay less — this is what makes the paper's cost-reduction
 claim testable rather than structurally impossible to reproduce.
+
+## LLM providers & live validation
+
+Every agent's reasoning step (`observe → detect → reason → propose`, never execute or emit code —
+see [Agents](#agents)) goes through `acde.llm.client.LLMClient`. `MOCK_LLM=1` is the default
+**everywhere, including CI** (`.env.example`, `make test-unit`, `make agents`, `make orchestrator`):
+deterministic canned proposals, zero API calls, so the whole pipeline — locking, OPA gates, retries,
+logging — is provable for free. The live path is real and opt-in, never accidental.
+
+### Providers and model tiers
+
+Set via `LLM_PROVIDER` in `.env`; every provider maps each agent to one of two tiers — **fast**
+(monitoring only, runs every tick) or **reasoning** (schema/optimization/recovery, run only when a
+fault is open) — via `LLMClient.model_for()` ([`llm/client.py`](src/acde/llm/client.py)):
+
+| Provider | Env var | Fast-tier default | Reasoning-tier default |
+|---|---|---|---|
+| `anthropic` (code default) | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` | `claude-sonnet-4-6` |
+| `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-pro` |
+| `openai_compatible` (NVIDIA NIM / Groq / OpenRouter / z.ai, via `OAI_BASE_URL`) | `OAI_API_KEY` | `nvidia/nemotron-3-nano-30b-a3b` | `z-ai/glm-5.2` |
+
+Every field is overridable per-model (`MODEL_FAST`, `OAI_MODEL_REASONING`, …) without a code change.
+All providers run at **temperature 0**, are budget-capped (`LLM_MAX_CALLS_PER_RUN=60`,
+`LLM_MAX_TOKENS_PER_RUN=150000`), cache identical proposals within a run, and degrade to `no_action`
+on any provider failure rather than raise — the loop never crashes on a bad or unavailable model.
+
+```bash
+make chaos-schema_drift            # inject a fault
+EXPERIMENT_RUN=demo make agents    # one cycle of all four agents, MOCK_LLM=1
+EXPERIMENT_RUN=smoke make agents-live-smoke   # one REAL call — needs a provider key; you run this
+```
+
+### First live-LLM validation (D-081, D-082)
+
+Once a live key is configured, the mocked path's assumptions get tested against a real model for
+the first time. Two things came out of the first pass (quick profile: 96 runs, all 8 configs × 4
+scenarios × N=3, real NVIDIA `nemotron-3-ultra-550b-a55b`/`nemotron-3-nano-30b-a3b` calls):
+
+- **The live path works end-to-end.** 96/96 runs `status: ok`, zero crashes, real calls through the
+  full observe → reason → OPA gate → act pipeline. `resource_contention`'s ~10× wall-time jump is
+  the scenario's own CPU stressor (D-026) contending with the host running everything, not an
+  LLM issue — confirmed identical across every agent config that hit it.
+- **Real reasoning is meaningfully weaker than the deterministic mock.** `decision_correct` for the
+  `full` config dropped from 100% (mock) to 66.7% (live):
+
+  | metric (full config) | mocked | live |
+  |---|---|---|
+  | decision_correct | 100% | 66.7% |
+  | MTTR | ~0.06s | 106s (still a ~76% cut vs. baseline's 450s) |
+
+  Root cause (D-082): the recovery agent echoed the run's own `experiment_run` scaffolding id as
+  `target` in 46% of live proposals — not a real dag/dataset — when `task_runs` telemetry was too
+  sparse to reason to one. The executor correctly hit a real `404` against Airflow and degraded to
+  `escalate_to_human` rather than crash, but it's a genuine live-reasoning gap no mock can surface.
+  **Fixed** two layers deep: an explicit prompt rule (`llm/prompts/recovery.md`) plus a
+  deterministic guard in `policy/executor.py::apply_action` that rejects
+  `target == experiment_run` *before* any real infra call — the guard is what actually matters,
+  since it holds regardless of whether the model follows the prompt.
+
+The mock isn't wrong to use as the default — it's what makes the pipeline free, fast, and
+deterministic for CI and the paper's statistical matrix — but it's optimistic by construction. Live
+validation is what proves the agents work against a model that can actually be imperfect. Full
+detail: `DEVIATIONS.md` D-077 through D-082.
 
 ## Repository map
 
