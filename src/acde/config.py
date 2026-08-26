@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     oai_base_url: str = "https://integrate.api.nvidia.com/v1"
     oai_api_key: str = ""
     oai_model_reasoning: str = "z-ai/glm-5.2"
-    oai_model_fast: str = "meta/llama-3.1-8b-instruct"
+    oai_model_fast: str = "nvidia/nemotron-3-nano-30b-a3b"
     oai_max_tokens_per_call: int = 8192
     mock_llm: bool = True  # default everywhere; live runs must opt out explicitly
     llm_max_calls_per_run: int = 60

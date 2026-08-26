@@ -30,6 +30,10 @@ per phase, `v1.0.0` at Phase 9.
   as expected, restored). Honestly scoped: no current `MOCK_LLM=1` scenario produces same-target
   contention between agent types, so this is a verified safety net for the live-LLM path, not
   something exercised by today's integration tests.
+- **Dead `OAI_MODEL_FAST` default (D-080)**: found on the first real `make agents-live-smoke` run —
+  NVIDIA retired `meta/llama-3.1-8b-instruct` the same day (HTTP 410 Gone). Replaced the default with
+  `nvidia/nemotron-3-nano-30b-a3b` in `config.py`, `.env.example`, and the hardcoded test assertion
+  that had baked in the dead string. Re-verified live: all 4 agents now get real `200 OK` responses.
 
 ## [2.2.0] — Dependency refresh + a real concurrency fix
 

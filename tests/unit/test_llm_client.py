@@ -77,7 +77,7 @@ class TestProviderRouting:
             lambda: Settings(_env_file=None, llm_provider="openai_compatible"),
         )
         client = LLMClient()
-        assert client.model_for("monitoring") == "meta/llama-3.1-8b-instruct"
+        assert client.model_for("monitoring") == "nvidia/nemotron-3-nano-30b-a3b"
         assert client.model_for("schema") == "z-ai/glm-5.2"
 
     def test_live_call_dispatches_to_openai_compatible(self, monkeypatch):

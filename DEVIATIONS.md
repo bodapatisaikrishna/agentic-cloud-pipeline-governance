@@ -908,3 +908,29 @@ auto-included in the final report.
   overlapping targets that the deterministic mock never does), verified at the unit level with
   hand-built proposals rather than fabricated into an integration scenario that doesn't reflect how
   the mock actually behaves.
+
+## D-080 — `OAI_MODEL_FAST` default was dead on NVIDIA's endpoint, found via first live-LLM smoke run
+
+**What happened:** first `make agents-live-smoke` run (`MOCK_LLM=0`, real NVIDIA NIM endpoint) since
+the API key was configured. 3 of 4 agents (schema/optimization/recovery, using
+`OAI_MODEL_REASONING=nvidia/nemotron-3-ultra-550b-a55b`) got real `200 OK` responses. The monitoring
+agent, which uses `OAI_MODEL_FAST`, got `HTTP 410 Gone`: `meta/llama-3.1-8b-instruct` "has reached
+its end of life on 2026-08-26T09:00:00Z and is no longer available" — retired by NVIDIA the same day
+this was first exercised live. `llm.client` logged `llm_unavailable` and the agent fell back to
+`no_action` rather than crashing — the fail-safe path worked correctly; this was a config staleness
+bug, not a code bug.
+
+**Fix:** queried NVIDIA's live `/v1/models` endpoint for available fast-tier models, picked
+`nvidia/nemotron-3-nano-30b-a3b` — same family/naming convention as the reasoning model already in
+use (`nemotron-3-ultra-550b-a55b`: ultra vs. nano tier), rather than an unrelated provider's model.
+Updated the tracked default (`config.py`'s `oai_model_fast`), `.env.example`, and the local `.env`
+override to match; fixed `test_llm_client.py::test_openai_compatible_uses_oai_models`, which had
+hardcoded the dead model string as an assertion. Re-ran the smoke test: all 4 agents now get real
+`200 OK` responses. Full `make lint && make test-unit` green (389/389) after the fix.
+
+**Why this matters beyond the one string:** this is the first evidence that `MOCK_LLM=1` being the
+default everywhere (by design, for deterministic zero-cost CI) means model-catalog staleness is
+invisible until someone runs live — there is no test that catches a provider retiring a model out
+from under a hardcoded default. Not fixing that gap now (would need a scheduled live liveness check
+against real provider catalogs, itself a live-API cost and complexity tradeoff); noting it here as
+the honest limitation rather than silently patching the one string and moving on.
