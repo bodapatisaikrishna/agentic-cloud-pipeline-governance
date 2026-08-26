@@ -12,6 +12,11 @@ RUN uv sync --no-dev --frozen --no-editable
 
 FROM python:3.11-slim AS runtime
 
+# The base image's OS packages (openssl, etc.) lag behind fixed CVEs the same way the Python-level
+# ones did (D-075's tension is a Python-packaging issue; this is the OS layer) -- apt upgrade rather
+# than pinning a single package by name, since the next CVE will be in a different package next time.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # The app runs entirely out of the self-contained venv copied in below (built by uv) -- system
 # Python's pip/setuptools/wheel are never used at runtime. They're also a recurring source of stale
 # CVEs (e.g. pip vendors its own pinned msgpack that lags behind fixed versions, and the base image's
