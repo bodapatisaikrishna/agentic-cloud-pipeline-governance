@@ -48,8 +48,9 @@ Maps each section/claim of arXiv:2512.23737 *"Governing Cloud Data Pipelines wit
 
 ## Paper future-work → ACDE status
 
-- Multi-agent coordination (§X) — advisory-lock coordination exists (`orchestrator/loop.py`); an
-  explicit negotiation protocol is **scoped future work** (E1).
+- Multi-agent coordination (§X) — explicit negotiation protocol **implemented** (D-079):
+  same-target proposals resolve by static agent-priority bid (`orchestrator/loop.py`), replacing
+  the earlier advisory-lock-order claim (D-038) that turned out not to hold in practice.
 - Policy learning (§X) — bounded adaptation mechanism implemented (D-064); full longitudinal
   evaluation is **future work** (E3).
 - Multi-cloud, formal verification (§X) — **out of scope** (cited as further work).
