@@ -1,4 +1,4 @@
-# ACDE — Agentic Cloud Data Engineering
+# ACDE: Agentic Cloud Data Engineering
 
 **Policy-bounded agentic governance for cloud data pipelines.**
 
@@ -49,20 +49,20 @@ ACDE is both:
 
 Most tools in this space pick one of two extremes: **observability platforms detect** problems and
 stop there, or **generic AIOps automation acts** on infrastructure with no policy boundary and no
-audit trail. ACDE is neither — it's a **governed control plane**:
+audit trail. ACDE is neither; it's a **governed control plane**:
 
 | | Observability tools | Opaque AIOps | **ACDE** |
 |---|---|---|---|
 | Detects anomalies | ✅ | ✅ | ✅ |
 | Proposes a fix | ❌ | ✅ | ✅ |
-| Every action validated by declarative policy first | — | ❌ | ✅ (OPA, fail-safe) |
-| Graduated autonomy (shadow → approval → autonomous) | — | ❌ | ✅ |
+| Every action validated by declarative policy first | n/a | ❌ | ✅ (OPA, fail-safe) |
+| Graduated autonomy (shadow → approval → autonomous) | n/a | ❌ | ✅ |
 | Full audit trail of proposal + verdict + outcome | partial | rarely | ✅ |
-| Attaches to *your* orchestrator, not a bundled one | — | varies | ✅ (connector boundary) |
-| Adversarially tested containment | — | — | ✅ measured **1.0** |
+| Attaches to *your* orchestrator, not a bundled one | n/a | varies | ✅ (connector boundary) |
+| Adversarially tested containment | n/a | n/a | ✅ measured **1.0** |
 | Rehearsal on your own pipelines with an ROI report | ❌ | ❌ | ✅ `acde gameday` / `acde report` |
 
-Every claim above is backed by code in this repo, not marketing copy — see
+Every claim above is backed by code in this repo, not marketing copy; see
 [Beyond the paper](#beyond-the-paper-v13) and [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Production quickstart (deploy against your own Airflow)
@@ -76,7 +76,7 @@ docker compose -f deploy/docker-compose.prod.yml up -d --build
 acde doctor                      # validate the deployment; then `acde run` (shadow by default)
 ```
 
-ACDE ships **shadow-mode by default** in production — it logs what it would do and never touches
+ACDE ships **shadow-mode by default** in production: it logs what it would do and never touches
 your pipeline until you graduate it. See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) (deploy, trust
 ladder, kill switch), [`docs/CONNECTING.md`](docs/CONNECTING.md) (Airflow setup),
 [`docs/POLICY_AUTHORING.md`](docs/POLICY_AUTHORING.md) (Rego policies), and
@@ -123,7 +123,7 @@ stream + workers]
     EXE[executor
 side effects · retry · escalate]
   end
-  subgraph trust [Trust core — v2]
+  subgraph trust [Trust core - v2]
     MODE[execution mode
 shadow · approval · autonomous]
     APR[approval queue]
@@ -152,7 +152,7 @@ stats · figures · report] --> MD[results/results.md]
 
 Agents only ever emit a pydantic `ProposedAction`; the OPA gate decides; the executor is the sole
 component with side effects, and in production it routes through the execution mode (shadow queues
-nothing, approval queues for a human, autonomous executes) before ever reaching a real system — see
+nothing, approval queues for a human, autonomous executes) before ever reaching a real system; see
 [Fault tolerance](#fault-tolerance). Everything durable lives in Postgres, so the loop is stateless
 and resumable.
 
@@ -214,8 +214,8 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
 - Four Rego policies (`infra/opa/policies/`): `cost_budget`, `recovery_approval`,
   `schema_compat`, `rate_limit`, aggregated by `main.rego`. Run their tests with `make opa-test`
   (20 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
-- The gate **fails safe** — if OPA is unreachable it escalates rather than allowing.
-- The executor **retries then escalates** — an Airflow-REST side effect that fails is retried with
+- The gate **fails safe**: if OPA is unreachable it escalates rather than allowing.
+- The executor **retries then escalates**: an Airflow-REST side effect that fails is retried with
   bounded backoff and, if it still fails, degrades to a human escalation (see [Fault tolerance](#fault-tolerance)).
 - In production, an *allowed* action still passes through the **execution mode** (`acde_mode`):
   `shadow` logs it, `approval` queues it for a human (`acde approvals approve <id>`), `autonomous`
@@ -229,7 +229,7 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
 Four bounded agents (`acde.agents`) run **observe → detect → reason → propose → gate →
 execute**, logging every action to `telemetry.agent_actions`. Detection is statistical
 (z-score + thresholds); the LLM only triages/proposes a `ProposedAction` (never executes or
-emits code). Monitoring stamps `detected_ts`, recovery stamps `resolved_ts` — so MTTR is
+emits code). Monitoring stamps `detected_ts`, recovery stamps `resolved_ts`, so MTTR is
 `resolved_ts − detected_ts`.
 
 ```bash
@@ -258,7 +258,7 @@ CONFIG=full DURATION=1200 EXPERIMENT_RUN=soak make soak            # inject 2 fa
 ```
 
 The loop keeps no durable state (everything is in Postgres), so **killing and restarting it resumes
-cleanly** — the same property that makes the resumable experiment runner and the production
+cleanly**, the same property that makes the resumable experiment runner and the production
 `acde pause`/`acde resume` kill switch possible.
 
 ### Experiments
@@ -269,15 +269,15 @@ metrics into `results/raw.csv` (one row per metric) with a `results/manifest.jso
 
 ```bash
 make experiment-smoke   # 2 runs (the automated gate)
-make experiment-quick   # 96 runs — 8 configs × 4 scenarios × N=3 (~45–90 min on Docker Compose)
-make experiment-paper   # 480 runs — 4 baselines × N=20 + 4 ablations × N=10 (launch overnight)
+make experiment-quick   # 96 runs, 8 configs x 4 scenarios x N=3 (~45-90 min on Docker Compose)
+make experiment-paper   # 480 runs, 4 baselines x N=20 + 4 ablations x N=10 (launch overnight)
 ```
 
 Every run is keyed by `experiment_run = "{config}__{scenario}__r{replicate}"` and isolated; the
 runner **skips runs already in the manifest**, so a killed matrix resumes where it left off. The
 seed policy `sha256("{config}:{scenario}:{replicate}") % 2³²` gives each cell reproducible fault
 conditions. On the full 96-run matrix: **MTTR ↓100%, manual interventions ↓100%, cost ↓57.3%**
-(`full` vs `baseline`, all significant) — see [`REPORT.md`](REPORT.md) for the full breakdown.
+(`full` vs `baseline`, all significant); see [`REPORT.md`](REPORT.md) for the full breakdown.
 
 ### Analysis & report
 
@@ -290,7 +290,7 @@ make report    # analyze + figures + results/results.md
 **baseline-vs-full Wilcoxon** test with **Holm–Bonferroni** correction and **Cliff's delta** effect
 size. `figures.py` renders MTTR/cost/interventions bars with CI error bars, an MTTR CDF, and the
 **ablation heatmap** (config × metric % vs baseline) to `results/figures/`. `report.py` writes
-`results/results.md` — per-metric tables, embedded figures, a comparison of our full-vs-baseline
+`results/results.md`: per-metric tables, embedded figures, a comparison of our full-vs-baseline
 reductions to the paper's **45% / 25% / 70%** claims, and an appended `DEVIATIONS.md`.
 
 ### Chaos harness
@@ -306,7 +306,7 @@ make chaos-ingress_burst       # ×5–10 rate surge to the stream
 python -m acde.chaos.injector --scenario ingress_burst --seed 42 --plan-only
 ```
 
-The fault plan is a **pure seeded function** — the same seed always yields the same plan
+The fault plan is a **pure seeded function**: the same seed always yields the same plan
 (`run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`), so the experiment runner can
 replay identical fault conditions across configs, and `acde gameday` can rehearse a specific
 scenario against a customer's staging environment. `make seed` restores the source CSV after a
@@ -322,22 +322,22 @@ cost_units = compute_unit_seconds × 0.05 + storage_gb_hours × 0.01     # measu
 ```
 
 Static configs hold a fixed over-provisioned allocation; configs that dynamically right-size
-(`autoscale`, `optimization_only`, `full`) pay less — this is what makes the paper's cost-reduction
+(`autoscale`, `optimization_only`, `full`) pay less; this is what makes the paper's cost-reduction
 claim testable rather than structurally impossible to reproduce.
 
 ## LLM providers & live validation
 
-Every agent's reasoning step (`observe → detect → reason → propose`, never execute or emit code —
+Every agent's reasoning step (`observe → detect → reason → propose`, never execute or emit code;
 see [Agents](#agents)) goes through `acde.llm.client.LLMClient`. `MOCK_LLM=1` is the default
 **everywhere, including CI** (`.env.example`, `make test-unit`, `make agents`, `make orchestrator`):
-deterministic canned proposals, zero API calls, so the whole pipeline — locking, OPA gates, retries,
-logging — is provable for free. The live path is real and opt-in, never accidental.
+deterministic canned proposals, zero API calls, so the whole pipeline (locking, OPA gates, retries,
+logging) is provable for free. The live path is real and opt-in, never accidental.
 
 ### Providers and model tiers
 
-Set via `LLM_PROVIDER` in `.env`; every provider maps each agent to one of two tiers — **fast**
+Set via `LLM_PROVIDER` in `.env`; every provider maps each agent to one of two tiers: **fast**
 (monitoring only, runs every tick) or **reasoning** (schema/optimization/recovery, run only when a
-fault is open) — via `LLMClient.model_for()` ([`llm/client.py`](src/acde/llm/client.py)):
+fault is open), via `LLMClient.model_for()` ([`llm/client.py`](src/acde/llm/client.py)):
 
 | Provider | Env var | Fast-tier default | Reasoning-tier default |
 |---|---|---|---|
@@ -348,12 +348,12 @@ fault is open) — via `LLMClient.model_for()` ([`llm/client.py`](src/acde/llm/c
 Every field is overridable per-model (`MODEL_FAST`, `OAI_MODEL_REASONING`, …) without a code change.
 All providers run at **temperature 0**, are budget-capped (`LLM_MAX_CALLS_PER_RUN=60`,
 `LLM_MAX_TOKENS_PER_RUN=150000`), cache identical proposals within a run, and degrade to `no_action`
-on any provider failure rather than raise — the loop never crashes on a bad or unavailable model.
+on any provider failure rather than raise; the loop never crashes on a bad or unavailable model.
 
 ```bash
 make chaos-schema_drift            # inject a fault
 EXPERIMENT_RUN=demo make agents    # one cycle of all four agents, MOCK_LLM=1
-EXPERIMENT_RUN=smoke make agents-live-smoke   # one REAL call — needs a provider key; you run this
+EXPERIMENT_RUN=smoke make agents-live-smoke   # one REAL call, needs a provider key; you run this
 ```
 
 ### First live-LLM validation (D-081, D-082)
@@ -365,7 +365,7 @@ scenarios × N=3, real NVIDIA `nemotron-3-ultra-550b-a55b`/`nemotron-3-nano-30b-
 - **The live path works end-to-end.** 96/96 runs `status: ok`, zero crashes, real calls through the
   full observe → reason → OPA gate → act pipeline. `resource_contention`'s ~10× wall-time jump is
   the scenario's own CPU stressor (D-026) contending with the host running everything, not an
-  LLM issue — confirmed identical across every agent config that hit it.
+  LLM issue; confirmed identical across every agent config that hit it.
 - **Real reasoning is meaningfully weaker than the deterministic mock.** `decision_correct` for the
   `full` config dropped from 100% (mock) to 66.7% (live):
 
@@ -375,41 +375,41 @@ scenarios × N=3, real NVIDIA `nemotron-3-ultra-550b-a55b`/`nemotron-3-nano-30b-
   | MTTR | ~0.06s | 106s (still a ~76% cut vs. baseline's 450s) |
 
   Root cause (D-082): the recovery agent echoed the run's own `experiment_run` scaffolding id as
-  `target` in 46% of live proposals — not a real dag/dataset — when `task_runs` telemetry was too
+  `target` in 46% of live proposals (not a real dag/dataset) when `task_runs` telemetry was too
   sparse to reason to one. The executor correctly hit a real `404` against Airflow and degraded to
   `escalate_to_human` rather than crash, but it's a genuine live-reasoning gap no mock can surface.
   **Fixed** two layers deep: an explicit prompt rule (`llm/prompts/recovery.md`) plus a
   deterministic guard in `policy/executor.py::apply_action` that rejects
-  `target == experiment_run` *before* any real infra call — the guard is what actually matters,
+  `target == experiment_run` *before* any real infra call; the guard is what actually matters,
   since it holds regardless of whether the model follows the prompt.
 
-The mock isn't wrong to use as the default — it's what makes the pipeline free, fast, and
-deterministic for CI and the paper's statistical matrix — but it's optimistic by construction. Live
+The mock isn't wrong to use as the default; it's what makes the pipeline free, fast, and
+deterministic for CI and the paper's statistical matrix, but it's optimistic by construction. Live
 validation is what proves the agents work against a model that can actually be imperfect. Full
 detail: `DEVIATIONS.md` D-077 through D-082.
 
 ## Repository map
 
-Key entry points — full tree in the project spec:
+Key entry points, full tree in the project spec:
 
 **Core (production):**
-- `src/acde/agents/`, `src/acde/policy/` — the four agents, the OPA gate, the executor
-- `src/acde/connectors/` — attach to your orchestrator (`airflow`, `noop`); `src/acde/ops/health.py` — `acde doctor`
-- `src/acde/human/approvals.py` — the approval workflow; `src/acde/orchestrator/control.py` — kill switch + blast radius
-- `src/acde/server/` — the operator API (FastAPI); `src/acde/cli.py` — the `acde` CLI
-- `src/acde/contracts/` — pydantic contracts: `ProposedAction`, `PolicyDecision`, …
-- `src/acde/config.py` — every knob, from env/`.env` only
-- `infra/postgres/init/` — idempotent DDL: `telemetry`, `warehouse`, `control` schemas
-- `infra/opa/policies/` — Rego policies
+- `src/acde/agents/`, `src/acde/policy/`: the four agents, the OPA gate, the executor
+- `src/acde/connectors/`: attach to your orchestrator (`airflow`, `noop`); `src/acde/ops/health.py`: `acde doctor`
+- `src/acde/human/approvals.py`: the approval workflow; `src/acde/orchestrator/control.py`: kill switch + blast radius
+- `src/acde/server/`: the operator API (FastAPI); `src/acde/cli.py`: the `acde` CLI
+- `src/acde/contracts/`: pydantic contracts: `ProposedAction`, `PolicyDecision`, …
+- `src/acde/config.py`: every knob, from env/`.env` only
+- `infra/postgres/init/`: idempotent DDL: `telemetry`, `warehouse`, `control` schemas
+- `infra/opa/policies/`: Rego policies
 
 **Research (`acde[research]` extra):**
-- `src/acde/experiments/`, `src/acde/analysis/`, `src/acde/chaos/` — the benchmark, stats, and fault injection
-- `src/acde/eval/` — adversarial safety eval + cross-LLM study
-- `src/acde/dataplane/` — the demo Airflow/Redpanda data plane used for reproduction
+- `src/acde/experiments/`, `src/acde/analysis/`, `src/acde/chaos/`: the benchmark, stats, and fault injection
+- `src/acde/eval/`: adversarial safety eval + cross-LLM study
+- `src/acde/dataplane/`: the demo Airflow/Redpanda data plane used for reproduction
 
 **Everywhere:**
 - `tests/unit` (no docker) · `tests/integration` (needs `make up`)
-- `DEVIATIONS.md` — every assumption vs. the paper · `DATA_LICENSES.md` — dataset provenance
+- `DEVIATIONS.md`: every assumption vs. the paper · `DATA_LICENSES.md`: dataset provenance
 
 ## Fault tolerance
 
@@ -423,7 +423,7 @@ Operational agents must survive a dependency outage, not crash. ACDE degrades on
 | **Postgres** transient blip | `acde.db` **retries** the statement (tenacity) and recovers | `db.py` |
 
 In every case the agent cycle completes and, where relevant, an approval or escalation record hands
-the incident to a human — the loop stays alive and resumable, and in production you can always hit
+the incident to a human; the loop stays alive and resumable, and in production you can always hit
 the [kill switch](docs/OPERATIONS.md#kill-switch--blast-radius) (`acde pause`).
 
 ## Beyond the paper (v1.3)
@@ -432,17 +432,17 @@ ACDE goes past a faithful replica into a rigorous benchmark that also tests clai
 without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) and
 [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) (section-by-section mapping).
 
-- **Credible baselines** — `rule_based` + `autoscale` alongside static+human, so the comparison is
+- **Credible baselines**: `rule_based` + `autoscale` alongside static+human, so the comparison is
   "agents vs cheap automation," not just "agents vs a slow human."
-- **Decision-quality metric** — `decision_correct`: did the agent pick the *right* mitigation, not
+- **Decision-quality metric**: `decision_correct`, did the agent pick the *right* mitigation, not
   just a fast one?
-- **Cost model v2** — credits avoided over-provisioning, making the paper's cost claim testable.
-- **Cross-LLM study** — `python -m acde.eval.cross_model` measures decision correctness/latency/tokens
+- **Cost model v2**: credits avoided over-provisioning, making the paper's cost claim testable.
+- **Cross-LLM study**: `python -m acde.eval.cross_model` measures decision correctness/latency/tokens
   across models, testing the paper's "model-agnostic" claim.
-- **Adversarial safety eval** — `python -m acde.eval.adversarial` injects unsafe proposals and measures
-  the OPA gate's containment rate — **1.0** against real OPA — the first stress-test of the paper's
+- **Adversarial safety eval**: `python -m acde.eval.adversarial` injects unsafe proposals and measures
+  the OPA gate's containment rate, **1.0** against real OPA, the first stress-test of the paper's
   core safety thesis.
-- **Bounded adaptation** — `agents/adaptation.py` concretizes the paper's §V adaptation claim, off by
+- **Bounded adaptation**: `agents/adaptation.py` concretizes the paper's §V adaptation claim, off by
   default for determinism.
 
 ## Phase status
@@ -454,7 +454,7 @@ without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) 
 | P1–P5 | Trust core, connectors, operator API/CLI, prod packaging, game-day + ROI (v2.0) | ✅ verified |
 | Tier 1 | Published Docker image, backfilled GitHub Releases, hardened CI (opa-test, docker-build+Trivy, pip-audit), OSS hygiene | ✅ verified |
 | Tier 2 | Multi-actor API auth, web dashboard, integration tests proven in CI, Prefect connector (v2.1.0) | ✅ verified |
-| Post-Tier 2 hardening | Concurrency fuzzing (D-077), OPA policy audit + coverage (D-078), real bid-based conflict resolution correcting D-038 (D-079), dead live-LLM model default found + fixed (D-080), first full live-LLM validation pass — 96/96 clean runs against the real NVIDIA endpoint (D-081) | ✅ verified (unreleased) |
+| Post-Tier 2 hardening | Concurrency fuzzing (D-077), OPA policy audit + coverage (D-078), real bid-based conflict resolution correcting D-038 (D-079), dead live-LLM model default found + fixed (D-080), first full live-LLM validation pass (96/96 clean runs against the real NVIDIA endpoint, D-081) | ✅ verified (unreleased) |
 
 ## Reproduction
 
