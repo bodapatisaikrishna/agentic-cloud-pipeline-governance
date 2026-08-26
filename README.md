@@ -11,7 +11,7 @@
 
 Four bounded AI agents (**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline
 telemetry, reason via an LLM, and **propose** operational actions. An **OPA policy gate validates
-every proposal before execution** — agents never touch a pipeline directly and never generate code.
+every proposal before execution**  agents never touch a pipeline directly and never generate code.
 Safety comes from the architecture, not the model.
 
 ACDE is both:
