@@ -396,6 +396,7 @@ without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) 
 | P1–P5 | Trust core, connectors, operator API/CLI, prod packaging, game-day + ROI (v2.0) | ✅ verified |
 | Tier 1 | Published Docker image, backfilled GitHub Releases, hardened CI (opa-test, docker-build+Trivy, pip-audit), OSS hygiene | ✅ verified |
 | Tier 2 | Multi-actor API auth, web dashboard, integration tests proven in CI, Prefect connector (v2.1.0) | ✅ verified |
+| Post-Tier 2 hardening | Concurrency fuzzing (D-077), OPA policy audit + coverage (D-078), real bid-based conflict resolution correcting D-038 (D-079), dead live-LLM model default found + fixed (D-080), first full live-LLM validation pass — 96/96 clean runs against the real NVIDIA endpoint (D-081) | ✅ verified (unreleased) |
 
 ## Reproduction
 
