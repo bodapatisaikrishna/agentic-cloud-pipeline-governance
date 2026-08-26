@@ -752,3 +752,26 @@ auto-included in the final report.
 - **Kept from the original diagnosis pass:** the CI diagnostics step (dump
   `airflow-scheduler`/`airflow-webserver` logs on `integration` job failure) that made the original
   root-causing possible.
+
+## D-075 — `docker/airflow.Dockerfile` pinned to `uv.lock` instead of resolving live from PyPI
+
+- **What happened:** the Airflow image installed acde via a plain `pip install /opt/acde`, which
+  re-resolves every dependency fresh against whatever's newest on PyPI at build time — not pinned to
+  `uv.lock` the way `deploy/Dockerfile.server`'s build already is. This broke `integration` in CI:
+  once a new `uvicorn` release landed on PyPI, pip's resolver hit `ResolutionImpossible` inside that
+  specific install context and the whole stack failed to build.
+- **Fix:** added a `lock-export` build stage (`python:3.11-slim` + `uv`, same pattern the server image
+  already uses) that runs `uv export --frozen --format requirements-txt --no-emit-project` against the
+  committed `uv.lock`, then the Airflow stage installs from that pinned, hashed requirements file
+  before installing the acde package itself with `--no-deps`. This image now resolves to the exact
+  same dependency versions as every other build in the project, eliminating the "fresh PyPI release
+  breaks the build" failure class entirely rather than just patching this one instance of it.
+- **Known, pre-existing, non-blocking tension (not introduced by this fix):** pip prints soft
+  dependency-conflict warnings on install — several of Airflow's own bundled provider packages
+  (`apache-airflow-providers-google`, `-snowflake`, `msal`, `gcloud-aio-*`) declare narrower pins
+  (older `pandas`/`cryptography`/`packaging`) than what acde's own pinned versions install. These are
+  warnings, not errors; the install completes, `import acde.*` works, all 26 integration tests pass
+  against the built image, and `airflow dags list-import-errors` reports zero import errors. The
+  original unpinned Dockerfile would have hit this same tension once those provider packages'
+  constraints and acde's core deps drifted far enough apart regardless — pinning didn't create it,
+  it just surfaced it as a visible (non-fatal) warning instead of letting it fail silently later.
