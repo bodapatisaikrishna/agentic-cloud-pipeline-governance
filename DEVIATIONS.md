@@ -934,3 +934,26 @@ invisible until someone runs live — there is no test that catches a provider r
 from under a hardcoded default. Not fixing that gap now (would need a scheduled live liveness check
 against real provider catalogs, itself a live-API cost and complexity tradeoff); noting it here as
 the honest limitation rather than silently patching the one string and moving on.
+
+## D-081 — First full live-LLM validation pass (quick profile, all 8 configs x 4 scenarios x N=3)
+
+**What ran:** `MOCK_LLM=0`, real NVIDIA endpoint (`nemotron-3-ultra-550b-a55b` reasoning /
+`nemotron-3-nano-30b-a3b` fast, post D-080), `experiments.runner --profile quick`, isolated into
+`results/live-quick/` so it wouldn't collide with the existing mocked manifest (run IDs are
+`config__scenario__replicate`, independent of `experiment_run`, so a shared manifest would have
+silently skipped every run as "already done" — first attempt did exactly this, 0/96 ran, caught by
+checking the manifest before assuming the run itself was broken).
+
+**Result:** 96/96 runs, `status: ok`, zero errors. 60 of those (`monitor_only`/`recovery_only`/
+`optimization_only`/`schema_only`/`full`) made real Nemotron calls end-to-end through the full
+observe → reason → OPA gate → act pipeline. Per-scenario average wall time: `schema_drift` 23.8s,
+`upstream_delay` 20.9s, `ingress_burst` 24.9s, `resource_contention` 207.5s — the last is not a
+live-LLM regression; `resource_contention` runs a real in-process CPU stressor (`chaos/stressor.py`,
+D-026, `STRESS_USE_CONTAINER=0`) on the same host as the experiment runner and the real HTTPS/TLS
+calls to NVIDIA, so contention slows everything sharing that CPU. Confirmed by the same ~200s figure
+appearing consistently across every agent config that hit this scenario, not just one.
+
+**Scope, stated plainly:** this validates the live path *works* — real calls, real policy gates,
+real actions, no crashes — not decision *quality*. That's what the full `paper` profile (480 runs,
+~28-30h live, real ongoing cost) would speak to; deliberately not run yet. This quick pass was
+the risk-reducing step before committing to that cost/duration, per plan.

@@ -6,6 +6,12 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **First full live-LLM validation pass (D-081)**: quick profile (96 runs, all 8 configs x 4
+  scenarios x N=3) run against the real NVIDIA endpoint end-to-end. 96/96 `status: ok`, zero errors.
+  Confirmed the `resource_contention` scenario's ~10x wall-time increase is the scenario's own CPU
+  stressor (D-026), not a live-LLM issue. Validates the live path works; the full `paper` profile
+  (480 runs, ~28-30h, real ongoing cost) is deliberately not run yet — this was the risk-reducing
+  step first.
 - **Proactive concurrency fuzzing (D-077)**: `tests/integration/test_concurrency_fuzz.py` turns the
   disposable script that found D-074 into a permanent regression test — 20 real concurrent workers
   hammer `PartitionVersionManager.create_version` across shared targets. Verified both directions:
