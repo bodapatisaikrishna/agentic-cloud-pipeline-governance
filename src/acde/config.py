@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     tenant_id: str = "default"
     environment: str = "default"
 
+    # --- Retention (D-086): off by default, so upgrading never silently deletes data. The audit
+    # trail (agent_actions) is exempt on purpose -- it's the compliance record, not noise.
+    retention_days: int = 0
+
     # --- Postgres (telemetry / warehouse / control schemas) ---
     postgres_host: str = "localhost"
     postgres_port: int = 5433  # host-published port; 5433 avoids clashing with a local pg on 5432

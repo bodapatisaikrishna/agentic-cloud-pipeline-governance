@@ -1126,3 +1126,60 @@ events, 2812 cost_ledger rows, 1365 resource_usage rows, 105 manual intervention
 actions from the integration suite) — every existing and new row correctly `tenant_id='default',
 environment='default'`, confirmed via direct query, not assumed. Full unit (413) and integration
 (27) suites green.
+
+## D-086 — Hot-path indexes, retention, and a benchmark that reported an honest mixed result
+
+**Indexes lead with `experiment_run`, not `tenant_id`** — a deliberate refinement of the design
+doc's original wording. `tenant_id` is constant across every row in the single-tenant deployment
+that exists today (D-085), so it gives the query planner nothing to select on; `experiment_run` is
+what every one of these queries actually filters by. Migration 004 adds indexes matching the real
+predicates of the 3 hottest queries: `blast_radius_exceeded` (runs before every action),
+`_open_faults` (every control-loop tick), and `/audit`'s `ORDER BY ts DESC`.
+
+**Benchmark methodology** (`acde.analysis.bench_hot_paths`, checkpoints 10³/10⁴/10⁵ — not the
+design doc's 10⁶, judged impractical for this environment's Docker Postgres; noted as a scope
+reduction, not silently substituted): seeds synthetic rows tagged with a throwaway
+`experiment_run`, times the real queries, deletes everything it added. First run exposed a
+methodology bug in itself — an even 33/33/33 split across `policy_decision` values doesn't
+resemble reality; checked the real table (198 rows: 183 allowed, 11 escalated, 4 denied) and
+reweighted the synthetic seed to match (92/6/2) before trusting the results.
+
+**Measured, at 100k rows, honestly including what did NOT improve:**
+
+| Query | Before | After | 
+|---|---|---|
+| `blast_radius_exceeded` | 18.4ms | 6.9ms |
+| `_open_faults` | 7.7ms | 2.8–4.0ms |
+| `metrics_escalated_count` (6% selectivity) | n/a (no index existed) | 2.8ms, confirmed via `EXPLAIN` to use `agent_actions_policy_decision_idx` |
+| `metrics_executed_count` (**85%** selectivity in real data) | 10.3ms | 10.4–12.6ms — unchanged |
+| `metrics_proposals_total` (unfiltered) | 6.1ms | 5.0–11.3ms — noise, not a real regression (re-ran to confirm; an unfiltered aggregate cannot be helped by any index, by definition) |
+
+**A partial index was built, benchmarked, proven dead by `EXPLAIN`, and removed before ever being
+committed** — this is the finding worth stating plainly rather than burying: `executed=TRUE` is
+85% of real rows (not the 70% the first synthetic seed assumed), far too poor a selectivity for
+Postgres to ever choose an index scan over a sequential scan. `agent_actions_executed_true_idx`
+was added to migration 004, measured to provide zero benefit, confirmed via `EXPLAIN` that the
+planner ignores it unconditionally, and deleted from the migration (never pushed) rather than
+shipped as pure write overhead. Caught before commit specifically because the discipline this
+session has used throughout — verify against real data, not the assumption that indexing a
+boolean column always helps — was applied to a benchmark script too, not just application code.
+
+**No counter-cache table was built for the two unfiltered aggregates**, a deliberate decision, not
+an oversight: a hand-maintained counter (incremented on write, read at scrape time) is a real
+correctness liability — drift on a crash between the increment and the write it's supposed to
+track, double-counting on retry — for a metrics endpoint polled every 15–60s, not a hot request
+path. The measured cost (5–12ms at 100k rows) is acceptable at that poll interval. If real-world
+scale ever proves otherwise, a Postgres materialized view (refreshed on a schedule, no custom
+drift-prone code) is the documented next option — not a hand-rolled counter.
+
+**Retention** (`acde.telemetry.retention.purge`, `acde retention` CLI): off by default
+(`RETENTION_DAYS=0`), so upgrading never silently deletes anything. Prunes only the three tables
+the audit specifically measured as the volume driver — `resource_usage`, `pipeline_metrics`,
+`task_runs` — and never `agent_actions`, the audit trail, enforced by a dedicated table (never a
+config flag that could be misconfigured to include it). **Verified live, not just unit-tested**:
+seeded one synthetic row 400 days old into both `resource_usage` and `agent_actions`, ran
+`acde retention --days 30`, confirmed the `resource_usage` row was deleted and the `agent_actions`
+row survived untouched — the exemption is real, demonstrated against the live database, not an
+assumption resting on the code reading correctly.
+
+Full unit (418, +5 for retention) and integration (27) suites green.

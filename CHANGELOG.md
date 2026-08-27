@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Hot-path indexes, benchmarked, and opt-in retention (D-086)**: migration 004 indexes the real
+  predicates of the 3 hottest queries (`blast_radius_exceeded`, `_open_faults`, `/audit`'s
+  `ORDER BY ts`). Benchmarked before/after at 10³–10⁵ rows (`acde.analysis.bench_hot_paths`); one
+  proposed index (`executed=TRUE`, 85% selectivity in real data) was measured, proven dead via
+  `EXPLAIN`, and removed before ever being committed. New `acde retention` CLI (opt-in,
+  `RETENTION_DAYS=0` by default) purges `resource_usage`/`pipeline_metrics`/`task_runs`; the audit
+  trail (`agent_actions`) is never touched, verified live with a seeded old row.
 - **Tenant/environment schema boundary (D-085)**: `tenant_id`/`environment` columns (migration
   003, server-side config only, never client-supplied) on every scoped telemetry table. Schema-
   level groundwork for eventual multi-tenant hosting, deliberately not a SaaS control plane yet —

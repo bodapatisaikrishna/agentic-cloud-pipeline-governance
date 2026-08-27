@@ -42,6 +42,15 @@ def cmd_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_retention(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.telemetry.retention import purge
+
+    print(json.dumps(purge(args.days), indent=2))
+    return 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     from acde.ops.health import doctor
 
@@ -160,6 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
     mig = sub.add_parser("migrate", help="apply pending schema migrations")
     mig.add_argument("--status", action="store_true", help="report state without applying")
     mig.set_defaults(func=cmd_migrate)
+
+    ret = sub.add_parser("retention", help="delete telemetry older than RETENTION_DAYS (opt-in)")
+    ret.add_argument("--days", type=int, default=None, help="override RETENTION_DAYS")
+    ret.set_defaults(func=cmd_retention)
 
     sub.add_parser("status", help="current mode / pause / counts").set_defaults(func=cmd_status)
 
