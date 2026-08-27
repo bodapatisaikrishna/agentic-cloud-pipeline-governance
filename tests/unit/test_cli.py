@@ -35,6 +35,29 @@ def test_resume_calls_control(monkeypatch):
     assert called["p"] is False
 
 
+def test_loop_health_ok_when_recent(monkeypatch, capsys):
+    monkeypatch.setattr("acde.orchestrator.control.heartbeat_age_s", lambda: 5.0)
+    assert cli.main(["loop-health"]) == 0
+    assert "ok" in capsys.readouterr().out
+
+
+def test_loop_health_fails_when_stale(monkeypatch, capsys):
+    from acde.config import Settings
+
+    monkeypatch.setattr("acde.orchestrator.control.heartbeat_age_s", lambda: 999.0)
+    monkeypatch.setattr(
+        "acde.config.get_settings", lambda: Settings(_env_file=None, monitoring_interval_s=15.0)
+    )
+    assert cli.main(["loop-health"]) == 1
+    assert "stale" in capsys.readouterr().out
+
+
+def test_loop_health_fails_when_never_recorded(monkeypatch, capsys):
+    monkeypatch.setattr("acde.orchestrator.control.heartbeat_age_s", lambda: None)
+    assert cli.main(["loop-health"]) == 1
+    assert "no heartbeat" in capsys.readouterr().out
+
+
 def test_approvals_list(monkeypatch, capsys):
     monkeypatch.setattr(
         "acde.human.approvals.list_pending",

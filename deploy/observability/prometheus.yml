@@ -1,0 +1,19 @@
+# Scrape config for the acde-server /metrics endpoint (D-088). Requires the X-API-Key header --
+# /metrics is authenticated like every other operator endpoint (D-070/D-087) on purpose; a metrics
+# endpoint is a real information-disclosure surface (proposal counts, LLM spend), not a public one.
+# Replace ${ACDE_API_KEY} with the real key, or run `envsubst < prometheus.yml.template` in CI/CD.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: acde
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["acde-server:8099"]
+    http_headers:
+      X-API-Key:
+        values: ["${ACDE_API_KEY}"]

@@ -1,0 +1,32 @@
+# Optional overlay: real Prometheus + Grafana pre-wired to acde-server's /metrics, for operators
+# without their own observability stack (or to verify deploy/observability/'s assets locally).
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    environment:
+      ACDE_API_KEY: ${API_KEY:?set API_KEY (same value acde-server uses)}
+    entrypoint:
+      - sh
+      - -c
+      - "sed -i \"s/\\${ACDE_API_KEY}/$$ACDE_API_KEY/\" /etc/prometheus/prometheus.yml && exec /bin/prometheus --config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      acde-server: {condition: service_healthy}
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"   # local-only convenience; put auth back before exposing
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus

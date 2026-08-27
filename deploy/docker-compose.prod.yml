@@ -46,6 +46,40 @@ services:
     ports:
       - "127.0.0.1:8099:8099"   # bind localhost; put a TLS reverse proxy in front
     restart: unless-stopped
+    healthcheck:
+      # D-087's shallow /health, no auth needed; urllib avoids adding curl/wget to the slim image.
+      test: ["CMD", "python", "-c",
+             "import urllib.request as u; u.urlopen('http://localhost:8099/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # D-088: the actual governing process, not just the API in front of it -- previously the compose
+  # file ran only acde-server, and an operator started the loop manually with `acde run` in the
+  # foreground per docs/OPERATIONS.md. Now supervised like every other service here.
+  acde-loop:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    command: ["acde", "run", "--env", "prod"]
+    env_file:
+      - path: ../.env.prod
+        required: false
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      OPA_URL: http://opa:8181
+    depends_on:
+      postgres: {condition: service_healthy}
+      opa: {condition: service_healthy}
+    restart: unless-stopped
+    healthcheck:
+      # No HTTP port to curl -- acde loop-health reads the D-088 heartbeat directly from Postgres.
+      test: ["CMD", "acde", "loop-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s   # the loop's first tick needs a moment after container start
 
 volumes:
   acde_pgdata:

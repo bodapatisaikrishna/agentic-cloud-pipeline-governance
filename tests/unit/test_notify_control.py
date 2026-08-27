@@ -84,3 +84,34 @@ class TestControl:
         fake.fetch_one.return_value = {"n": 3}
         monkeypatch.setattr(control, "db", fake)
         assert control.blast_radius_exceeded("prod", "tgt") is True
+
+
+class TestHeartbeat:
+    """D-088: the loop-liveness signal `acde loop-health` reads."""
+
+    def test_record_heartbeat_upserts_desired_state(self, monkeypatch):
+        fake = MagicMock()
+        monkeypatch.setattr(control, "db", fake)
+        control.record_heartbeat("prod")
+        sql, params = fake.execute.call_args.args
+        assert "control.desired_state" in sql
+        assert params[0] == "acde.loop_heartbeat"
+        assert '"experiment_run": "prod"' in params[1]
+
+    def test_heartbeat_age_none_when_never_recorded(self, monkeypatch):
+        fake = MagicMock()
+        fake.fetch_one.return_value = None
+        monkeypatch.setattr(control, "db", fake)
+        assert control.heartbeat_age_s() is None
+
+    def test_heartbeat_age_reflects_elapsed_time(self, monkeypatch):
+        import datetime as dt
+
+        fake = MagicMock()
+        fake.fetch_one.return_value = {
+            "updated_ts": dt.datetime.now(dt.UTC) - dt.timedelta(seconds=30)
+        }
+        monkeypatch.setattr(control, "db", fake)
+        age = control.heartbeat_age_s()
+        assert age is not None
+        assert 29 <= age <= 31

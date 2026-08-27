@@ -12,9 +12,13 @@ curl -s localhost:8099/health                                   # shallow livene
 curl -s -H "X-API-Key: $API_KEY" localhost:8099/health/ready     # full doctor report (D-087)
 ```
 
-The prod profile runs **only** `acde-server` + OPA + Postgres. Your orchestrator (Airflow) stays
-external — ACDE attaches to it via a connector. Use a **managed Postgres** in real deployments and
-put a **TLS-terminating reverse proxy** in front of `acde-server` (the container binds localhost).
+The prod profile runs `acde-server` (the operator API), `acde-loop` (the control loop that actually
+governs pipelines — supervised and auto-restarting since D-088; previously this was a manual
+foreground `acde run` an operator had to remember to start), OPA, and Postgres. Your orchestrator
+(Airflow) stays external — ACDE attaches to it via a connector. Use a **managed Postgres** in real
+deployments and put a **TLS-terminating reverse proxy** in front of `acde-server` (the container
+binds localhost). Both `acde-server` and `acde-loop` have container healthchecks — `docker compose
+ps` shows `unhealthy` if either the API or the loop itself stops responding.
 
 > Do not run the stack on Docker Desktop for anything long-running — use a Linux VM or Kubernetes.
 > (During development we observed Docker Desktop crashing under sustained load; a self-healing wrapper
@@ -35,7 +39,8 @@ require sign-off. Side-effect-free acknowledgements always run.
 
 ```bash
 acde doctor                       # validate DB, OPA, connector, LLM, mode, notifications
-acde run --env prod               # start the control loop (shadow-safe if ACDE_MODE unset)
+# `acde run --env prod` is what the acde-loop container already runs, supervised (D-088) — run it
+# by hand only outside Docker Compose, e.g. bare-metal or your own process manager.
 acde status                       # mode / paused / pending approvals / action count
 acde approvals list               # pending human approvals
 acde approvals approve 42         # execute a queued action

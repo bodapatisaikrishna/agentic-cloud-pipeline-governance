@@ -51,6 +51,25 @@ def cmd_retention(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_loop_health(_: argparse.Namespace) -> int:
+    """Exit 0 if the control loop ticked recently, 1 otherwise (D-088). Exec-form healthcheck for
+    the ``acde-loop`` container -- it has no HTTP port, unlike ``acde serve``'s ``/health``."""
+    from acde.config import get_settings
+    from acde.orchestrator.control import heartbeat_age_s
+
+    age = heartbeat_age_s()
+    # 3x the tick interval tolerates one slow/retrying tick without flapping the healthcheck.
+    max_age = get_settings().monitoring_interval_s * 3
+    if age is None:
+        print("no heartbeat recorded yet")
+        return 1
+    if age > max_age:
+        print(f"heartbeat stale: last tick {age:.1f}s ago (max {max_age:.1f}s)")
+        return 1
+    print(f"ok: last tick {age:.1f}s ago")
+    return 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     from acde.ops.health import doctor
 
@@ -173,6 +192,10 @@ def build_parser() -> argparse.ArgumentParser:
     ret = sub.add_parser("retention", help="delete telemetry older than RETENTION_DAYS (opt-in)")
     ret.add_argument("--days", type=int, default=None, help="override RETENTION_DAYS")
     ret.set_defaults(func=cmd_retention)
+
+    sub.add_parser(
+        "loop-health", help="exit 0 if the control loop ticked recently (container healthcheck)"
+    ).set_defaults(func=cmd_loop_health)
 
     sub.add_parser("status", help="current mode / pause / counts").set_defaults(func=cmd_status)
 

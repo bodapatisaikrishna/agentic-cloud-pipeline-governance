@@ -1219,3 +1219,59 @@ against real Airflow basic auth) — not assumed from the type conversion being 
 consistent.
 
 Full unit (419) and integration (27) suites green.
+
+## D-088 — Supervised control loop + `deploy/observability/` built for real
+
+**The gap this closes**: `docker-compose.prod.yml` ran only `acde-server` (the API) + OPA +
+Postgres. The actual governing process — the control loop that watches pipelines and proposes/
+executes actions — was documented as something an operator runs manually in the foreground
+(`acde run --env prod`, `docs/OPERATIONS.md`). Nothing supervised it, restarted it on crash, or
+reported whether it was even still running. Separately, `docs/OPERATIONS.md` claimed *"a starter
+Grafana panel set + alerts live in `deploy/observability/`"* — that directory did not exist.
+
+**Heartbeat, the same durable pattern as the kill switch**: the loop writes
+`control.desired_state['acde.loop_heartbeat']` at the top of every `_tick()` — before the pause
+check, deliberately, since "alive but paused" is expected and healthy; only a clock that stops
+advancing is the alertable signal. `acde loop-health` (new CLI command) reads it and exits
+non-zero past `MONITORING_INTERVAL_S * 3`; wired as `acde-loop`'s container `HEALTHCHECK` (exec
+form — no HTTP port to curl, unlike `acde-server`). `docker-compose.prod.yml` gained the
+`acde-loop` service itself (same image, `command: ["acde", "run", "--env", "prod"]`,
+`restart: unless-stopped`) — the actual fix; `acde-server` also gained a healthcheck against
+D-087's now-cheap `/health`.
+
+**Two new Prometheus gauges**, both read cross-process (the API and the loop are separate
+containers; `control.desired_state` in shared Postgres is how one learns the other's state — same
+mechanism, different question): `acde_loop_last_tick_timestamp_seconds` and
+`acde_stale_executing_actions` (D-084's write-ahead rows stuck at `status='executing'` — the exact
+crash-mid-execution scenario that fix targets, now alertable, not just queryable).
+
+**`deploy/observability/` built for real, then proven, not just written**: `prometheus.yml`
+(scrape config, `X-API-Key` auth via Prometheus's `http_headers`, since `/metrics` is
+authenticated like every other operator endpoint on purpose — a metrics endpoint discloses real
+operational data, D-070/D-087), `alerts.yml` (4 rules, each keyed to a real measured metric — loop
+stalled, stale executing actions, approval backlog, denial spike), and a provisioned Grafana
+dashboard (`grafana/dashboards/acde-overview.json` + datasource/dashboard provisioning YAML).
+`docker-compose.observability.yml` is the optional overlay for operators without their own stack
+(or for the verification below).
+
+**End-to-end verification against real infrastructure, every claim proven, not assumed**:
+- Ran the real control loop for 5s (`MOCK_LLM=1`), confirmed `acde loop-health` reports `ok` on the
+  fresh heartbeat and `stale` on an old one — both directions, against the live database.
+- Stood up a real `prom/prometheus:v2.55.1` container against a locally-running `acde serve`:
+  confirmed the scrape target reached `health: up` (proving the `http_headers` X-API-Key auth
+  actually works, not just that the config parses), queried `acde_proposals_total` back through
+  Prometheus and got the real value (`198`, matching the database), confirmed all 4 alert rules
+  loaded with `health: ok`.
+- Let `ACDELoopStalled` actually reach **`firing`** state under a genuine stale heartbeat (the
+  loop hadn't ticked in 638s) — not just "pending", the full `for: 2m` duration elapsed for real.
+- Stood up a real `grafana/grafana:11.3.1` container, imported `acde-overview.json` via the API
+  (`status: success` — proves it's valid Grafana schema, not just valid JSON), then queried a
+  panel's data through Grafana's own datasource-proxy chain (Grafana → Prometheus → real ACDE
+  metric) and got back the real value — the full chain an actual dashboard load exercises.
+- All verification infrastructure (2 containers, 1 network, temp files, a scratch API key) torn
+  down afterward; nothing left running or modified beyond the intended source changes.
+
+This is the last item in the production-hardening sequence (`docs/specs/2026-08-27-production-
+hardening-design.md`): migrations (D-083) → write-ahead audit (D-084) → tenant boundary (D-085) →
+indexes/retention (D-086) → security hardening (D-087) → this. Full unit (428) and integration
+(27) suites green.

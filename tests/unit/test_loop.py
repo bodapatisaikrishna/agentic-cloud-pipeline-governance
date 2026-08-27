@@ -117,6 +117,7 @@ class TestTick:
         )
         monkeypatch.setattr(cl, "_open_faults", lambda: open_faults)
         monkeypatch.setattr(loop_mod.control, "is_paused", lambda: paused)
+        monkeypatch.setattr(loop_mod.control, "record_heartbeat", lambda run: None)
         return cl, calls
 
     def test_no_faults_only_monitoring(self, monkeypatch):
@@ -155,6 +156,15 @@ class TestTick:
         cl, calls = self._loop_recording(monkeypatch, open_faults=2, paused=True)
         asyncio.run(cl._tick())
         assert calls == []
+
+    def test_heartbeat_recorded_every_tick_even_when_paused(self, monkeypatch):
+        # D-088: "alive but paused" must still update the heartbeat -- it's the *stopped* clock
+        # that's the alertable signal, not the paused state itself.
+        cl, _ = self._loop_recording(monkeypatch, open_faults=0, paused=True)
+        recorded = []
+        monkeypatch.setattr(loop_mod.control, "record_heartbeat", lambda run: recorded.append(run))
+        asyncio.run(cl._tick())
+        assert recorded == ["t"]
 
 
 class TestResolveConflicts:

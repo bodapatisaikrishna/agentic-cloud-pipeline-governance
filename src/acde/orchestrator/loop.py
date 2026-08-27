@@ -155,6 +155,9 @@ class ControlLoop:
         return int(row["n"]) if row else 0
 
     async def _tick(self) -> None:
+        # D-088: recorded before the pause check -- "alive but paused" is expected and healthy;
+        # only a heartbeat that stops advancing (a hung or crashed process) is the alertable signal.
+        await asyncio.to_thread(control.record_heartbeat, self.experiment_run)
         if control.is_paused():  # global kill switch — take no actions until resumed
             log.info("loop_paused", extra={"experiment_run": self.experiment_run})
             return

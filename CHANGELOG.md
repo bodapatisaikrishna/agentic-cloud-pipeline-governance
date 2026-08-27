@@ -6,6 +6,17 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Supervised control loop + real `deploy/observability/` (D-088)**: `docker-compose.prod.yml`
+  gained the `acde-loop` service itself — the control loop was previously a manual foreground
+  command, now supervised (`restart: unless-stopped`) with its own healthcheck (`acde loop-health`,
+  reading a new per-tick heartbeat). Two new Prometheus gauges
+  (`acde_loop_last_tick_timestamp_seconds`, `acde_stale_executing_actions`). Built
+  `deploy/observability/` for real (scrape config, 4 alert rules, provisioned Grafana dashboard) —
+  docs previously claimed this directory existed; it didn't. Verified end-to-end against real
+  Prometheus/Grafana containers: real scrape with auth, an alert reaching actual `firing` state
+  under a genuine stale condition, and a dashboard panel query returning real data through the
+  full Grafana→Prometheus→ACDE chain. Last item in the production-hardening sequence
+  (D-083 through D-088).
 - **`/health` split + every credential as `SecretStr` (D-087)**: `/health` is now a shallow
   unauthenticated liveness check (`{"status": "ok"}`); the full `doctor()` report moved to the
   authenticated `/health/ready`. All 8 credential fields in `Settings` (postgres/airflow

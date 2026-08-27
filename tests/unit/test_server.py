@@ -18,6 +18,10 @@ def client(monkeypatch):
     monkeypatch.setattr(app_mod, "db", fake)
     monkeypatch.setattr(app_mod.metrics, "db", fake)
     monkeypatch.setattr("acde.human.approvals.db", fake)
+    # /metrics reads the loop heartbeat cross-process via orchestrator.control -- a separate `db`
+    # reference from metrics.py's own, and otherwise unmocked, would silently hit a real database
+    # if one happens to be running (tests/unit is meant to need neither docker nor network).
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -96,7 +100,27 @@ def test_metrics_prometheus_format(client):
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert "acde_proposals_total" in r.text
+    assert "acde_stale_executing_actions" in r.text
     assert r.headers["content-type"].startswith("text/plain")
+
+
+def test_metrics_omits_loop_heartbeat_gauge_when_never_recorded(client):
+    # the shared fake's fetch_one returns {"n": 0} for every query, including the heartbeat
+    # lookup -- no "updated_ts" key, so heartbeat_age_s() must degrade to None, not KeyError.
+    r = client.get("/metrics", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert "acde_loop_last_tick_timestamp_seconds" not in r.text
+
+
+def test_metrics_includes_loop_heartbeat_gauge_when_recorded(client, monkeypatch):
+    import datetime as dt
+
+    fake = MagicMock()
+    fake.fetch_one.return_value = {"updated_ts": dt.datetime.now(dt.UTC)}
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    r = client.get("/metrics", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert "acde_loop_last_tick_timestamp_seconds" in r.text
 
 
 def test_approvals_endpoints(client, monkeypatch):
@@ -130,6 +154,10 @@ def multi_actor_client(monkeypatch):
     monkeypatch.setattr(app_mod, "db", fake)
     monkeypatch.setattr(app_mod.metrics, "db", fake)
     monkeypatch.setattr("acde.human.approvals.db", fake)
+    # /metrics reads the loop heartbeat cross-process via orchestrator.control -- a separate `db`
+    # reference from metrics.py's own, and otherwise unmocked, would silently hit a real database
+    # if one happens to be running (tests/unit is meant to need neither docker nor network).
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     return TestClient(app_mod.create_app())
 
 
