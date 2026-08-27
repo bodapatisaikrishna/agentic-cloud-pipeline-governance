@@ -1,0 +1,64 @@
+{{- if not .Values.opa.existingConfigMap }}
+{{- fail "opa.existingConfigMap is required — kubectl create configmap opa-policies --from-file=infra/opa/policies, then set this to its name (see NOTES.txt)" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "acde.fullname" . }}-opa
+  labels:
+    {{- include "acde.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "acde.labels" . | nindent 6 }}
+      app.kubernetes.io/component: opa
+  template:
+    metadata:
+      labels:
+        {{- include "acde.labels" . | nindent 8 }}
+        app.kubernetes.io/component: opa
+    spec:
+      containers:
+        - name: opa
+          image: "{{ .Values.opa.image.repository }}:{{ .Values.opa.image.tag }}"
+          # --ignore '..*' skips the hidden directories Kubernetes' ConfigMap volume mount creates
+          # for its atomic-update symlink structure (`..2026_..._.../`, `..data`) -- without it OPA
+          # walks into them too and loads every .rego file twice, once via the top-level symlink and
+          # once via the hidden directory, producing "multiple default rules" for a single-default
+          # file. Verified: reproduces in a real kind cluster without this flag, gone with it.
+          args: ["run", "--server", "--addr", "0.0.0.0:8181", "--ignore", "..*", "/policies"]
+          ports:
+            - containerPort: 8181
+          volumeMounts:
+            - name: policies
+              mountPath: /policies
+              readOnly: true
+          readinessProbe:
+            httpGet: {path: /health, port: 8181}
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: {path: /health, port: 8181}
+            initialDelaySeconds: 5
+          resources:
+            {{- toYaml .Values.opa.resources | nindent 12 }}
+      volumes:
+        - name: policies
+          configMap:
+            name: {{ .Values.opa.existingConfigMap }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "acde.fullname" . }}-opa
+  labels:
+    {{- include "acde.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  selector:
+    {{- include "acde.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+  ports:
+    - port: 8181
+      targetPort: 8181

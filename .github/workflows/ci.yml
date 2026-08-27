@@ -50,6 +50,38 @@ jobs:
       - name: Rego policy test suite
         run: opa test infra/opa/policies -v
 
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v3.16.2"
+
+      - name: Lint the chart
+        run: helm lint deploy/helm/acde
+
+      - name: Render with representative values (catches template errors lint alone can miss)
+        run: |
+          helm template acde deploy/helm/acde \
+            --set postgres.host=postgres.example.svc.cluster.local \
+            --set postgres.password=ci-placeholder \
+            --set opa.existingConfigMap=opa-policies \
+            --set secrets.apiKey=ci-placeholder \
+            --set secrets.airflowPassword=ci-placeholder \
+            --set secrets.oaiApiKey=ci-placeholder \
+            > /dev/null
+
+      - name: The loop.replicaCount guard must actually refuse invalid input
+        run: |
+          if helm template acde deploy/helm/acde \
+            --set postgres.host=x --set postgres.password=x --set opa.existingConfigMap=x \
+            --set secrets.apiKey=x --set secrets.airflowPassword=x --set secrets.oaiApiKey=x \
+            --set loop.replicaCount=3 > /dev/null 2>&1; then
+            echo "loop.replicaCount=3 should have failed to render but didn't"; exit 1
+          fi
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

@@ -64,6 +64,26 @@ acde approvals reject 42 --note "change freeze"
 - **Notifications:** set `WEBHOOK_URL` to a Slack-compatible endpoint; ACDE pings on pending
   approvals, escalations, and execution failures (params redacted).
 
+## Kubernetes (horizontal scale, D-089)
+
+`deploy/helm/acde/` is the alternative to Docker Compose for multi-node deployments — `acde-server`
+scales horizontally (stateless; optional HPA), `acde-loop` is a hard-enforced singleton (the chart
+refuses to render if `loop.replicaCount` is set above 1). Requires an OPA policies ConfigMap and a
+real Postgres you provide (see `deploy/helm/acde/templates/NOTES.txt`, printed on install):
+
+```bash
+kubectl create configmap opa-policies --from-file=infra/opa/policies
+helm install acde deploy/helm/acde \
+  --set postgres.host=<your-postgres> \
+  --set postgres.existingSecret=<secret-with-postgres-password> \
+  --set opa.existingConfigMap=opa-policies \
+  --set secrets.existingSecret=<secret-with-api-key-etc>
+```
+
+A Kubernetes `livenessProbe` running `acde loop-health` gives `acde-loop` something plain Docker
+Compose's `HEALTHCHECK` cannot: an unhealthy pod actually gets killed and replaced, not just
+flagged unhealthy in `docker ps`.
+
 ## Upgrades & data
 
 Schema changes are additive/idempotent — `make migrate` (or restart, which re-applies init SQL) is

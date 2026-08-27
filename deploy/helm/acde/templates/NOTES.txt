@@ -1,0 +1,23 @@
+ACDE {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}".
+
+Before this chart will actually come up healthy, two things must exist first (helm cannot create
+them safely on your behalf — a real Postgres and real policies are not chart-managed state):
+
+1. OPA policies ConfigMap (required — the chart refuses to render without it):
+     kubectl create configmap opa-policies --from-file=infra/opa/policies -n {{ .Release.Namespace }}
+   then re-run with --set opa.existingConfigMap=opa-policies
+
+2. A real Postgres reachable at postgres.host — this chart never runs one itself (same
+   bring-your-own-database philosophy as deploy/docker-compose.prod.yml). Point it at a managed
+   instance (RDS, Cloud SQL, ...).
+
+Check status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=loop -f
+
+{{ include "acde.fullname" . }}-loop MUST stay at 1 replica (loop.replicaCount) — the chart refuses
+to template if you set it higher. See values.yaml for why.
+
+Once acde-server's pod is Ready:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "acde.fullname" . }}-server 8099:{{ .Values.server.service.port }}
+  curl localhost:8099/health

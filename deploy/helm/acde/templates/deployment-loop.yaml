@@ -1,0 +1,45 @@
+{{- if gt (int .Values.loop.replicaCount) 1 }}
+{{- fail "loop.replicaCount must stay 1 — the control loop is a singleton by design (see values.yaml's comment on this field); running multiple replicas multiplies LLM calls and duplicates governance work, it does not add capacity." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "acde.fullname" . }}-loop
+  labels:
+    {{- include "acde.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loop
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # never run two loop pods at once, even transiently during a rolling update
+  selector:
+    matchLabels:
+      {{- include "acde.labels" . | nindent 6 }}
+      app.kubernetes.io/component: loop
+  template:
+    metadata:
+      labels:
+        {{- include "acde.labels" . | nindent 8 }}
+        app.kubernetes.io/component: loop
+    spec:
+      containers:
+        - name: acde-loop
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # args, not command — see deployment-server.yaml's comment: must preserve
+          # docker-entrypoint.sh so migrations run before the loop starts.
+          args: ["acde", "run", "--config", {{ .Values.loop.config | quote }}, "--duration", {{ .Values.loop.durationSeconds | quote }}]
+          env:
+            {{- include "acde.commonEnv" . | nindent 12 }}
+          # D-088's heartbeat, exec'd directly — no HTTP port to probe, unlike acde-server. This is
+          # the auto-restart-on-hang that D-088 explicitly deferred to "the Kubernetes work": a
+          # failing exec livenessProbe makes Kubernetes kill and replace the pod, which plain
+          # docker-compose's HEALTHCHECK alone cannot do.
+          livenessProbe:
+            exec:
+              command: ["acde", "loop-health"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.loop.resources | nindent 12 }}

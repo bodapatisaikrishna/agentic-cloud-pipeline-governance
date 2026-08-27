@@ -1275,3 +1275,58 @@ This is the last item in the production-hardening sequence (`docs/specs/2026-08-
 hardening-design.md`): migrations (D-083) → write-ahead audit (D-084) → tenant boundary (D-085) →
 indexes/retention (D-086) → security hardening (D-087) → this. Full unit (428) and integration
 (27) suites green.
+
+## D-089 — Kubernetes/Helm chart, verified against a real cluster, two real bugs caught
+
+**Sub-project B**, deferred at the start of the production-hardening sequence: docker-compose is
+single-host; this is the horizontal-scaling / real-orchestrator story. `deploy/helm/acde/` — chart
+for `acde-server` (stateless per the README's own claim, replicas=2 default, optional HPA) and
+`acde-loop` (a **hard-enforced singleton**: the chart calls Helm's `fail` if
+`loop.replicaCount > 1`, not just a comment — running N independent loop processes would multiply
+LLM calls and duplicate governance work, not add capacity). OPA is bundled (lightweight, stateless,
+tightly coupled); Postgres is not (bring-your-own managed instance, same philosophy as
+`docker-compose.prod.yml` — this chart never runs a database).
+
+**Verified against a real `kind` cluster, not just `helm template`** — every claim below is from
+an actual deployed cluster, torn down afterward:
+
+- **Real bug #1**: both Deployments used `command:` to set the container's entrypoint arguments.
+  In Kubernetes, `command:` overrides the image's `ENTRYPOINT` entirely — since `docker-entrypoint.sh`
+  *is* the entrypoint (it runs `acde migrate` before exec'ing `acde serve`/`acde run`, D-083),
+  this would have **silently skipped migrations on every pod start**. Caught by building a
+  faithful stand-in image with the same `ENTRYPOINT`/`CMD` shape as the real one and observing the
+  entrypoint's log line never appeared. Fixed: `args:`, not `command:` — overrides `CMD` only,
+  entrypoint stays in effect. Real acde-server/acde-loop images could not be built locally to test
+  directly (see below); this was caught with the same rigor via a stand-in that reproduces the
+  exact ENTRYPOINT/CMD contract.
+- **Real bug #2**: OPA crashed with `rego_type_error: multiple default rules ... found` when its
+  policies came from a Kubernetes ConfigMap volume — but not from a plain directory bind mount of
+  the identical files (verified directly: ran `openpolicyagent/opa:0.68.0`, the exact tag
+  `docker-compose.prod.yml` pins, against the real `infra/opa/policies/` via `docker run -v`, and
+  it started clean). Root cause: a ConfigMap volume mount creates a hidden
+  `..<timestamp>/` directory holding the real files plus a `..data` symlink and per-key symlinks
+  at the top level; OPA's directory loader doesn't skip hidden directories by default, so it loads
+  every file twice — once via the top-level symlink, once by walking into the hidden directory —
+  and a file with one `default` rule becomes two. Fixed: `--ignore '..*'` on OPA's `run` args (a
+  real, documented OPA flag for exactly this). Verified live: crashed without the flag in the real
+  kind cluster, `Running 1/1` with it, using the identical ConfigMap.
+- Confirmed via `kubectl describe`/`logs`/`exec` inside the running pods: liveness/readiness
+  probes on `/health` (D-087's shallow endpoint) both passing, `POSTGRES_HOST`/`API_KEY`/etc.
+  correctly injected from the Secret (never inlined into the pod spec), `OPA_URL` resolving to the
+  real Kubernetes Service DNS name and a real pod-to-pod HTTP call succeeding across it, and the
+  entrypoint's log line appearing before the `acde` command in both `acde-server` and `acde-loop`
+  pod logs — proving bug #1's fix, not just asserting it.
+- The `loop.replicaCount` guard was exercised directly: `--set loop.replicaCount=3` refuses to
+  render at all (`helm template` exits non-zero with the exact reason), not merely documented.
+- New CI job (`helm-lint`): lints the chart, renders it with representative values, and asserts
+  the replica-count guard actually refuses invalid input — all three steps run locally first and
+  confirmed to match what CI will do.
+
+**Honest limitation**: the real `acde-server`/`acde-loop` production image could not be built in
+this environment — the same persistent local Docker Desktop TLS failure documented in D-083's
+entrypoint verification (now reproduced again, failing even on `pip install uv` itself, before
+touching any project code — confirmed environmental, not a regression, since `docker pull` of
+plain registry images works fine throughout). Verification used a purpose-built stand-in image
+with the identical `ENTRYPOINT`/`CMD`/probe contract to prove the Kubernetes-level mechanics
+(which is what a Helm chart actually governs); it does not substitute for CI's `docker-build` job
+actually building the real image on a clean runner, which remains the authoritative build check.

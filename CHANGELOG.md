@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Kubernetes/Helm chart, verified against a real cluster (D-089)**: `deploy/helm/acde/` — HPA-
+  capable `acde-server`, a hard-enforced singleton `acde-loop` (the chart refuses to render above
+  1 replica), bundled OPA, bring-your-own Postgres. Verified against a real `kind` cluster, not
+  just `helm template`: caught and fixed two real bugs — `command:` silently bypassing the
+  migration-running entrypoint (should be `args:`), and OPA crashing on ConfigMap-mounted policies
+  (`rego_type_error: multiple default rules`, from Kubernetes' hidden ConfigMap symlink directory
+  being double-loaded; fixed with `--ignore '..*'`). New `helm-lint` CI job.
 - **Supervised control loop + real `deploy/observability/` (D-088)**: `docker-compose.prod.yml`
   gained the `acde-loop` service itself — the control loop was previously a manual foreground
   command, now supervised (`restart: unless-stopped`) with its own healthcheck (`acde loop-health`,

@@ -1,0 +1,73 @@
+image:
+  repository: acde-server
+  tag: "2.2"
+  pullPolicy: IfNotPresent
+
+# acde-server: the operator API. Stateless (everything durable lives in Postgres — README's own
+# claim, kill/restart resumes cleanly) — safe to run multiple replicas and autoscale.
+server:
+  replicaCount: 2
+  resources: {}
+  service:
+    port: 8099
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+# acde-loop: the control loop. MUST stay at 1 replica — it is a singleton by design. D-038/D-079's
+# bid-based conflict resolution handles concurrent *proposals* on the same target within one
+# process's tick; it does not make N independent loop processes safe to run concurrently against
+# the same experiment_run — that would multiply LLM calls and duplicate governance work, not add
+# capacity. Do not set this above 1.
+loop:
+  replicaCount: 1
+  config: full
+  durationSeconds: "86400"
+  resources: {}
+
+# OPA is bundled (lightweight, stateless, tightly coupled to ACDE) — unlike Postgres it is not a
+# "bring your own" external dependency. Policies are NOT vendored into this chart (avoids drift
+# from infra/opa/policies, the single source of truth) — create the ConfigMap yourself:
+#   kubectl create configmap opa-policies --from-file=infra/opa/policies -n <namespace>
+# and set opa.existingConfigMap to its name.
+opa:
+  image:
+    repository: openpolicyagent/opa
+    tag: "0.68.0"
+  existingConfigMap: ""
+  resources: {}
+
+# Bring your own managed Postgres in real deployments (RDS / Cloud SQL / etc.) — same philosophy
+# as deploy/docker-compose.prod.yml. This chart never runs a Postgres StatefulSet.
+postgres:
+  host: ""
+  port: 5432
+  db: acde
+  user: acde
+  existingSecret: ""
+  existingSecretPasswordKey: postgres-password
+  password: ""  # local/kind testing only when existingSecret is unset — see secrets.existingSecret
+
+# Credentials. existingSecret is the real-production path — create the Secret yourself (see
+# NOTES.txt for the exact keys) and reference it here. The inline values below exist only for
+# quick local/kind testing; leaving existingSecret empty makes the chart create a Secret from
+# them, which is NOT how you should run this against real infrastructure.
+secrets:
+  existingSecret: ""
+  apiKey: ""
+  airflowPassword: ""
+  oaiApiKey: ""
+  anthropicApiKey: ""
+  geminiApiKey: ""
+
+# ACDE_MODE: shadow-safe by default, exactly like `acde run`'s own fail-safe when unset.
+acdeMode: shadow
+
+airflowUrl: "http://airflow.airflow.svc.cluster.local:8080/api/v1"
+airflowUser: admin
+llmProvider: anthropic
+mockLlm: "1"
+
+extraEnv: {}
