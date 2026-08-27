@@ -6,6 +6,11 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Write-ahead audit trail (D-084)**: `agents/base.py::act()` now writes an intent row
+  (`status='executing'`) before calling the executor, then updates it with the outcome. Closes a
+  real gap where a crash during execution left an executed action with zero audit record. New
+  `status` column (migration 002); `/audit` gained `since`/`until` filters, both `/audit` and
+  `/proposals` surface `status`.
 - **Migration framework (D-083)**: `src/acde/migrations/` — forward-only, checksum-guarded,
   advisory-lock-serialized. Fixes a real production bug: `dataplane.migrate` resolved its SQL
   directory to the repo root, which doesn't exist in the installed wheel, so production had no way

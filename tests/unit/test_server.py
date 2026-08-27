@@ -45,6 +45,36 @@ def test_valid_key_grants_access(client):
     assert r.json() == []
 
 
+def test_audit_since_and_until_filter_the_query(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.return_value = []
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr(app_mod, "db", fake)
+    r = client.get(
+        "/audit",
+        params={"since": "2026-01-01T00:00:00Z", "until": "2026-01-02T00:00:00Z"},
+        headers={"X-API-Key": "secret"},
+    )
+    assert r.status_code == 200
+    sql, params = fake.fetch_all.call_args.args
+    assert "ts >= %s" in sql
+    assert "ts <= %s" in sql
+    assert params[:2] == ("2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z")
+
+
+def test_audit_without_filters_has_no_range_clause(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.return_value = []
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr(app_mod, "db", fake)
+    r = client.get("/audit", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    sql, params = fake.fetch_all.call_args.args
+    assert "ts >=" not in sql
+    assert "ts <=" not in sql
+    assert params == (100,)
+
+
 def test_metrics_prometheus_format(client):
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200

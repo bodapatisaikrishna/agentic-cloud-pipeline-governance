@@ -79,17 +79,31 @@ def create_app(require_key: bool = True) -> FastAPI:
     @app.get("/proposals", dependencies=auth)
     def proposals(limit: int = 50) -> list[dict[str, Any]]:
         return db.fetch_all(
-            "SELECT agent, action_type, target, policy_decision, executed, outcome, ts "
+            "SELECT agent, action_type, target, policy_decision, executed, outcome, status, ts "
             "FROM telemetry.agent_actions ORDER BY ts DESC LIMIT %s",
             (min(limit, 500),),
         )
 
     @app.get("/audit", dependencies=auth)
-    def audit(limit: int = 100) -> list[dict[str, Any]]:
+    def audit(
+        limit: int = 100, since: str | None = None, until: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Audit trail, most recent first. ``since``/``until`` are ISO-8601 timestamps — the actual
+        compliance question ("what happened on date X") a `LIMIT`-only query cannot answer."""
+        conditions = ["1=1"]
+        params: list[Any] = []
+        if since:
+            conditions.append("ts >= %s")
+            params.append(since)
+        if until:
+            conditions.append("ts <= %s")
+            params.append(until)
+        params.append(min(limit, 1000))
         return db.fetch_all(
             "SELECT agent, action_type, target, policy_decision, policy_reason, executed, "
-            "outcome, llm_model, ts FROM telemetry.agent_actions ORDER BY ts DESC LIMIT %s",
-            (min(limit, 1000),),
+            "outcome, status, llm_model, ts FROM telemetry.agent_actions "
+            f"WHERE {' AND '.join(conditions)} ORDER BY ts DESC LIMIT %s",
+            tuple(params),
         )
 
     @app.get("/approvals", dependencies=auth)

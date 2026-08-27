@@ -139,7 +139,14 @@ class BaseAgent:
     def act(
         self, action: ProposedAction, result: LLMResult, snapshot: TelemetrySnapshot
     ) -> CycleResult:
-        """Gate → execute → log agent_actions; run subclass hooks."""
+        """Gate → write-ahead → execute → record outcome; run subclass hooks.
+
+        The intent row is written and committed *before* ``executor.execute()`` runs (D-083's
+        write-ahead audit trail): a crash, OOM-kill, or DB blip during execution leaves a durable
+        row at ``status='executing'`` — alertable and recoverable — instead of leaving the action
+        entirely unaudited despite having really happened. The gate decision is already known at
+        write-ahead time, so it's recorded then, not deferred to the outcome update.
+        """
         context = gate.build_context(
             action,
             experiment_run=self.experiment_run,
@@ -147,7 +154,6 @@ class BaseAgent:
             schema_compat=snapshot.schema_compat,
         )
         decision = gate.evaluate(action, context)
-        outcome = executor.execute(action, decision, self.experiment_run)
         policy_state = (
             "escalated"
             if decision.escalate and not decision.allowed
@@ -159,8 +165,8 @@ class BaseAgent:
             "INSERT INTO telemetry.agent_actions "
             "(action_id, experiment_run, agent, action_type, target, params, justification, "
             " confidence, policy_decision, policy_reason, executed, outcome, llm_model, "
-            " llm_tokens_in, llm_tokens_out) "
-            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " llm_tokens_in, llm_tokens_out, status) "
+            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 str(action.action_id),
                 self.experiment_run,
@@ -172,12 +178,28 @@ class BaseAgent:
                 action.confidence,
                 policy_state,
                 decision.reason,
-                outcome.executed,
-                outcome.outcome,
+                False,
+                None,
                 result.model,
                 result.tokens_in,
                 result.tokens_out,
+                "executing",
             ),
+        )
+        outcome = executor.execute(action, decision, self.experiment_run)
+        final_status = (
+            "executed"
+            if outcome.executed
+            else "denied"
+            if policy_state == "denied"
+            else "escalated"
+            if policy_state == "escalated"
+            else "failed"
+        )
+        db.execute(
+            "UPDATE telemetry.agent_actions SET executed = %s, outcome = %s, status = %s "
+            "WHERE action_id = %s",
+            (outcome.executed, outcome.outcome, final_status, str(action.action_id)),
         )
         self.on_after_act(action, outcome.executed, snapshot)
         log.info(

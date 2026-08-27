@@ -1040,3 +1040,46 @@ local Docker Desktop networking issue (this project's own `docs/OPERATIONS.md` a
 Docker Desktop isn't reliable for sustained work), not a code defect. `sh -n` confirms the
 entrypoint script's syntax; the authoritative check is CI's `docker-build` job on clean runners,
 checked after push.
+
+**Two real bugs found by CI itself, not by local review, after push:**
+- `python -m acde.migrations` failed with `No module named acde.migrations.__main__` — a package
+  doesn't execute its `__init__.py`'s `if __name__ == "__main__"` guard via `-m`; it needs its own
+  `__main__.py`. Broke `make migrate`/`make seed` everywhere, caught by the integration job.
+- `TestDoctor.test_all_ok_when_deps_healthy` didn't mock the new `_check_migrations`, so it hit a
+  real (absent) DB connection in the no-docker unit-test job. Fixed, and used the gap to add direct
+  coverage for `_check_migrations`'s three paths (pending / up to date / error), which had none.
+
+## D-084 — Write-ahead audit trail: an executed action could be lost entirely
+
+**The defect** (audit finding #1, `docs/specs/2026-08-27-production-hardening-design.md`):
+`agents/base.py::act()` called `executor.execute()` — the real Airflow API call, the real
+`control.desired_state` write, the real quarantine — and only *after* it returned did it write the
+`telemetry.agent_actions` row. A crash, OOM-kill, or DB blip in that window meant the action really
+happened and there was no record of it at all. `orchestrator/loop.py::_tick()` swallows exceptions
+("a bad tick must not kill the loop"), so this failure mode is silent. For a product whose central
+claim is "every action is policy-gated and auditable," an unauditable executed action falsifies
+that claim.
+
+**Fix**: `act()` now writes an intent row (`status='executing'`, policy verdict already known and
+recorded — it's decided before the side effect runs) *before* calling `executor.execute()`, then
+updates the same row with the outcome and a final status (`executed` / `denied` / `escalated` /
+`failed`, derived from `outcome.executed` and the policy verdict). `db.execute()` opens and closes
+its own connection per call (confirmed in `db.py`), so the write-ahead INSERT is a fully committed,
+independent transaction before execution begins — not something a later crash can unwind.
+
+**New migration** (`002_audit_status.sql`): `status` column, `NOT NULL DEFAULT 'executed'` — a
+fast-default add-column (PG 11+, no table rewrite), so every existing row keeps exactly its current
+meaning. A partial index on `status = 'executing'` is the query an operator (or an alert, wired in
+a later step) uses to find actions stuck mid-flight.
+
+**Verified the fix actually fixes something**, the same discipline as every fix this session:
+`executor.execute()` was moved back to *before* the write-ahead insert (simulating the exact
+pre-fix ordering) and the new test caught it precisely — `exec_mock.call_count == 0` on a crash
+during execution, proving the pre-fix defect exactly as described (the action vanishes, not even a
+partial record). Restored, reconfirmed 13/13 (now 15/15 with the denied/escalated branch tests)
+green. Also re-verified live: applied the migration against the already-populated real table, ran a
+real agent cycle, confirmed the terminal `status='executed'` end-to-end.
+
+**Also fixed while touching this code path** (small, same endpoint, not scope creep): `/audit`
+gained `since`/`until` ISO-8601 filters — the design doc's audit finding #7 ("no way to answer
+'what happened on date X'") — and both `/audit` and `/proposals` now surface `status`.
