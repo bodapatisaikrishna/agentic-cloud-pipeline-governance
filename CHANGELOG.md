@@ -6,6 +6,10 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Tenant/environment schema boundary (D-085)**: `tenant_id`/`environment` columns (migration
+  003, server-side config only, never client-supplied) on every scoped telemetry table. Schema-
+  level groundwork for eventual multi-tenant hosting, deliberately not a SaaS control plane yet —
+  see DEVIATIONS D-085 for the explicit scope line.
 - **Write-ahead audit trail (D-084)**: `agents/base.py::act()` now writes an intent row
   (`status='executing'`) before calling the executor, then updates it with the outcome. Closes a
   real gap where a crash during execution left an executed action with zero audit record. New

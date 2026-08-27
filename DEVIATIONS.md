@@ -1083,3 +1083,46 @@ real agent cycle, confirmed the terminal `status='executed'` end-to-end.
 **Also fixed while touching this code path** (small, same endpoint, not scope creep): `/audit`
 gained `since`/`until` ISO-8601 filters — the design doc's audit finding #7 ("no way to answer
 'what happened on date X'") — and both `/audit` and `/proposals` now surface `status`.
+
+## D-085 — Tenant/environment schema boundary, deliberately not a SaaS control plane
+
+**Directed decision, not an underspecified one**: "design for eventual multi-tenant hosted SaaS,
+but do not over-engineer it yet; establish clean tenant/environment boundaries now so the schema
+can evolve safely" — and "strict server-side isolation." Recorded here anyway per this file's
+purpose: what was actually built and why, not just what was asked.
+
+**What exists**: two new `Settings` fields, `tenant_id`/`environment` (both default `"default"`),
+resolved only from server-side config (`acde.tenancy.current_scope()`) — never from a request, an
+agent's proposed action, or any other client-controllable input. Every scoped telemetry table
+(`agent_actions`, `failure_events`, `resource_usage`, `pipeline_metrics`, `cost_ledger`,
+`manual_interventions`, `task_runs`) gained both columns via a fast-default add-column migration
+(003, no rewrite) and every one of the 9 write sites across 6 modules now stamps them.
+
+**What deliberately does not exist yet, and why**: a tenant registry, per-request tenant
+resolution, or any routing that lets one *database* serve multiple tenants. `tenant_id` is
+constant for the life of a deployment today — every self-hosted install is exactly one tenant,
+which is 100% of current real usage. Building request-level multi-tenancy now (deciding how a
+tenant is created, how an API key maps to one, how a shared database enforces row-level isolation)
+is the actual SaaS control plane, a materially larger feature with its own auth/billing/routing
+model — building it before there's a second tenant to serve would be inventing requirements rather
+than serving a real one. This is the schema decision that makes it possible without another
+data-touching migration later, not the feature itself.
+
+**"Strict server-side isolation," honestly delivered for what's built now**: `tenant_id` can never
+be client-supplied — it comes from the process's own config, the same principle the multi-actor
+audit system already applies correctly to the *actor* field (`server/app.py`'s `_authenticate`
+resolves the actor server-side; a client cannot claim to be someone else). The isolation claim
+here is real but scoped to what's true today: one tenant per deployment, enforced by the fact that
+there is one deployment's database, not by a query-time filter that doesn't exist yet.
+
+**Not conflated with the existing multi-actor auth (D-070)**: an "actor" (an API key's named
+holder) is a human or service operating a deployment, not a tenant — a multi-actor deployment
+today is *one* tenant with several operators sharing full visibility (an ops team), and that
+existing, intended behavior would break if actor were silently treated as tenant_id. Kept as two
+separate, currently-orthogonal concepts on purpose.
+
+**Verified**: migration 003 applied against the already-populated real database (104 failure
+events, 2812 cost_ledger rows, 1365 resource_usage rows, 105 manual interventions, 198 agent
+actions from the integration suite) — every existing and new row correctly `tenant_id='default',
+environment='default'`, confirmed via direct query, not assumed. Full unit (413) and integration
+(27) suites green.

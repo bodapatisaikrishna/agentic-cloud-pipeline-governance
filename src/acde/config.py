@@ -15,6 +15,13 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # --- Tenancy (D-085): server-side only, never client-supplied. A single deployment is one
+    # tenant/environment today (self-hosted, one Postgres) -- these columns exist on every scoped
+    # telemetry table so a future shared-database multi-tenant deployment needs no further schema
+    # change, without building the tenant-routing/auth machinery a real hosted SaaS would need now.
+    tenant_id: str = "default"
+    environment: str = "default"
+
     # --- Postgres (telemetry / warehouse / control schemas) ---
     postgres_host: str = "localhost"
     postgres_port: int = 5433  # host-published port; 5433 avoids clashing with a local pg on 5432

@@ -13,6 +13,7 @@ import datetime as dt
 from acde import db
 from acde.human.simulator import HumanSimulator
 from acde.logging import get_logger
+from acde.tenancy import current_scope
 
 log = get_logger("experiments.baseline")
 
@@ -41,10 +42,18 @@ def resolve_via_human(experiment_run: str, seed: int, fixed_detection: bool = Tr
     # One manual intervention per open fault, requested at detection time.
     for fault in open_faults:
         requested = fault["detected_ts"] or dt.datetime.now(dt.UTC)
+        tenant_id, environment = current_scope()
         db.execute(
-            "INSERT INTO telemetry.manual_interventions (experiment_run, reason, requested_ts) "
-            "VALUES (%s, %s, %s)",
-            (experiment_run, f"baseline: unresolved fault {fault['event_id']}", requested),
+            "INSERT INTO telemetry.manual_interventions "
+            "(experiment_run, reason, requested_ts, tenant_id, environment) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (
+                experiment_run,
+                f"baseline: unresolved fault {fault['event_id']}",
+                requested,
+                tenant_id,
+                environment,
+            ),
         )
 
     sim = HumanSimulator(experiment_run=experiment_run, seed=seed)

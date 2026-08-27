@@ -20,6 +20,7 @@ from acde.config import get_settings
 from acde.dataplane.streaming.workers import read_desired_workers
 from acde.logging import get_logger
 from acde.telemetry import freshness
+from acde.tenancy import current_scope
 
 log = get_logger("telemetry.collector")
 
@@ -54,6 +55,7 @@ def parse_docker_stats(text: str) -> list[dict[str, Any]]:
 
 def task_instance_to_row(ti: dict[str, Any], experiment_run: str) -> tuple[Any, ...]:
     """Map an Airflow task-instance JSON object to a ``task_runs`` upsert tuple."""
+    tenant_id, environment = current_scope()
     return (
         ti.get("dag_run_id"),
         ti.get("dag_id"),
@@ -65,6 +67,8 @@ def task_instance_to_row(ti: dict[str, Any], experiment_run: str) -> tuple[Any, 
         ti.get("try_number") or 0,
         None,
         experiment_run,
+        tenant_id,
+        environment,
     )
 
 
@@ -100,8 +104,9 @@ class TelemetryCollector:
                     row = task_instance_to_row(ti, self.experiment_run)
                     db.execute(
                         "INSERT INTO telemetry.task_runs (run_id, dag_id, task_id, state, "
-                        " start_ts, end_ts, duration_s, try_number, error, experiment_run) "
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+                        " start_ts, end_ts, duration_s, try_number, error, experiment_run, "
+                        " tenant_id, environment) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
                         "ON CONFLICT (dag_id, run_id, task_id, try_number) DO UPDATE SET "
                         "  state = EXCLUDED.state, end_ts = EXCLUDED.end_ts, "
                         "  duration_s = EXCLUDED.duration_s, "
@@ -133,8 +138,18 @@ class TelemetryCollector:
         running_slots = self._running_slots()
         streaming_workers = read_desired_workers()
         ts = dt.datetime.now(dt.UTC)
+        tenant_id, environment = current_scope()
         rows: list[tuple[Any, ...]] = [
-            (c["component"], c["cpu_pct"], c["mem_mb"], 1, ts, self.experiment_run)
+            (
+                c["component"],
+                c["cpu_pct"],
+                c["mem_mb"],
+                1,
+                ts,
+                self.experiment_run,
+                tenant_id,
+                environment,
+            )
             for c in containers
         ]
         # Logical resource-unit rows that drive the cost model.
@@ -147,12 +162,14 @@ class TelemetryCollector:
                     component_workers(logical, running_slots, streaming_workers),
                     ts,
                     self.experiment_run,
+                    tenant_id,
+                    environment,
                 )
             )
         db.execute_many(
             "INSERT INTO telemetry.resource_usage "
-            "(component, cpu_pct, mem_mb, workers, ts, experiment_run) "
-            "VALUES (%s, %s, %s, %s, %s, %s)",
+            "(component, cpu_pct, mem_mb, workers, ts, experiment_run, tenant_id, environment) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             rows,
         )
         return len(rows)

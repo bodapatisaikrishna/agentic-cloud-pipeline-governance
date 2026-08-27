@@ -17,6 +17,7 @@ import datetime as dt
 from acde import db
 from acde.config import get_settings
 from acde.logging import get_logger
+from acde.tenancy import current_scope
 
 log = get_logger("telemetry.cost")
 
@@ -136,6 +137,7 @@ def compute_cost_windows(experiment_run: str | None = None, window_s: float | No
     storage_gb = warehouse_size_gb()
     delta = dt.timedelta(seconds=window_s)
     written = 0
+    tenant_id, environment = current_scope()
     start = span["lo"]
     while start < span["hi"] + delta:
         end = start + delta
@@ -146,18 +148,40 @@ def compute_cost_windows(experiment_run: str | None = None, window_s: float | No
                 continue
             db.execute(
                 "INSERT INTO telemetry.cost_ledger (experiment_run, component, "
-                "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (experiment_run, component, cus, 0.0, cost_units(cus, 0.0), start, end),
+                "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end, "
+                "tenant_id, environment) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    experiment_run,
+                    component,
+                    cus,
+                    0.0,
+                    cost_units(cus, 0.0),
+                    start,
+                    end,
+                    tenant_id,
+                    environment,
+                ),
             )
             written += 1
         # storage cost for the window, attributed to the storage component
         sgh = storage_gb * (window_s / 3600.0)
         db.execute(
             "INSERT INTO telemetry.cost_ledger (experiment_run, component, "
-            "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (experiment_run, STORAGE_COMPONENT, 0.0, sgh, cost_units(0.0, sgh), start, end),
+            "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end, "
+            "tenant_id, environment) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                experiment_run,
+                STORAGE_COMPONENT,
+                0.0,
+                sgh,
+                cost_units(0.0, sgh),
+                start,
+                end,
+                tenant_id,
+                environment,
+            ),
         )
         written += 1
         start = end

@@ -73,6 +73,8 @@ class TestTaskInstanceToRow:
             1,
             None,
             "run-x",
+            "default",
+            "default",
         )
 
     def test_missing_try_number_defaults_zero(self):

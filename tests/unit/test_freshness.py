@@ -27,7 +27,7 @@ class TestStreamingFreshness:
         writes = [c.args for c in fake_db.execute.call_args_list]
         assert len(writes) == 2
         assert all("pipeline_metrics" in w[0] for w in writes)
-        assert writes[0][1] == ("stream", "freshness_s", 12.5, "run-1")
+        assert writes[0][1] == ("stream", "freshness_s", 12.5, "run-1", "default", "default")
 
 
 class TestBatchFreshness:

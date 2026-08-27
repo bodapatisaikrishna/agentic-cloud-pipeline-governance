@@ -25,6 +25,7 @@ from acde.chaos.scenarios import Scenario, get_scenario
 from acde.config import get_settings
 from acde.dataplane.streaming.producer import generate_events, rebase_to_end
 from acde.logging import get_logger
+from acde.tenancy import current_scope
 
 log = get_logger("chaos.injector")
 
@@ -126,11 +127,12 @@ class FaultInjector:
 
     def _record(self, plan: FaultPlan) -> str:
         event_id = str(uuid4())
+        tenant_id, environment = current_scope()
         db.execute(
             "INSERT INTO telemetry.failure_events "
-            "(event_id, experiment_run, scenario, fault_type, injected_ts) "
-            "VALUES (%s, %s, %s, %s, now())",
-            (event_id, self.experiment_run, plan.scenario, plan.fault_type),
+            "(event_id, experiment_run, scenario, fault_type, injected_ts, tenant_id, environment) "
+            "VALUES (%s, %s, %s, %s, now(), %s, %s)",
+            (event_id, self.experiment_run, plan.scenario, plan.fault_type, tenant_id, environment),
         )
         log.info(
             "fault_injected",

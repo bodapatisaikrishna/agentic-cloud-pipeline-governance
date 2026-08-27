@@ -22,6 +22,7 @@ from acde.contracts import AgentName, ProposedAction, SchemaCompat, TelemetrySna
 from acde.llm.client import LLMClient, LLMResult
 from acde.logging import get_logger
 from acde.policy import executor, gate
+from acde.tenancy import current_scope
 
 log = get_logger("agents.base")
 
@@ -161,12 +162,14 @@ class BaseAgent:
             if decision.allowed
             else "denied"
         )
+        tenant_id, environment = current_scope()
         db.execute(
             "INSERT INTO telemetry.agent_actions "
             "(action_id, experiment_run, agent, action_type, target, params, justification, "
             " confidence, policy_decision, policy_reason, executed, outcome, llm_model, "
-            " llm_tokens_in, llm_tokens_out, status) "
-            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " llm_tokens_in, llm_tokens_out, status, tenant_id, environment) "
+            "VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+            "%s)",
             (
                 str(action.action_id),
                 self.experiment_run,
@@ -184,6 +187,8 @@ class BaseAgent:
                 result.tokens_in,
                 result.tokens_out,
                 "executing",
+                tenant_id,
+                environment,
             ),
         )
         outcome = executor.execute(action, decision, self.experiment_run)

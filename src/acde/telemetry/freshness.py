@@ -13,15 +13,18 @@ import datetime as dt
 from acde import db
 from acde.config import get_settings
 from acde.logging import get_logger
+from acde.tenancy import current_scope
 
 log = get_logger("telemetry.freshness")
 
 
 def _record(pipeline_id: str, metric: str, value: float, experiment_run: str) -> None:
+    tenant_id, environment = current_scope()
     db.execute(
-        "INSERT INTO telemetry.pipeline_metrics (pipeline_id, metric, value, experiment_run) "
-        "VALUES (%s, %s, %s, %s)",
-        (pipeline_id, metric, value, experiment_run),
+        "INSERT INTO telemetry.pipeline_metrics "
+        "(pipeline_id, metric, value, experiment_run, tenant_id, environment) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (pipeline_id, metric, value, experiment_run, tenant_id, environment),
     )
 
 

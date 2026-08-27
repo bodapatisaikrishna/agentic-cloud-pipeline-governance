@@ -21,6 +21,7 @@ from acde.config import get_settings
 from acde.contracts import PolicyDecision, ProposedAction
 from acde.dataplane.partitions import PartitionVersionManager
 from acde.logging import get_logger
+from acde.tenancy import current_scope
 
 log = get_logger("policy.executor")
 
@@ -191,10 +192,17 @@ _HANDLERS = {
 
 
 def _escalate(action: ProposedAction, decision: PolicyDecision, experiment_run: str) -> None:
+    tenant_id, environment = current_scope()
     db.execute(
-        "INSERT INTO telemetry.manual_interventions (experiment_run, reason, requested_ts) "
-        "VALUES (%s, %s, now())",
-        (experiment_run, f"{action.agent}/{action.action_type}: {decision.reason}"),
+        "INSERT INTO telemetry.manual_interventions "
+        "(experiment_run, reason, requested_ts, tenant_id, environment) "
+        "VALUES (%s, %s, now(), %s, %s)",
+        (
+            experiment_run,
+            f"{action.agent}/{action.action_type}: {decision.reason}",
+            tenant_id,
+            environment,
+        ),
     )
     log.info(
         "escalated_to_human",
