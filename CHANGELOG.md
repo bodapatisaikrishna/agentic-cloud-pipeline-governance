@@ -5,6 +5,13 @@ per phase, `v1.0.0` at Phase 9.
 
 ## [Unreleased]
 
+### Added
+- **Migration framework (D-083)**: `src/acde/migrations/` — forward-only, checksum-guarded,
+  advisory-lock-serialized. Fixes a real production bug: `dataplane.migrate` resolved its SQL
+  directory to the repo root, which doesn't exist in the installed wheel, so production had no way
+  to apply a schema change to an existing database at all. Wired into `acde doctor` and the
+  production Docker entrypoint (migrations now run automatically before the server/loop starts).
+
 ### Fixed
 - **Recovery agent target hallucination (D-082)**: found by inspecting D-081's live results —
   `decision_correct` for `full` dropped from 100% (mock) to 66.7% (live), traced to the recovery

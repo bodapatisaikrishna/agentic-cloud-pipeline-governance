@@ -33,11 +33,15 @@ RUN useradd --create-home --uid 10001 acde
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY infra/opa/policies ./infra/opa/policies
+COPY deploy/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH" \
     ACDE_MODE=shadow \
     MOCK_LLM=1
 USER acde
 
 EXPOSE 8099
+ENTRYPOINT ["docker-entrypoint.sh"]
 # Default: the operator API. Override the command with `acde run ...` to run the control loop.
+# Either way, the entrypoint applies pending migrations first.
 CMD ["acde", "serve", "--host", "0.0.0.0"]

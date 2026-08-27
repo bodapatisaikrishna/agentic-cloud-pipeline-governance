@@ -75,6 +75,20 @@ def _check_mode() -> Check:
     )
 
 
+def _check_migrations() -> Check:
+    try:
+        from acde.migrations import status
+
+        s = status()
+        if s["pending"]:
+            pending = ", ".join(s["pending"])
+            return Check("migrations", False, f"pending: {pending} — run acde migrate")
+        current = s["current_version"] or "(none applied)"
+        return Check("migrations", True, f"up to date at {current}")
+    except Exception as exc:
+        return Check("migrations", False, str(exc)[:120])
+
+
 def _check_webhook() -> Check:
     s = get_settings()
     return Check(
@@ -88,6 +102,7 @@ def doctor() -> dict[str, object]:
     """Run all checks; return {checks, all_ok}."""
     checks = [
         _check_db(),
+        _check_migrations(),
         _check_opa(),
         _check_connector(),
         _check_llm(),

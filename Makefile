@@ -45,8 +45,8 @@ test-integration:  ## Integration tests (requires `make up` first)
 
 ## --- Data plane (Phase 1) ---
 
-migrate:  ## Apply idempotent init SQL to the running DB (adds tables to existing volumes)
-	MOCK_LLM=1 $(UV) python -m acde.dataplane.migrate
+migrate:  ## Apply pending schema migrations (adds tables to existing volumes, D-083)
+	MOCK_LLM=1 $(UV) python -m acde.migrations
 
 seed:  ## Generate seeded datasets and migrate the DB
 	MOCK_LLM=1 $(UV) python -m acde.dataplane.datasets.tpcds_gen

@@ -992,3 +992,51 @@ make test-unit` (392/392). Note this does **not** raise `decision_correct` for a
 model genuinely had nothing to recover with — correctly escalating with no target *is* correct
 behavior, it just doesn't count as a successful recovery under the paper's scoring, which is honest
 rather than something to paper over.
+
+## D-083 — Migration framework: production had no way to reach an existing database at all
+
+**Found via systematic production-readiness audit** (`docs/specs/2026-08-27-production-hardening-design.md`),
+not a test failure: `dataplane/migrate.py` resolved its SQL directory as `parents[3]` — the repo
+root. That path exists in a dev checkout but not inside the installed wheel
+(`packages = ["src/acde"]` in `pyproject.toml`), so in the production Docker image it silently
+no-opped (`migrate_no_init_dir`, swallowed as a warning). Combined with Postgres only running
+`docker-entrypoint-initdb.d` on first volume init: **there was no way to get a schema change into
+an existing production database.** Every fix in this session's remaining hardening work needs one.
+
+**Decision: a small forward-only runner (`src/acde/migrations/`), not Alembic.** Alembic assumes
+SQLAlchemy, which this project deliberately does not use (see `server/metrics.py`'s hand-rolled
+Prometheus exposition, avoiding a client library at this scale) — pulling in an ORM dependency
+just for its migration tool would be a bigger footprint than the ~200-line runner this needs.
+Simplest defensible option per CLAUDE.md's underspecified-decision rule.
+
+**Guarantees, each proven against the real running stack, not just mocked unit tests:**
+- Migrations live *inside the package* (`src/acde/migrations/NNN_name.sql`), so they ship in the
+  wheel — fixes the actual bug, not just the symptom.
+- One transaction per migration, version row written in the same transaction: verified live —
+  re-running `apply()` against an already-migrated database is a genuine no-op (`migrations_up_to_date`).
+- Checksum guard: verified live by tampering with the applied `001_baseline.sql` on disk and
+  confirming `apply()` refuses with `MigrationError` naming the exact mismatch, then restoring and
+  reconfirming clean.
+- `pg_advisory_lock` around the whole run, so concurrent replica startups serialize instead of
+  racing (unit-tested at the mock level here; the underlying primitive is the same one Postgres
+  itself provides and `orchestrator/locks.py` already relies on for per-target locking).
+- `001_baseline.sql` is generated verbatim from the existing `infra/postgres/init/*.sql` (still
+  the fresh-volume path) — a database created either way converges on the same schema. No table
+  was dropped, retyped, or had data moved.
+- Wired into `acde doctor` (a new `migrations` check, pending migrations show red) and the
+  production Docker entrypoint (`deploy/docker-entrypoint.sh` runs `acde migrate` before `exec`ing
+  `acde serve`/`acde run`) — so this is now unavoidable in the actual startup path, not an unused
+  CLI command sitting next to the same silent-no-op risk it replaces.
+
+**Bug caught by the test suite itself, not manual review:** the first version of
+`log.info("migration_applied", extra={"name": migration.name})` raised `KeyError: Attempt to
+overwrite 'name' in LogRecord` — `name` collides with `logging.LogRecord`'s own attribute. Renamed
+to `migration_name`. Left here as a reminder that `extra=` dict keys need checking against
+`LogRecord`'s reserved names, not just against each other.
+
+**Honest gap**: the local Docker build to verify the new entrypoint could not complete in this
+environment — repeated `cannot decrypt peer's message` TLS errors mid-package-download, which is a
+local Docker Desktop networking issue (this project's own `docs/OPERATIONS.md` already warns
+Docker Desktop isn't reliable for sustained work), not a code defect. `sh -n` confirms the
+entrypoint script's syntax; the authoritative check is CI's `docker-build` job on clean runners,
+checked after push.

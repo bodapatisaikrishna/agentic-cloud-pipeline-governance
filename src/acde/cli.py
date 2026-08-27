@@ -26,6 +26,22 @@ def _print_checks(result: dict[str, Any]) -> int:
     return 0 if result["all_ok"] else 1
 
 
+def cmd_migrate(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.migrations import apply, status
+
+    if args.status:
+        print(json.dumps(status(), indent=2, default=str))
+        return 0
+    applied = apply()
+    if applied:
+        print(f"applied {len(applied)} migration(s): {', '.join(applied)}")
+    else:
+        print("already up to date")
+    return 0
+
+
 def cmd_doctor(_: argparse.Namespace) -> int:
     from acde.ops.health import doctor
 
@@ -140,6 +156,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="validate the deployment").set_defaults(func=cmd_doctor)
+
+    mig = sub.add_parser("migrate", help="apply pending schema migrations")
+    mig.add_argument("--status", action="store_true", help="report state without applying")
+    mig.set_defaults(func=cmd_migrate)
+
     sub.add_parser("status", help="current mode / pause / counts").set_defaults(func=cmd_status)
 
     run = sub.add_parser("run", help="run the control loop (shadow-safe by default)")
