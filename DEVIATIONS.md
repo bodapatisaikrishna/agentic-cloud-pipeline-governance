@@ -1183,3 +1183,39 @@ row survived untouched — the exemption is real, demonstrated against the live 
 assumption resting on the code reading correctly.
 
 Full unit (418, +5 for retention) and integration (27) suites green.
+
+## D-087 — `/health` split, and every credential converted to `SecretStr`
+
+**`/health` no longer calls `doctor()` at all.** It returned the full deployment-readiness report
+— LLM provider, connector identity, execution mode, and raw exception fragments (`str(exc)[:120]`,
+which can carry a hostname or DSN piece) — to any unauthenticated caller, since a load balancer's
+health check can't carry credentials. Split: `/health` returns `{"status": "ok"}` unauthenticated;
+the full report moved to `/health/ready`, now behind the same auth as every other operator
+endpoint. `docs/OPERATIONS.md`'s quickstart curl updated to match.
+
+**Every credential field became `SecretStr`**: `postgres_password`, `airflow_password`,
+`prefect_api_key`, `anthropic_api_key`, `gemini_api_key`, `oai_api_key`, `api_key`, `api_keys` — 8
+fields, ~11 real call sites across 6 modules plus `config.py`'s own `postgres_dsn` and
+`api_key_map`. Pydantic's `SecretStr` accepts a plain string at construction (no test breakage —
+confirmed, all 8 fields' existing `Settings(api_key="secret", ...)`-style test fixtures kept
+working unmodified) and masks in `str()`/`repr()`/f-strings; every genuine *use* site (an httpx
+`auth=` tuple, an SDK's `api_key=` kwarg, the DSN string) needs an explicit `.get_secret_value()`
+or it silently sends the literal string `"**********"` as the credential — auth would fail, not
+leak, but fail in a confusing way. Traced every one by grep, not by assumption.
+
+**Two real integration-test bugs this itself caught**, both fixed: `tests/integration/test_
+telemetry.py` and `test_dataplane.py` each built their own `httpx.Client(auth=(user, password))`
+directly against `s.airflow_password` for verification, unaware of the type change — both failed
+immediately with `TypeError: ... SecretStr found` the first time the real integration suite ran
+after this change, caught by the real test run, not by code review.
+
+**Verified the actual security claim, not just that the type exists**: with the real NVIDIA key
+loaded in `.env`, confirmed live — `"nvapi" in repr(get_settings())` is `False`, `str(oai_api_key)`
+prints `**********`, and `.get_secret_value()` still returns the real 40+ character key. Also
+verified the *other* direction, that real auth still works end-to-end against real infrastructure
+with the wrapped values: `acde doctor` against the live stack shows `database: reachable` (proves
+`postgres_dsn`'s unwrap) and `connector:airflow: HTTP 200` (proves `airflow_password`'s unwrap
+against real Airflow basic auth) — not assumed from the type conversion being mechanically
+consistent.
+
+Full unit (419) and integration (27) suites green.

@@ -34,7 +34,7 @@ class AirflowConnector:
         if s.airflow_auth_token:
             headers["Authorization"] = f"Bearer {s.airflow_auth_token}"
         else:
-            auth = (s.airflow_user, s.airflow_password)
+            auth = (s.airflow_user, s.airflow_password.get_secret_value())
         return httpx.Client(
             base_url=s.airflow_url,
             auth=auth,

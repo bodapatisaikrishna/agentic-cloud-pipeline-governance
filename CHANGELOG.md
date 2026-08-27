@@ -6,6 +6,12 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **`/health` split + every credential as `SecretStr` (D-087)**: `/health` is now a shallow
+  unauthenticated liveness check (`{"status": "ok"}`); the full `doctor()` report moved to the
+  authenticated `/health/ready`. All 8 credential fields in `Settings` (postgres/airflow
+  passwords, all 3 LLM provider keys, prefect key, operator API keys) converted to `SecretStr` —
+  masked in `repr()`/`str()`/logs, unwrapped only at the ~11 real usage sites. Caught two
+  integration tests constructing their own auth tuples directly against the raw field, both fixed.
 - **Hot-path indexes, benchmarked, and opt-in retention (D-086)**: migration 004 indexes the real
   predicates of the 3 hottest queries (`blast_radius_exceeded`, `_open_faults`, `/audit`'s
   `ORDER BY ts`). Benchmarked before/after at 10³–10⁵ rows (`acde.analysis.bench_hot_paths`); one

@@ -91,7 +91,7 @@ class TelemetryCollector:
         settings = get_settings()
         self.experiment_run = experiment_run or settings.experiment_run
         self.airflow_url = settings.airflow_url
-        self.auth = (settings.airflow_user, settings.airflow_password)
+        self.auth = (settings.airflow_user, settings.airflow_password.get_secret_value())
 
     def collect_task_runs(self) -> int:  # pragma: no cover - Airflow REST
         written = 0

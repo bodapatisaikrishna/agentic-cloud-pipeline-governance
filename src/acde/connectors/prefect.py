@@ -34,7 +34,7 @@ class PrefectConnector:
         s = get_settings()
         headers = {}
         if s.prefect_api_key:  # Prefect Cloud; self-hosted Server typically needs no auth
-            headers["Authorization"] = f"Bearer {s.prefect_api_key}"
+            headers["Authorization"] = f"Bearer {s.prefect_api_key.get_secret_value()}"
         return httpx.Client(base_url=s.prefect_api_url, headers=headers, timeout=30)
 
     def health(self) -> ConnectorHealth:  # pragma: no cover - network

@@ -220,7 +220,7 @@ class LLMClient:
 
         settings = get_settings()
         if self._gemini is None:
-            self._gemini = genai.Client(api_key=settings.gemini_api_key or None)
+            self._gemini = genai.Client(api_key=settings.gemini_api_key.get_secret_value() or None)
 
         def _retryable(exc: BaseException) -> bool:
             code = getattr(exc, "code", None)
@@ -256,7 +256,8 @@ class LLMClient:
         settings = get_settings()
         if self._oai is None:
             self._oai = openai.OpenAI(
-                base_url=settings.oai_base_url, api_key=settings.oai_api_key or "missing"
+                base_url=settings.oai_base_url,
+                api_key=settings.oai_api_key.get_secret_value() or "missing",
             )
 
         def _retryable(exc: BaseException) -> bool:

@@ -7,6 +7,7 @@ see ``.env.example`` for the full catalogue.
 
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5433  # host-published port; 5433 avoids clashing with a local pg on 5432
     postgres_user: str = "acde"
-    postgres_password: str = "acde"
+    postgres_password: SecretStr = SecretStr("acde")
     postgres_db: str = "acde"
     db_pool_min_size: int = 1
     db_pool_max_size: int = 8
@@ -61,7 +62,7 @@ class Settings(BaseSettings):
     # --- Airflow REST API (Phase 1+) ---
     airflow_url: str = "http://localhost:8080/api/v1"
     airflow_user: str = "admin"
-    airflow_password: str = "admin"
+    airflow_password: SecretStr = SecretStr("admin")
     airflow_auth_token: str = ""  # bearer token; used instead of basic auth when set (prod SSO)
     airflow_verify_tls: bool = True  # verify TLS certs on the customer's Airflow endpoint
     # Which orchestrator connector the runtime attaches to: "airflow" (their Airflow), "prefect"
@@ -71,7 +72,7 @@ class Settings(BaseSettings):
     # Prefect connector (T2.4): REST API base URL; api_key is optional (Prefect Cloud only — a
     # self-hosted Prefect Server typically has no auth by default).
     prefect_api_url: str = "http://localhost:4200/api"
-    prefect_api_key: str = ""
+    prefect_api_key: SecretStr = SecretStr("")
     # Whether the connected environment is production. Game-day/chaos refuses to run unless this is
     # False (a staging connector), so incident rehearsals never hit prod.
     connector_is_production: bool = True
@@ -79,17 +80,17 @@ class Settings(BaseSettings):
     # --- LLM layer ---
     # Live-call provider: "anthropic" (default) or "gemini" (D-056). Ignored under MOCK_LLM.
     llm_provider: str = "anthropic"
-    anthropic_api_key: str = ""
+    anthropic_api_key: SecretStr = SecretStr("")
     model_reasoning: str = "claude-sonnet-4-6"
     model_fast: str = "claude-haiku-4-5"
     # Gemini live provider (opt-in; key + models via .env). IDs are overridable if they change.
-    gemini_api_key: str = ""
+    gemini_api_key: SecretStr = SecretStr("")
     gemini_model_reasoning: str = "gemini-2.5-pro"
     gemini_model_fast: str = "gemini-2.5-flash"
     # Generic OpenAI-compatible provider (NVIDIA NIM / Groq / OpenRouter / z.ai) — D-057.
     # Larger per-call cap so "thinking" models (e.g. GLM-5.2) can reach the JSON.
     oai_base_url: str = "https://integrate.api.nvidia.com/v1"
-    oai_api_key: str = ""
+    oai_api_key: SecretStr = SecretStr("")
     oai_model_reasoning: str = "z-ai/glm-5.2"
     oai_model_fast: str = "nvidia/nemotron-3-nano-30b-a3b"
     oai_max_tokens_per_call: int = 8192
@@ -185,8 +186,8 @@ class Settings(BaseSettings):
     # or the API refuses to start, so it is never accidentally exposed unauthenticated. Accepted
     # via the X-API-Key header (JSON/CLI clients) or HTTP Basic (actor=username, key=password;
     # lets a browser hit the dashboard with a native credential prompt). TLS via reverse proxy.
-    api_key: str = ""
-    api_keys: str = ""
+    api_key: SecretStr = SecretStr("")
+    api_keys: SecretStr = SecretStr("")
     api_host: str = "127.0.0.1"
     api_port: int = 8099
 
@@ -200,11 +201,17 @@ class Settings(BaseSettings):
 
     @property
     def api_key_map(self) -> dict[str, str]:
-        """actor -> key, merging the legacy ``api_key`` (actor "operator") with ``api_keys``."""
+        """actor -> key, merging the legacy ``api_key`` (actor "operator") with ``api_keys``.
+
+        Unwraps ``SecretStr`` here, at the one point the raw value is actually needed (building
+        the lookup table ``_authenticate`` compares against) — everywhere else the field stays
+        wrapped, so a ``repr(settings)``, log line, or traceback can't print a live credential.
+        """
         keys: dict[str, str] = {}
-        if self.api_key:
-            keys["operator"] = self.api_key
-        for pair in self.api_keys.split(","):
+        api_key = self.api_key.get_secret_value()
+        if api_key:
+            keys["operator"] = api_key
+        for pair in self.api_keys.get_secret_value().split(","):
             pair = pair.strip()
             if not pair or ":" not in pair:
                 continue
@@ -230,7 +237,7 @@ class Settings(BaseSettings):
         """libpq connection string for the ACDE database."""
         return (
             f"host={self.postgres_host} port={self.postgres_port} "
-            f"user={self.postgres_user} password={self.postgres_password} "
+            f"user={self.postgres_user} password={self.postgres_password.get_secret_value()} "
             f"dbname={self.postgres_db}"
         )
 

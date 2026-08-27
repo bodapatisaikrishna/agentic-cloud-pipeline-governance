@@ -27,16 +27,33 @@ def test_refuses_to_start_without_api_key(monkeypatch):
         app_mod.create_app()
 
 
-def test_health_is_unauthenticated(client, monkeypatch):
-    monkeypatch.setattr(app_mod, "doctor", lambda: {"checks": [], "all_ok": True})
+def test_health_is_unauthenticated_and_shallow(client, monkeypatch):
+    # D-087: /health never calls doctor() at all -- it must not leak deployment internals to an
+    # unauthenticated caller, so this asserts the shape, not just a 200.
+    monkeypatch.setattr(
+        app_mod, "doctor", lambda: (_ for _ in ()).throw(AssertionError("must not be called"))
+    )
     r = client.get("/health")
     assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
+
+
+def test_health_ready_requires_auth_and_returns_full_report(client, monkeypatch):
+    monkeypatch.setattr(
+        app_mod, "doctor", lambda: {"checks": [{"name": "database"}], "all_ok": True}
+    )
+    assert client.get("/health/ready").status_code == 401
+    r = client.get("/health/ready", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.json()["all_ok"] is True
+    assert r.json()["checks"]
 
 
 def test_protected_routes_require_key(client):
     assert client.get("/proposals").status_code == 401
     assert client.get("/metrics").status_code == 401
     assert client.get("/audit").status_code == 401
+    assert client.get("/health/ready").status_code == 401
 
 
 def test_valid_key_grants_access(client):

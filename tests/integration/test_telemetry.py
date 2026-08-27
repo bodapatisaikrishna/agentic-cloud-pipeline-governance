@@ -24,7 +24,9 @@ RUN = "itest-telemetry"
 def _trigger_tpcds() -> None:
     s = get_settings()
     with httpx.Client(
-        base_url=s.airflow_url, auth=(s.airflow_user, s.airflow_password), timeout=30
+        base_url=s.airflow_url,
+        auth=(s.airflow_user, s.airflow_password.get_secret_value()),
+        timeout=30,
     ) as c:
         c.patch("/dags/tpcds_ingest", json={"is_paused": False}).raise_for_status()
         run_id = f"tel__{int(time.time())}"

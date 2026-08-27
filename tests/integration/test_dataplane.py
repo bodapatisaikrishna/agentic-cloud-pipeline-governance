@@ -21,7 +21,9 @@ pytestmark = pytest.mark.integration
 def _airflow() -> httpx.Client:
     s = get_settings()
     return httpx.Client(
-        base_url=s.airflow_url, auth=(s.airflow_user, s.airflow_password), timeout=30
+        base_url=s.airflow_url,
+        auth=(s.airflow_user, s.airflow_password.get_secret_value()),
+        timeout=30,
     )
 
 

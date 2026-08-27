@@ -69,7 +69,16 @@ def create_app(require_key: bool = True) -> FastAPI:
     actor_dep = _authenticate if require_key else (lambda: "api")
 
     @app.get("/health")
-    def health() -> dict[str, Any]:  # unauthenticated liveness/readiness
+    def health() -> dict[str, Any]:
+        """Unauthenticated shallow liveness only (D-087) -- a load balancer's health check must
+        work with no credentials, but the full ``doctor()`` report discloses LLM provider,
+        connector identity, execution mode, and raw exception fragments that can carry hostnames
+        or DSN pieces. That detail moves to the authenticated ``/health/ready``."""
+        return {"status": "ok"}
+
+    @app.get("/health/ready", dependencies=auth)
+    def health_ready() -> dict[str, Any]:
+        """Full deployment readiness report (was ``/health``'s body) -- now behind auth."""
         return doctor()
 
     @app.get("/metrics", dependencies=auth)

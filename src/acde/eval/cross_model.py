@@ -59,7 +59,10 @@ def _openai_probe(model: str, scenario: str) -> tuple[str, int, float]:  # pragm
 
     s = get_settings()
     client = openai.OpenAI(
-        base_url=s.oai_base_url, api_key=s.oai_api_key, timeout=40, max_retries=0
+        base_url=s.oai_base_url,
+        api_key=s.oai_api_key.get_secret_value(),
+        timeout=40,
+        max_retries=0,
     )
     system = (
         "You are a data-pipeline recovery agent. Respond with ONLY a JSON object "

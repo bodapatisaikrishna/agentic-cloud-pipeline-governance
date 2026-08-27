@@ -8,7 +8,8 @@ graduating trust, and running it safely.
 ```bash
 cp .env.prod.example .env.prod          # fill in API_KEY, POSTGRES_PASSWORD, AIRFLOW_*, LLM key
 docker compose -f deploy/docker-compose.prod.yml up -d --build
-curl -s localhost:8099/health           # readiness = full doctor report
+curl -s localhost:8099/health                                   # shallow liveness, no auth
+curl -s -H "X-API-Key: $API_KEY" localhost:8099/health/ready     # full doctor report (D-087)
 ```
 
 The prod profile runs **only** `acde-server` + OPA + Postgres. Your orchestrator (Airflow) stays
