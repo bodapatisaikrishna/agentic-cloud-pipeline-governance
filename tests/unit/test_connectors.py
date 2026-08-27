@@ -80,6 +80,9 @@ class TestPrefectConnector:
 class TestDoctor:
     def test_all_ok_when_deps_healthy(self, monkeypatch):
         monkeypatch.setattr(health, "_check_db", lambda: health.Check("database", True, "ok"))
+        monkeypatch.setattr(
+            health, "_check_migrations", lambda: health.Check("migrations", True, "up to date")
+        )
         monkeypatch.setattr(health, "_check_opa", lambda: health.Check("opa", True, "ok"))
         monkeypatch.setattr(
             health,
@@ -101,6 +104,42 @@ class TestDoctor:
         )
         c = health._check_llm()
         assert not c.ok and "MISSING" in c.detail
+
+    def test_migrations_check_reports_pending(self, monkeypatch):
+        import acde.migrations as mig_mod
+
+        monkeypatch.setattr(
+            mig_mod,
+            "status",
+            lambda: {"applied": ["001"], "pending": ["002_add_thing"], "current_version": "001"},
+        )
+        c = health._check_migrations()
+        assert not c.ok
+        assert "002_add_thing" in c.detail
+        assert "acde migrate" in c.detail
+
+    def test_migrations_check_ok_when_up_to_date(self, monkeypatch):
+        import acde.migrations as mig_mod
+
+        monkeypatch.setattr(
+            mig_mod,
+            "status",
+            lambda: {"applied": ["001"], "pending": [], "current_version": "001"},
+        )
+        c = health._check_migrations()
+        assert c.ok
+        assert "001" in c.detail
+
+    def test_migrations_check_surfaces_error(self, monkeypatch):
+        import acde.migrations as mig_mod
+
+        def _boom():
+            raise RuntimeError("checksum drift on 001_baseline")
+
+        monkeypatch.setattr(mig_mod, "status", _boom)
+        c = health._check_migrations()
+        assert not c.ok
+        assert "checksum drift" in c.detail
 
     def test_connector_health_dataclass(self):
         h = ConnectorHealth("x", True, "d", can_act=True)
