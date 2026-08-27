@@ -71,3 +71,17 @@ llmProvider: anthropic
 mockLlm: "1"
 
 extraEnv: {}
+
+# Defense-in-depth beyond what the image itself already does (Dockerfile.server already runs as
+# UID 10001, non-root) — the Pod spec enforces it too, so a misconfigured or compromised image
+# can't silently run as root. readOnlyRootFilesystem defaults off: not verified against the real
+# production image (only a stand-in was available when this chart was built and tested against a
+# real kind cluster, D-089) whether it needs a writable path anywhere (e.g. /tmp) — turn it on
+# once you've confirmed your build doesn't.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]

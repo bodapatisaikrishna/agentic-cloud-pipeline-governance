@@ -22,10 +22,18 @@ spec:
         {{- include "acde.labels" . | nindent 8 }}
         app.kubernetes.io/component: loop
     spec:
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
       containers:
         - name: acde-loop
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              {{- toYaml .Values.securityContext.capabilities | nindent 14 }}
           # args, not command — see deployment-server.yaml's comment: must preserve
           # docker-entrypoint.sh so migrations run before the loop starts.
           args: ["acde", "run", "--config", {{ .Values.loop.config | quote }}, "--duration", {{ .Values.loop.durationSeconds | quote }}]

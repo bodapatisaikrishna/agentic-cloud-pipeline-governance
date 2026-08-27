@@ -19,10 +19,18 @@ spec:
         {{- include "acde.labels" . | nindent 8 }}
         app.kubernetes.io/component: server
     spec:
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
       containers:
         - name: acde-server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              {{- toYaml .Values.securityContext.capabilities | nindent 14 }}
           # args, not command: the image's ENTRYPOINT (docker-entrypoint.sh) must stay in effect --
           # it runs `acde migrate` before exec'ing this. `command:` here would override the
           # entrypoint entirely and silently skip migrations on every pod start.

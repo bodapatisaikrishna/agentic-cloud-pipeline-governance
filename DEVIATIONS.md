@@ -1330,3 +1330,26 @@ plain registry images works fine throughout). Verification used a purpose-built 
 with the identical `ENTRYPOINT`/`CMD`/probe contract to prove the Kubernetes-level mechanics
 (which is what a Helm chart actually governs); it does not substitute for CI's `docker-build` job
 actually building the real image on a clean runner, which remains the authoritative build check.
+
+## D-090 — Pod-level securityContext hardening for the Helm chart
+
+**Found by re-auditing D-089's own chart** with the same rigor applied to the rest of the
+production-hardening sequence: no template set a Pod- or container-level `securityContext`. The
+image already runs non-root (`Dockerfile.server`'s `USER acde`, UID 10001) but nothing enforced
+that at the Kubernetes level — a misconfigured or compromised image build could still run as root
+with no guard against it.
+
+**Fix**: `runAsNonRoot: true` + `runAsUser` at the Pod level for all three Deployments (10001 for
+`acde-server`/`acde-loop`, matching the Dockerfile exactly; 1000 for OPA — confirmed via
+`docker run openpolicyagent/opa:0.68.0 id` that this is the official image's own non-root UID, not
+guessed), plus `allowPrivilegeEscalation: false` and `capabilities: drop: [ALL]` at the container
+level. `readOnlyRootFilesystem` deliberately left off by default and documented as such — not
+verified against the real image (only the D-089 stand-in was available) whether it needs a
+writable path anywhere; turning it on unverified would be asserting something not actually checked,
+which this whole session's discipline has been to avoid.
+
+**Verified against a fresh real `kind` cluster, not assumed from the YAML**: all three Deployments
+reached `Running 1/1` with the new constraints in place (proving OPA's non-default UID 1000 and
+the dropped capabilities don't break anything), and `uid=10001 gid=10001` printed from inside the
+actual running server pod — confirming the constraint is genuinely enforced, not just declared.
+Full verification infrastructure torn down after.

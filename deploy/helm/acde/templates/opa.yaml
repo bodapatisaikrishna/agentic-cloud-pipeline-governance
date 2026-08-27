@@ -20,9 +20,16 @@ spec:
         {{- include "acde.labels" . | nindent 8 }}
         app.kubernetes.io/component: opa
     spec:
+      securityContext:
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+        runAsUser: 1000   # the official OPA image's own non-root UID, distinct from acde's 10001
       containers:
         - name: opa
           image: "{{ .Values.opa.image.repository }}:{{ .Values.opa.image.tag }}"
+          securityContext:
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            capabilities:
+              {{- toYaml .Values.securityContext.capabilities | nindent 14 }}
           # --ignore '..*' skips the hidden directories Kubernetes' ConfigMap volume mount creates
           # for its atomic-update symlink structure (`..2026_..._.../`, `..data`) -- without it OPA
           # walks into them too and loads every .rego file twice, once via the top-level symlink and

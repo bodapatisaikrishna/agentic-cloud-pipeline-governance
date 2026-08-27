@@ -6,6 +6,11 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Pod-level securityContext hardening for the Helm chart (D-090)**: `runAsNonRoot` +
+  `runAsUser` (matching each image's real non-root UID, not guessed), `allowPrivilegeEscalation:
+  false`, `capabilities: drop: [ALL]` on all three Deployments. Verified against a real kind
+  cluster — all pods still reach `Running 1/1` under the new constraints, and the actual running
+  UID was confirmed from inside the pod.
 - **Kubernetes/Helm chart, verified against a real cluster (D-089)**: `deploy/helm/acde/` — HPA-
   capable `acde-server`, a hard-enforced singleton `acde-loop` (the chart refuses to render above
   1 replica), bundled OPA, bring-your-own Postgres. Verified against a real `kind` cluster, not
