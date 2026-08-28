@@ -6,6 +6,10 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Bulk audit export (D-094)**: `GET /audit/export` (CSV/JSON, `viewer`+) — no row cap, unlike
+  `/audit`. Keyset-paginated on `(ts, action_id)` so CSV streams in bounded batches regardless of
+  export size. Verified live against the real 198-row audit trail; both formats matched the
+  database count exactly.
 - **RBAC: viewer / approver / admin (D-093)**: no role concept existed before this. Optional
   third `actor:key:role` field on `api_keys`; a missing role defaults to `admin`, so no existing
   deployment's access silently changes. `require_role(min_role)` gates

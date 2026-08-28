@@ -14,12 +14,17 @@ never silently downgrades anyone's existing access.
 
 from __future__ import annotations
 
+import csv
+import io
+import json
+from collections.abc import Iterator
 from secrets import compare_digest
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from acde import db
@@ -61,6 +66,64 @@ def _authenticate(
         detail="invalid or missing credentials (X-API-Key header or HTTP Basic)",
         headers={"WWW-Authenticate": "Basic"},
     )
+
+
+_EXPORT_COLUMNS = (
+    "action_id",
+    "agent",
+    "action_type",
+    "target",
+    "policy_decision",
+    "policy_reason",
+    "executed",
+    "outcome",
+    "status",
+    "llm_model",
+    "tenant_id",
+    "environment",
+    "ts",
+)
+_EXPORT_BATCH_SIZE = 1000
+
+
+def _audit_rows_paginated(
+    since: str | None, until: str | None, batch_size: int = _EXPORT_BATCH_SIZE
+) -> Iterator[dict[str, Any]]:
+    """Every matching audit row, oldest first, fetched in bounded batches (D-094) — unlike
+    ``/audit``'s ``LIMIT``, this is a genuine full export: a keyset cursor on ``(ts, action_id)``
+    (a plain ``OFFSET`` degrades on a large table, and ``ts`` alone isn't a unique tiebreaker)
+    means memory stays bounded to one batch at a time regardless of how large the result is.
+    """
+    conditions = ["1=1"]
+    params: list[Any] = []
+    if since:
+        conditions.append("ts >= %s")
+        params.append(since)
+    if until:
+        conditions.append("ts <= %s")
+        params.append(until)
+    cursor: tuple[Any, str] | None = None
+    while True:
+        cursor_conditions = list(conditions)
+        cursor_params = list(params)
+        if cursor is not None:
+            cursor_conditions.append("(ts, action_id) > (%s, %s)")
+            cursor_params.extend(cursor)
+        cursor_params.append(batch_size)
+        rows = db.fetch_all(
+            "SELECT action_id, agent, action_type, target, policy_decision, policy_reason, "
+            "executed, outcome, status, llm_model, tenant_id, environment, ts "
+            "FROM telemetry.agent_actions "
+            f"WHERE {' AND '.join(cursor_conditions)} ORDER BY ts ASC, action_id ASC LIMIT %s",
+            tuple(cursor_params),
+        )
+        if not rows:
+            return
+        yield from rows
+        if len(rows) < batch_size:
+            return
+        last = rows[-1]
+        cursor = (last["ts"], str(last["action_id"]))
 
 
 _ROLE_RANK = {"viewer": 0, "approver": 1, "admin": 2}
@@ -163,6 +226,39 @@ def create_app(require_key: bool = True) -> FastAPI:
             "outcome, status, llm_model, ts FROM telemetry.agent_actions "
             f"WHERE {' AND '.join(conditions)} ORDER BY ts DESC LIMIT %s",
             tuple(params),
+        )
+
+    @app.get("/audit/export", dependencies=auth)
+    def audit_export(
+        since: str | None = None,
+        until: str | None = None,
+        export_format: str = Query("csv", alias="format", pattern="^(csv|json)$"),
+    ) -> Response:
+        """The full audit trail matching the same ``since``/``until`` filters as ``/audit`` — no
+        row cap, unlike that endpoint. CSV (default) streams in bounded batches; JSON collects the
+        same paginated query into one response (still uncapped, just not memory-bounded)."""
+        rows = _audit_rows_paginated(since, until)
+        if export_format == "json":
+            return Response(
+                content=json.dumps(list(rows), default=str),
+                media_type="application/json",
+            )
+
+        def _csv_chunks() -> Iterator[str]:
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=_EXPORT_COLUMNS)
+            writer.writeheader()
+            yield buf.getvalue()
+            for row in rows:
+                buf.seek(0)
+                buf.truncate(0)
+                writer.writerow(row)
+                yield buf.getvalue()
+
+        return StreamingResponse(
+            _csv_chunks(),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=acde_audit_export.csv"},
         )
 
     @app.get("/approvals", dependencies=auth)

@@ -112,6 +112,67 @@ def test_audit_without_filters_has_no_range_clause(client, monkeypatch):
     assert params == (100,)
 
 
+def test_audit_export_requires_auth(client):
+    assert client.get("/audit/export").status_code == 401
+
+
+def test_audit_export_csv_has_header_and_rows(client, monkeypatch):
+    import datetime as dt
+
+    fake = MagicMock()
+    row = {
+        "action_id": "a1",
+        "agent": "schema",
+        "action_type": "quarantine_partition",
+        "target": "store_sales",
+        "policy_decision": "allowed",
+        "policy_reason": "ok",
+        "executed": True,
+        "outcome": "quarantined",
+        "status": "executed",
+        "llm_model": "mock",
+        "tenant_id": "default",
+        "environment": "default",
+        "ts": dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+    }
+    fake.fetch_all.return_value = [row]  # one batch, fewer than the page size -> stops after one
+    monkeypatch.setattr(app_mod, "db", fake)
+    r = client.get("/audit/export", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    lines = r.text.strip().splitlines()
+    assert lines[0].split(",")[0] == "action_id"
+    assert "quarantine_partition" in lines[1]
+
+
+def test_audit_export_json_format(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.return_value = [{"action_id": "a1", "agent": "schema"}]
+    monkeypatch.setattr(app_mod, "db", fake)
+    r = client.get("/audit/export", params={"format": "json"}, headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert r.json() == [{"action_id": "a1", "agent": "schema"}]
+
+
+def test_audit_export_paginates_past_the_batch_size(client, monkeypatch):
+    from acde.server.app import _EXPORT_BATCH_SIZE
+
+    full_batch = [{"action_id": f"a{i}", "ts": "t"} for i in range(_EXPORT_BATCH_SIZE)]
+    partial_batch = [{"action_id": "last", "ts": "t"}]
+    fake = MagicMock()
+    fake.fetch_all.side_effect = [full_batch, partial_batch]
+    monkeypatch.setattr(app_mod, "db", fake)
+    r = client.get("/audit/export", params={"format": "json"}, headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert len(r.json()) == _EXPORT_BATCH_SIZE + 1
+    assert fake.fetch_all.call_count == 2
+    second_sql, second_params = fake.fetch_all.call_args_list[1].args
+    assert "(ts, action_id) > (%s, %s)" in second_sql
+    assert second_params[-3:-1] == ("t", "a999")
+
+
 def test_metrics_prometheus_format(client):
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200

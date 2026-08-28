@@ -1482,3 +1482,35 @@ approver key's `POST .../approve` against a nonexistent approval id returns
 just that the gate itself returns the right status code in isolation.
 
 Full unit (444) and integration (27) suites green.
+
+## D-094 — Bulk audit export
+
+`/audit`'s `LIMIT` cap (1000, D-084) is right for the JSON API's normal use, wrong for the actual
+compliance question ("give me everything from Q1") every B2B enterprise-readiness source found
+while researching this feature roadmap lists as a standard expectation alongside SSO/RBAC/audit
+logs. New `GET /audit/export` (`viewer`+): same `since`/`until` filters as `/audit`, no cap.
+
+**Design**: keyset pagination on `(ts, action_id)`, not `OFFSET` — `OFFSET` degrades on a large
+table (Postgres still has to scan and discard every skipped row), and `ts` alone isn't a unique
+tiebreaker (two actions can share a timestamp). `action_id` (the primary key) breaks ties and makes
+the cursor stable. CSV (default) streams via `StreamingResponse`, one batch (1000 rows) in memory
+at a time regardless of export size — the actual point of a bulk-export endpoint. JSON collects the
+same generator into one response (still uncapped, just not memory-bounded — a reasonable
+simplification since CSV is what carries the "handles a huge export" property).
+
+**Mutation-tested**: removed the pagination stop condition (`if len(rows) < batch_size: return`) —
+the test failed exactly as expected (the generator tried to fetch a third, non-existent batch from
+a 2-item mock `side_effect`, raising `StopIteration`). Restored, reconfirmed 29/29 `test_server.py`
+green.
+
+**Verified live against the real running server and its real 198-row audit trail** (accumulated
+across this entire session's work) — both formats matched the real database count exactly. Caught
+my own verification mistake along the way: `wc -l` on the CSV output showed 214 lines against a
+198-row JSON export and a 198-row `SELECT count(*)`, which looked like a real bug — a proper CSV
+parser (`csv.DictReader`) confirmed exactly 198 rows. `wc -l` counts raw newline characters, which
+over-counts when `csv.DictWriter` correctly quotes a field containing an embedded newline (e.g. a
+multi-line `outcome`/`justification`); the CSV itself was correct, the verification tool was wrong.
+Recorded here rather than silently discarded, since catching your own false alarm and saying so is
+part of the same honesty this session has held code changes to.
+
+Full unit (448) and integration (27) suites green.
