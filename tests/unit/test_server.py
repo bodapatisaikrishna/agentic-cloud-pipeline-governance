@@ -26,6 +26,7 @@ def client(monkeypatch):
     # import -- a third separate reference from app_mod's and metrics.py's, same pitfall as above.
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -225,6 +226,7 @@ def test_costs_returns_per_tenant_breakdown(client, monkeypatch):
     ]
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = client.get("/costs", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert r.json() == [
@@ -254,6 +256,7 @@ def test_metrics_includes_per_tenant_cost_gauge(client, monkeypatch):
     fake.fetch_one.return_value = {"n": 0}
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert 'acde_cost_units_by_tenant{tenant_id="acme"} 3.0' in r.text
@@ -315,6 +318,7 @@ def multi_actor_client(monkeypatch):
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -361,6 +365,7 @@ def role_client(monkeypatch):
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -469,6 +474,7 @@ def tenant_client(monkeypatch):
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -510,6 +516,10 @@ def test_audit_export_and_costs_and_compliance_report_are_also_scoped(tenant_cli
     fake.fetch_one.return_value = {"n": 0}
     monkeypatch.setattr(app_mod, "db", fake)
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
+    # compliance.py has its own separate `db` import (the same "patch every module's own
+    # reference" pitfall this session has caught repeatedly elsewhere) -- without this, /compliance
+    # -report below falls through to the real, unmocked pool.
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
 
     r = tenant_client.get("/audit/export", headers={"X-API-Key": "viv-key"})
     assert r.status_code == 200
@@ -535,6 +545,7 @@ def test_suspended_tenant_gets_403(tenant_client, monkeypatch):
         "created_ts": "t",
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.get("/proposals", headers={"X-API-Key": "viv-key"})
     assert r.status_code == 403
 
@@ -551,6 +562,7 @@ def test_unbound_actor_never_hits_the_tenant_table(tenant_client, monkeypatch):
     fake = MagicMock()
     fake.fetch_one.side_effect = AssertionError("must not be called for an unbound actor")
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.get("/proposals", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 200
 
@@ -571,6 +583,7 @@ def test_admin_can_create_list_suspend_activate_a_tenant(tenant_client, monkeypa
         {"tenant_id": "beta", "display_name": "Beta LLC", "status": "active", "created_ts": "t"}
     ]
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
 
     r = tenant_client.post(
         "/tenants",
@@ -616,6 +629,7 @@ def test_create_duplicate_tenant_is_409(tenant_client, monkeypatch):
         "created_ts": "t",
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.post(
         "/tenants",
         params={"tenant_id": "acme", "display_name": "Acme Again"},
@@ -633,6 +647,7 @@ def test_admin_can_reactivate_a_suspended_tenant(tenant_client, monkeypatch):
         "created_ts": "t",
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.post("/tenants/acme/activate", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 200
     assert r.json()["status"] == "active"
@@ -642,6 +657,7 @@ def test_suspend_unknown_tenant_is_404(tenant_client, monkeypatch):
     fake = MagicMock()
     fake.fetch_one.return_value = None
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.post("/tenants/nope/suspend", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 404
 
@@ -650,5 +666,6 @@ def test_activate_unknown_tenant_is_404(tenant_client, monkeypatch):
     fake = MagicMock()
     fake.fetch_one.return_value = None
     monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.post("/tenants/nope/activate", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 404

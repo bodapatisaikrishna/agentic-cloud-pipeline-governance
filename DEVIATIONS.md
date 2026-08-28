@@ -1671,4 +1671,18 @@ API: `viv`'s next request got a real `403`; reactivated: `200` again. `/costs` a
 `/compliance-report` showed the same scoped-vs-unscoped split. Cleaned up the verification tenant
 and server process afterward.
 
-Full unit (497) and integration (27) suites green.
+**Real bug caught by CI, not local testing**: the pushed commit failed CI's `quality` job (no
+docker, no real Postgres) with `psycopg_pool.PoolTimeout: couldn't get a connection after 30.00
+sec` in `test_audit_export_and_costs_and_compliance_report_are_also_scoped` — the exact
+"patch every module's own `db` import" pitfall D-091 and D-095 already hit, landed a third time:
+`acde.ops.compliance` has its own separate `db` import, and the test's local mock never patched
+it, so `/compliance-report` fell through to a real, unmocked connection pool. It passed locally
+only because a real Postgres happened to be running in this dev environment, silently masking the
+gap — CI's docker-free `quality` job is what actually exercises the "no real DB reachable" case
+this pattern depends on. Fixed by patching `acde.ops.compliance.db` in the test (and, defensively,
+in every fixture in the file). **Re-verified by stopping the local Postgres container and
+re-running the fixed test** — it completed in under a second with zero real connection attempt
+(confirmed by the absence of `db_pool_opened` in its output), the actual proof the fix works
+rather than trusting a second green run against a database that happened to be up again.
+
+Full unit (498) and integration (27) suites green.
