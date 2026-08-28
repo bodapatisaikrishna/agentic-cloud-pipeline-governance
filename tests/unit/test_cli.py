@@ -80,6 +80,18 @@ def test_approvals_approve(monkeypatch):
     assert cli.main(["approvals", "approve", "7"]) == 0
 
 
+def test_compliance_report_prints_json(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.ops.compliance.compliance_report",
+        lambda since_hours: {"window_hours": since_hours, "availability": {"healthy": True}},
+    )
+    rc = cli.main(["compliance-report", "--since-hours", "48"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"window_hours": 48.0' in out
+    assert '"healthy": true' in out
+
+
 def test_unknown_command_errors():
     import pytest
 

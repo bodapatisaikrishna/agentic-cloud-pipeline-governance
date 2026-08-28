@@ -62,6 +62,7 @@ def test_protected_routes_require_key(client):
     assert client.get("/audit").status_code == 401
     assert client.get("/health/ready").status_code == 401
     assert client.get("/costs").status_code == 401
+    assert client.get("/compliance-report").status_code == 401
 
 
 def test_docs_and_openapi_require_auth(client):
@@ -253,6 +254,22 @@ def test_metrics_includes_per_tenant_cost_gauge(client, monkeypatch):
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert 'acde_cost_units_by_tenant{tenant_id="acme"} 3.0' in r.text
+
+
+def test_compliance_report_requires_auth(client):
+    assert client.get("/compliance-report").status_code == 401
+
+
+def test_compliance_report_returns_the_report_shape(client, monkeypatch):
+    monkeypatch.setattr(
+        "acde.server.app.compliance_report",
+        lambda since_hours: {"window_hours": since_hours, "availability": {"healthy": True}},
+    )
+    r = client.get(
+        "/compliance-report", params={"since_hours": 48}, headers={"X-API-Key": "secret"}
+    )
+    assert r.status_code == 200
+    assert r.json() == {"window_hours": 48.0, "availability": {"healthy": True}}
 
 
 def test_approvals_endpoints(client, monkeypatch):

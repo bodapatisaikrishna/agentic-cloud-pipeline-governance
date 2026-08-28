@@ -138,6 +138,15 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compliance_report(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.ops.compliance import compliance_report
+
+    print(json.dumps(compliance_report(since_hours=args.since_hours), indent=2))
+    return 0
+
+
 def cmd_gameday(args: argparse.Namespace) -> int:
     import json
 
@@ -218,6 +227,10 @@ def build_parser() -> argparse.ArgumentParser:
     rp = sub.add_parser("report", help="ROI report from the audit trail")
     rp.add_argument("--since-hours", type=float, default=720.0)
     rp.set_defaults(func=cmd_report)
+
+    cr = sub.add_parser("compliance-report", help="compliance/audit evidence report")
+    cr.add_argument("--since-hours", type=float, default=720.0)
+    cr.set_defaults(func=cmd_compliance_report)
 
     gd = sub.add_parser("gameday", help="rehearse an incident in staging (research extra)")
     gd.add_argument("--scenario", required=True)

@@ -6,6 +6,11 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Compliance/audit evidence report (D-096)**: `acde compliance-report` CLI + `GET
+  /compliance-report` (`viewer`+) — policy verdict distribution, incident count + MTTR (now real
+  thanks to D-091), and a point-in-time availability check that explicitly does not fabricate a
+  historical uptime %. Verified live: matched the real DB's audit-trail and open-incident counts
+  exactly.
 - **Per-tenant cost attribution + budget alert (D-095)**: `GET /costs` (`viewer`+) and a new
   `acde_cost_units_by_tenant{tenant_id="..."}` `/metrics` gauge, both reading D-085's tenant/
   environment columns back grouped for the first time. New `ACDEBudgetExceeded` alert, threshold

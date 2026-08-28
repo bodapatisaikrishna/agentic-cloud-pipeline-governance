@@ -31,6 +31,7 @@ from acde import db
 from acde.config import get_settings
 from acde.human import approvals
 from acde.logging import get_logger
+from acde.ops.compliance import compliance_report
 from acde.ops.health import doctor
 from acde.server import dashboard, metrics
 from acde.telemetry import cost
@@ -266,6 +267,12 @@ def create_app(require_key: bool = True) -> FastAPI:
     def costs(since_hours: float = 24.0) -> list[dict[str, float | str]]:
         """Per-tenant cost + LLM token breakdown over the trailing window (D-095)."""
         return cost.costs_by_tenant(since_hours=since_hours)
+
+    @app.get("/compliance-report", dependencies=auth)
+    def compliance_report_endpoint(since_hours: float = 720.0) -> dict[str, Any]:
+        """Compliance/audit evidence report (D-096): policy verdict distribution, incident
+        count + MTTR, and a point-in-time availability check."""
+        return compliance_report(since_hours=since_hours)
 
     @app.get("/approvals", dependencies=auth)
     def list_approvals() -> list[dict[str, Any]]:

@@ -1563,3 +1563,46 @@ SUM(llm_tokens_in+llm_tokens_out) FROM telemetry.agent_actions` exactly. Started
 exposition renderer — read the identical live data consistently.
 
 Full unit (453) and integration suites green (see CI).
+
+## D-096 — Compliance / audit evidence report
+
+The last item of this plan's feature roadmap: an "evidence" artifact for the compliance question
+every enterprise-readiness source consulted for this roadmap lists next to SSO/RBAC/audit logs —
+"show me what happened, and that it was governed." New `src/acde/ops/compliance.py`, following
+`ops/roi.py`'s exact existing pattern (pure SQL over telemetry, no research extra, safe to run in
+production); `acde compliance-report` CLI command; `GET /compliance-report` API route (`viewer`+,
+plain `auth`, same as `/costs`).
+
+**Design**: three sections, each a real, already-computable number, no invented metric:
+- **Policy verdict distribution** — `agent_actions.policy_decision` counts + percentages over the
+  window. A dead defensive branch was found and removed here: `pct = {... if total else 0.0 ...}`
+  guarded a division that can never actually run at `total=0`, since `total` is the sum of the
+  same `counts` dict the comprehension iterates — an empty `counts` (the only way to get
+  `total=0`) means zero iterations, not a division. Mutation-tested by deleting the guard: the
+  existing "no rows" test still passed unchanged, which is the proof the guard was truly dead,
+  not that the test was weak — removed per this repo's no-dead-code rule rather than left in
+  as false reassurance.
+- **Incidents + MTTR** — now a real number **because of D-091** earlier in this same roadmap; this
+  is the report item D-091's plan section flagged as otherwise being "honest-looking but
+  functionally inert in production." Same computation `roi.py` already does over
+  `failure_events`, plus a `open_now` count `roi.py` doesn't currently surface.
+- **Availability** — a point-in-time heartbeat freshness check (`control.heartbeat_age_s()` vs.
+  `monitoring_interval_s * 3`, the exact threshold `loop-health`'s own container healthcheck
+  already uses), explicitly **not** a fabricated historical uptime percentage — ACDE's database
+  retains no heartbeat *history*, only the latest value, and building one is out of scope here.
+  The limitation is stated in the report's own `note` field, the same honesty standard `roi.py`'s
+  `estimated_operator_hours_saved` already holds itself to.
+
+**Mutation-tested** (the availability healthy check): `age is not None and age <= max_age` mutated
+to `age is not None` — the existing stale-heartbeat test failed exactly as expected (`assert True
+is False`). Restored, reconfirmed `test_compliance.py`'s 8/8 green.
+
+**Verified live against the real running stack**: `acde compliance-report --since-hours 100000`
+and a real `uvicorn` process's `GET /compliance-report` (temporary `API_KEY`, cleaned up after)
+returned byte-identical numbers — `total: 198` matching `SELECT count(*) FROM
+telemetry.agent_actions` exactly, `open_now: 3` matching `SELECT count(*) ... WHERE resolved_ts IS
+NULL` exactly, and `availability.healthy: false` — correctly, since no `acde-loop` container is
+currently running against this dev stack, which is exactly the honest "no heartbeat, no fabricated
+uptime claim" behavior this design decision exists to produce rather than paper over.
+
+Full unit (464) and integration (27) suites green.
