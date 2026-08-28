@@ -82,3 +82,39 @@ class TestComputeCostWindows:
         fake.fetch_one.return_value = {"lo": None, "hi": None}
         monkeypatch.setattr(cost, "db", fake)
         assert cost.compute_cost_windows(experiment_run="empty") == 0
+
+
+class TestCostsByTenant:
+    def test_groups_by_tenant_and_joins_token_spend(self, monkeypatch):
+        fake = MagicMock()
+        fake.fetch_all.side_effect = [
+            [
+                {
+                    "tenant_id": "acme",
+                    "cost_units": 12.5,
+                    "compute_unit_seconds": 200.0,
+                    "storage_gb_hours": 1.0,
+                },
+                {
+                    "tenant_id": "beta",
+                    "cost_units": 4.0,
+                    "compute_unit_seconds": 80.0,
+                    "storage_gb_hours": 0.0,
+                },
+            ],
+            [{"tenant_id": "acme", "llm_tokens": 500}],  # beta has no agent_actions rows at all
+        ]
+        monkeypatch.setattr(cost, "db", fake)
+        rows = cost.costs_by_tenant(since_hours=24.0)
+        by_tenant = {r["tenant_id"]: r for r in rows}
+        assert by_tenant["acme"]["cost_units"] == pytest.approx(12.5)
+        assert by_tenant["acme"]["llm_tokens"] == pytest.approx(500.0)
+        # mutation-test proof: without the token join, a tenant absent from agent_actions would
+        # KeyError rather than default to 0 -- .get(..., 0.0) is what's actually under test here.
+        assert by_tenant["beta"]["llm_tokens"] == pytest.approx(0.0)
+
+    def test_no_ledger_rows_returns_empty(self, monkeypatch):
+        fake = MagicMock()
+        fake.fetch_all.return_value = []
+        monkeypatch.setattr(cost, "db", fake)
+        assert cost.costs_by_tenant() == []

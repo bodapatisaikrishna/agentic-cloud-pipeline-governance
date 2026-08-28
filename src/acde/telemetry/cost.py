@@ -189,6 +189,39 @@ def compute_cost_windows(experiment_run: str | None = None, window_s: float | No
     return written
 
 
+def costs_by_tenant(since_hours: float = 24.0) -> list[dict[str, float | str]]:
+    """Per-tenant cost breakdown over the trailing window (D-095) — the first thing that reads
+    ``cost_ledger.tenant_id``/D-085's own multi-tenant columns back grouped, rather than just
+    stamping them on write. LLM token spend is a companion sum from ``agent_actions`` (not itself
+    a cost-unit input, but the other real per-tenant spend an operator wants next to it) joined by
+    ``tenant_id`` in Python rather than a SQL join, since the two tables share no other key.
+    """
+    since = dt.datetime.now(dt.UTC) - dt.timedelta(hours=since_hours)
+    cost_rows = db.fetch_all(
+        "SELECT tenant_id, COALESCE(SUM(cost_units), 0) AS cost_units, "
+        "COALESCE(SUM(compute_unit_seconds), 0) AS compute_unit_seconds, "
+        "COALESCE(SUM(storage_gb_hours), 0) AS storage_gb_hours "
+        "FROM telemetry.cost_ledger WHERE window_end >= %s GROUP BY tenant_id",
+        (since,),
+    )
+    token_rows = db.fetch_all(
+        "SELECT tenant_id, COALESCE(SUM(llm_tokens_in + llm_tokens_out), 0) AS llm_tokens "
+        "FROM telemetry.agent_actions WHERE ts >= %s GROUP BY tenant_id",
+        (since,),
+    )
+    tokens_by_tenant = {r["tenant_id"]: float(r["llm_tokens"] or 0) for r in token_rows}
+    return [
+        {
+            "tenant_id": r["tenant_id"],
+            "cost_units": float(r["cost_units"] or 0),
+            "compute_unit_seconds": float(r["compute_unit_seconds"] or 0),
+            "storage_gb_hours": float(r["storage_gb_hours"] or 0),
+            "llm_tokens": tokens_by_tenant.get(r["tenant_id"], 0.0),
+        }
+        for r in cost_rows
+    ]
+
+
 def main() -> None:  # pragma: no cover - CLI
     parser = argparse.ArgumentParser(description="ACDE cost-ledger aggregator")
     parser.add_argument("--experiment-run", default=None)

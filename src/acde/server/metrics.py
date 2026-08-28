@@ -16,6 +16,7 @@ import time
 
 from acde import db
 from acde.orchestrator.control import heartbeat_age_s
+from acde.telemetry.cost import costs_by_tenant
 
 
 def _scalar(sql: str) -> float:
@@ -61,6 +62,11 @@ def _loop_last_tick_ts() -> float | None:
     return None if age is None else time.time() - age
 
 
+def _escape_label(value: str) -> str:
+    """Prometheus label-value escaping: backslash, double-quote, newline (text-format spec)."""
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
 def render() -> str:
     """Return Prometheus text-format metrics."""
     m = snapshot()
@@ -96,4 +102,14 @@ def render() -> str:
             "# TYPE acde_loop_last_tick_timestamp_seconds gauge",
             f"acde_loop_last_tick_timestamp_seconds {last_tick:.3f}",
         ]
+    # D-095: per-tenant cost, trailing 24h -- same window costs_by_tenant defaults to, so /metrics
+    # and /costs agree without a separate parameter to keep in sync.
+    tenant_costs = costs_by_tenant(since_hours=24.0)
+    lines += [
+        "# HELP acde_cost_units_by_tenant Trailing-24h cost units, by tenant.",
+        "# TYPE acde_cost_units_by_tenant gauge",
+    ]
+    for row in tenant_costs:
+        label = _escape_label(str(row["tenant_id"]))
+        lines.append(f'acde_cost_units_by_tenant{{tenant_id="{label}"}} {row["cost_units"]}')
     return "\n".join(lines) + "\n"

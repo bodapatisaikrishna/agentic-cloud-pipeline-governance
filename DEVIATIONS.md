@@ -1514,3 +1514,52 @@ Recorded here rather than silently discarded, since catching your own false alar
 part of the same honesty this session has held code changes to.
 
 Full unit (448) and integration (27) suites green.
+
+## D-095 — Per-tenant cost attribution + budget alert
+
+D-085 added `tenant_id`/`environment` columns across every scoped telemetry table and
+`compute_cost_windows` already stamps them on every `cost_ledger` write — but nothing ever read
+them back *grouped*. A per-tenant deployment (or a single deployment tracking cost by environment)
+had no way to answer "who/what is actually driving spend," the same gap the market research for
+this roadmap flagged against Arthur/Fiddler-style governance platforms.
+
+**Design**: `telemetry/cost.py` gained `costs_by_tenant(since_hours=24.0)` — `SUM(cost_units)`,
+`SUM(compute_unit_seconds)`, `SUM(storage_gb_hours)` from `cost_ledger` grouped by `tenant_id` over
+the trailing window, joined in Python (not SQL — the two tables share no other key) against a
+companion per-tenant `SUM(llm_tokens_in + llm_tokens_out)` from `agent_actions`, since token spend
+is the other real per-tenant cost an operator wants next to it even though it isn't a `cost_units`
+input. `GET /costs` (`server/app.py`, `viewer`+, plain `auth` — every authenticated actor is
+viewer-or-above, so no `require_role` call was needed) exposes it as JSON. `/metrics` gained
+`acde_cost_units_by_tenant{tenant_id="..."}`, one gauge line per tenant, same trailing-24h window
+as the JSON route's default so the two never quietly disagree; a `_escape_label` helper backslash/
+quote/newline-escapes the label value per the Prometheus text-format spec (a tenant ID is
+operator-controlled config today, not user input, but the endpoint had no reason to assume that
+stays true). New `ACDEBudgetExceeded` alert in `deploy/observability/alerts.yml`, threshold `100`
+mirroring `Settings.budget_default_units` — the same number the cost OPA policy already enforces
+per-action, not an independently invented alert threshold.
+
+**Bug caught while wiring this up**: `costs_by_tenant` and `/metrics`' new gauge both go through
+`acde.telemetry.cost`'s own `db` import — a *third* separate reference from `server/app.py`'s and
+`server/metrics.py`'s own `db` bindings, the exact "patch the module you think you're patching,
+not the one actually executing the query" pitfall D-091 hit with `agents/monitoring.py`. Caught in
+review before it caused a stray-write-style incident this time (a read-only endpoint, so the
+failure mode here would have been *tests silently hitting a real database* rather than
+corrupting it) — `tests/unit/test_server.py`'s `client`/`multi_actor_client`/`role_client`
+fixtures all gained `monkeypatch.setattr("acde.telemetry.cost.db", fake)` alongside the existing
+`orchestrator.control.db` patch that already documents the same lesson.
+
+**Mutation-tested**: the token join's `.get(tenant_id, 0.0)` default was replaced with a bare
+`[tenant_id]` lookup — the new "a tenant with no `agent_actions` rows" test failed exactly as
+expected (`KeyError: 'beta'`). Restored, reconfirmed `test_cost.py`'s `TestCostsByTenant` green.
+
+**Verified live against the real running Postgres** (2812 real `cost_ledger` rows, all
+`tenant_id='default'` since this is still a single-tenant deployment): `costs_by_tenant` over an
+all-time window returned `cost_units=1798.126...`, matching `SELECT SUM(cost_units) FROM
+telemetry.cost_ledger` exactly, and `llm_tokens=247955`, matching `SELECT
+SUM(llm_tokens_in+llm_tokens_out) FROM telemetry.agent_actions` exactly. Started a real
+`uvicorn` process against the same database (temporary `API_KEY`, stopped and cleaned up after);
+`GET /costs` and `GET /metrics`'s new gauge line agreed on the same trailing-24h number
+(`43.500000812032006`), confirming the two code paths — one via the JSON route, one via the text
+exposition renderer — read the identical live data consistently.
+
+Full unit (453) and integration suites green (see CI).

@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Per-tenant cost attribution + budget alert (D-095)**: `GET /costs` (`viewer`+) and a new
+  `acde_cost_units_by_tenant{tenant_id="..."}` `/metrics` gauge, both reading D-085's tenant/
+  environment columns back grouped for the first time. New `ACDEBudgetExceeded` alert, threshold
+  mirroring `Settings.budget_default_units` (the same number the cost OPA policy already
+  enforces). Verified live against 2812 real `cost_ledger` rows — the per-tenant sum matched the
+  global DB sum exactly, and a real running server's `/costs` and `/metrics` agreed on the same
+  number.
 - **Bulk audit export (D-094)**: `GET /audit/export` (CSV/JSON, `viewer`+) — no row cap, unlike
   `/audit`. Keyset-paginated on `(ts, action_id)` so CSV streams in bounded batches regardless of
   export size. Verified live against the real 198-row audit trail; both formats matched the

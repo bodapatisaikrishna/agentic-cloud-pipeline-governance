@@ -33,6 +33,7 @@ from acde.human import approvals
 from acde.logging import get_logger
 from acde.ops.health import doctor
 from acde.server import dashboard, metrics
+from acde.telemetry import cost
 
 log = get_logger("server.app")
 
@@ -260,6 +261,11 @@ def create_app(require_key: bool = True) -> FastAPI:
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=acde_audit_export.csv"},
         )
+
+    @app.get("/costs", dependencies=auth)
+    def costs(since_hours: float = 24.0) -> list[dict[str, float | str]]:
+        """Per-tenant cost + LLM token breakdown over the trailing window (D-095)."""
+        return cost.costs_by_tenant(since_hours=since_hours)
 
     @app.get("/approvals", dependencies=auth)
     def list_approvals() -> list[dict[str, Any]]:

@@ -42,3 +42,15 @@ groups:
         annotations:
           summary: "Policy denied {{ $value }} actions in the last 10 minutes"
           description: "Agents are repeatedly proposing actions the policy rejects -- check policy config or a misbehaving/hallucinating LLM (see DEVIATIONS D-082)."
+
+      - alert: ACDEBudgetExceeded
+        # D-095: keyed off BUDGET_DEFAULT_UNITS, the same per-run budget number the cost OPA
+        # policy already enforces (Settings.budget_default_units) -- the alert threshold isn't
+        # invented separately from the number that already gates actions.
+        expr: acde_cost_units_by_tenant > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tenant {{ $labels.tenant_id }} over its trailing-24h cost budget ({{ $value }} units)"
+          description: "GET /costs for the per-tenant breakdown. Threshold mirrors BUDGET_DEFAULT_UNITS (default 100) -- update both together if you change it."

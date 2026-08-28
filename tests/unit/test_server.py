@@ -22,6 +22,9 @@ def client(monkeypatch):
     # reference from metrics.py's own, and otherwise unmocked, would silently hit a real database
     # if one happens to be running (tests/unit is meant to need neither docker nor network).
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    # D-095: /costs and /metrics' per-tenant gauge both go through acde.telemetry.cost's own `db`
+    # import -- a third separate reference from app_mod's and metrics.py's, same pitfall as above.
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -58,6 +61,7 @@ def test_protected_routes_require_key(client):
     assert client.get("/metrics").status_code == 401
     assert client.get("/audit").status_code == 401
     assert client.get("/health/ready").status_code == 401
+    assert client.get("/costs").status_code == 401
 
 
 def test_docs_and_openapi_require_auth(client):
@@ -200,6 +204,57 @@ def test_metrics_includes_loop_heartbeat_gauge_when_recorded(client, monkeypatch
     assert "acde_loop_last_tick_timestamp_seconds" in r.text
 
 
+def test_costs_requires_auth(client):
+    assert client.get("/costs").status_code == 401
+
+
+def test_costs_returns_per_tenant_breakdown(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.side_effect = [
+        [
+            {
+                "tenant_id": "acme",
+                "cost_units": 12.5,
+                "compute_unit_seconds": 200.0,
+                "storage_gb_hours": 1.0,
+            }
+        ],
+        [{"tenant_id": "acme", "llm_tokens": 500}],
+    ]
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
+    r = client.get("/costs", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.json() == [
+        {
+            "tenant_id": "acme",
+            "cost_units": 12.5,
+            "compute_unit_seconds": 200.0,
+            "storage_gb_hours": 1.0,
+            "llm_tokens": 500.0,
+        }
+    ]
+
+
+def test_metrics_includes_per_tenant_cost_gauge(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.side_effect = [
+        [
+            {
+                "tenant_id": "acme",
+                "cost_units": 3.0,
+                "compute_unit_seconds": 0.0,
+                "storage_gb_hours": 0.0,
+            }
+        ],
+        [],
+    ]
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
+    r = client.get("/metrics", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert 'acde_cost_units_by_tenant{tenant_id="acme"} 3.0' in r.text
+
+
 def test_approvals_endpoints(client, monkeypatch):
     monkeypatch.setattr("acde.human.approvals.approve", lambda i, actor: {"status": "executed"})
     r = client.post("/approvals/5/approve", headers={"X-API-Key": "secret"})
@@ -235,6 +290,7 @@ def multi_actor_client(monkeypatch):
     # reference from metrics.py's own, and otherwise unmocked, would silently hit a real database
     # if one happens to be running (tests/unit is meant to need neither docker nor network).
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -279,6 +335,7 @@ def role_client(monkeypatch):
     monkeypatch.setattr(app_mod.metrics, "db", fake)
     monkeypatch.setattr("acde.human.approvals.db", fake)
     monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
     return TestClient(app_mod.create_app())
 
 

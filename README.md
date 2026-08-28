@@ -89,7 +89,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv incl. the benchmark/chaos/analysis extras
 cp .env.example .env          # defaults work; MOCK_LLM=1 is the default everywhere
-make lint && make test-unit   # gate: ruff+mypy clean, 384 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 453 unit tests, coverage ≥ 80%
 make up && make seed          # full stack (postgres, opa, redpanda, airflow) + seeded data
 make experiment-quick         # 96-run matrix (8 configs × 4 scenarios × N=3)
 make report                   # → results/results.md + results/figures/*.png
@@ -166,7 +166,7 @@ and resumable.
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, design guarantees, operator responsibilities |
 | [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) | Paper section → implementation → measured result |
 | [`REPORT.md`](REPORT.md) | What reproduces from the paper, what doesn't, and why |
-| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (73 entries) |
+| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (94 entries) |
 | [`DATA_LICENSES.md`](DATA_LICENSES.md) | Provenance & licensing of the TPC-DS / NYC TLC datasets |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history, v0.1 → v2.2.0 |
 
@@ -455,7 +455,8 @@ without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) 
 | Tier 1 | Published Docker image, backfilled GitHub Releases, hardened CI (opa-test, docker-build+Trivy, pip-audit), OSS hygiene | ✅ verified |
 | Tier 2 | Multi-actor API auth, web dashboard, integration tests proven in CI, Prefect connector (v2.1.0) | ✅ verified |
 | Post-Tier 2 hardening | Concurrency fuzzing (D-077), OPA policy audit + coverage (D-078), real bid-based conflict resolution correcting D-038 (D-079), dead live-LLM model default found + fixed (D-080), first full live-LLM validation pass (96/96 clean runs against the real NVIDIA endpoint, D-081), a real recovery-agent target hallucination found + fixed (D-082) | ✅ verified (unreleased) |
-| Production hardening | Systematic audit found a real production could not survive: migration framework (D-083, prior schema tooling silently no-op'd outside a dev checkout), write-ahead audit trail (D-084, an executed action could be lost entirely on a crash), tenant/environment schema boundary (D-085), hot-path indexes with real before/after benchmarks (D-086, one proposed index measured and proven dead before ever being committed), `/health` split + every credential converted to `SecretStr` (D-087), supervised control loop + `deploy/observability/` built for real and verified against live Prometheus/Grafana (D-088), Kubernetes/Helm chart verified against a real `kind` cluster with 2 real bugs caught (D-089) | ✅ verified (unreleased) |
+| Production hardening | Systematic audit found a real production could not survive: migration framework (D-083, prior schema tooling silently no-op'd outside a dev checkout), write-ahead audit trail (D-084, an executed action could be lost entirely on a crash), tenant/environment schema boundary (D-085), hot-path indexes with real before/after benchmarks (D-086, one proposed index measured and proven dead before ever being committed), `/health` split + every credential converted to `SecretStr` (D-087), supervised control loop + `deploy/observability/` built for real and verified against live Prometheus/Grafana (D-088), Kubernetes/Helm chart verified against a real `kind` cluster with 2 real bugs caught (D-089), Pod-level `securityContext` hardening for the Helm chart (D-090) | ✅ verified (unreleased) |
+| Startup transformation | Real anomaly detection wired into production, was chaos-only (D-091, `agents/detection.py`'s tested 9-test detector had zero callers), `/docs`+`/openapi.json` authenticated (D-092, confirmed live-unauthenticated before the fix), RBAC — viewer/approver/admin (D-093), bulk audit export with keyset pagination (D-094), per-tenant cost attribution + `ACDEBudgetExceeded` alert (D-095) | ✅ verified (unreleased) |
 
 ## Reproduction
 
@@ -468,7 +469,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv from the committed uv.lock, incl. research deps
 cp .env.example .env          # defaults work; add ANTHROPIC_API_KEY only for optional live runs
-make lint && make test-unit   # gate: ruff+mypy clean, 384 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 453 unit tests, coverage ≥ 80%
 
 make up                       # full stack: postgres, opa, redpanda, airflow
 make seed                     # seeded TPC-DS + open-gov data, then migrate the DB
