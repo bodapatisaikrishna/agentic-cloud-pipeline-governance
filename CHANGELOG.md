@@ -6,6 +6,12 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Database backup & restore (D-099)**: `acde backup`/`acde restore --yes` wrap real
+  `pg_dump`/`pg_restore`; `--target-db` supports a restore drill without touching the live
+  database. Fixed a real gap found while planning: the production image never installed
+  `postgresql-client`, so these wouldn't have worked in a real deployment at all. Verified live:
+  a real dump, restored into a throwaway database, byte-for-byte row-count match against the
+  source.
 - **Operator API rate limiting (D-098)**: in-process, per-actor/per-source fixed-window limiter,
   `API_RATE_LIMIT_PER_MINUTE` (`0` = unlimited, default). Runs as middleware ahead of auth, so it
   also throttles pre-auth key-guessing floods; `/health` stays exempt. New

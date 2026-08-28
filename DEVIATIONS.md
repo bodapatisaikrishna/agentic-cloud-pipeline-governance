@@ -1747,3 +1747,68 @@ actor's own unaffected budget. All verification server processes stopped and cle
 verification, which is exactly the lesson from the incident recorded there).
 
 Full unit (511) and integration (27) suites green.
+
+## D-099 — Database backup & restore
+
+Continuing the "pick whatever makes the software best" mandate from D-098. Audited beyond the
+operator API this time: **zero backup or restore tooling or documentation exists anywhere** —
+grepped `docs/`, `Makefile`, `cli.py` for backup/restore, nothing. Every real deployment's entire
+state (the audit trail, the tenant registry, everything) lives in one Postgres with no documented,
+tooled recovery path. At least as fundamental as D-098's rate limiting: a rate limit protects
+availability, a backup protects existence.
+
+**A real portability gap found while planning, fixed as part of this, not left as a surprise**:
+`deploy/Dockerfile.server`'s runtime image didn't install `postgresql-client` — `pg_dump`/
+`pg_restore` weren't available inside the actual production container at all, only in local dev
+where they happen to already be installed. The same "looks done, isn't really outside the dev
+laptop" class of gap D-089's stand-in-vs-real Helm image caught.
+
+**Design**: `src/acde/ops/backup.py` — `backup()`/`restore()` shell out to the real `pg_dump -Fc`/
+`pg_restore --clean --if-exists --no-owner` rather than reimplementing a dump format. Connection
+passed via environment variables (`PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`), never as
+a command-line argument — an argv-embedded password is visible to any other process on the host
+via `ps aux`; environment variables of a child process are not. `restore(dump_path, target_db=)`
+takes an optional target database, defaulting to the live one (the real, destructive DR path) but
+overridable — turning a **restore drill** (verify a backup is actually restorable without
+touching production) into a first-class, reusable operation rather than an ad hoc trick.
+CLI-only (`acde backup`/`acde restore --yes`), deliberately no HTTP route: a network-reachable
+restore endpoint is meaningfully more attack surface for no real benefit, when an operator
+invoking this already has shell access to the container, the same trust boundary every other
+`acde` CLI command assumes. `restore` refuses without `--yes` (same pattern `gameday --force`
+already established for a different destructive-ish operation).
+
+**Scope boundary, stated up front**: no automated CI integration test performs a real
+`pg_restore --clean` against the shared CI Postgres the other ~27 integration tests also depend
+on — that's whole-database-destructive, and this session has already produced two real
+test-isolation incidents from shared-state mutation (D-097's own Airflow-scheduler side effect,
+the pre-existing `test_reset_isolates_reruns` flake); adding a third source of that exact risk for
+a feature a manual live verification already proves correctly is not worth it. Command
+construction is fully unit-tested (mocked `subprocess.run`); the real round-trip is verified
+manually, live, against the restore-drill path instead (below).
+
+**Mutation-tested**: (1) the missing-binary check (`_require_tool`) mutated to return a fake path
+instead of raising — the "raises a clear error" test failed exactly as expected (`DID NOT RAISE`).
+(2) the CLI's `--yes` refusal gate disabled — the "must not be called without --yes" test failed
+with the mocked `restore()` actually invoked (proof the refusal, not just the flag's existence, is
+what the test covers). Restored both, reconfirmed the full suite green.
+
+**Verified live against the real running Postgres, genuinely round-tripped, not just exercised**:
+`acde backup` wrote a real 305KB dump; `createdb acde_restore_drill`, `acde restore ... --target-db
+acde_restore_drill --yes`, then confirmed byte-for-byte-equivalent row counts against the live
+source (`telemetry.agent_actions`: 198/198, `control.tenants`: 1/1, including the exact tenant
+row's contents) — a real `pg_dump`/`pg_restore` round trip, not a mocked one. Dropped the drill
+database afterward; zero risk to the live dev stack.
+
+**Environment limitation hit and disclosed rather than glossed over**: local verification of the
+Dockerfile change (building the production image to confirm `postgresql-client` actually
+installs) hit genuine, repeated local-sandbox network failures across three *unrelated*
+subsystems on different retries — a Debian mirror `by-hash` index hash-mismatch (fixed with an
+added retry loop in the `RUN` line, confirmed to clear that specific step once fixed), then a
+`pip`/PyPI SSL failure, then a `uv`/`files.pythonhosted.org` "cannot decrypt peer's message" TLS
+error — three different hosts, three different failure modes, on a machine whose local dev
+Postgres/network otherwise worked fine throughout this session. Diagnosed as sandbox-local network
+instability, not a defect in the Dockerfile change, and not chased further locally; CI's
+`docker-build` job (GitHub's network, unaffected by this) is the authoritative confirmation,
+watched to green before considering this item done.
+
+Full unit (525) and integration (27) suites green.

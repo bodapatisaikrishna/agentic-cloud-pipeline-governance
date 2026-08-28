@@ -174,6 +174,40 @@ def cmd_compliance_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from acde.ops.backup import backup
+
+    try:
+        path = backup(output_dir=Path(args.output_dir) if args.output_dir else None)
+    except RuntimeError as exc:
+        print(f"error: {exc}")
+        return 1
+    print(f"backup written: {path}")
+    return 0
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from acde.ops.backup import restore
+
+    if not args.yes:
+        print(
+            "refusing to restore without --yes -- this is destructive (drops and recreates "
+            "every table the dump captured) in the target database."
+        )
+        return 1
+    try:
+        restore(Path(args.dump_path), target_db=args.target_db)
+    except RuntimeError as exc:
+        print(f"error: {exc}")
+        return 1
+    print(f"restored {args.dump_path} into {args.target_db or 'the configured database'}")
+    return 0
+
+
 def cmd_gameday(args: argparse.Namespace) -> int:
     import json
 
@@ -258,6 +292,16 @@ def build_parser() -> argparse.ArgumentParser:
     cr = sub.add_parser("compliance-report", help="compliance/audit evidence report")
     cr.add_argument("--since-hours", type=float, default=720.0)
     cr.set_defaults(func=cmd_compliance_report)
+
+    bk = sub.add_parser("backup", help="pg_dump the configured database (D-099)")
+    bk.add_argument("--output-dir", default=None, help="override BACKUP_DIR")
+    bk.set_defaults(func=cmd_backup)
+
+    rs = sub.add_parser("restore", help="pg_restore a dump (D-099, destructive -- needs --yes)")
+    rs.add_argument("dump_path")
+    rs.add_argument("--target-db", default=None, help="restore into a different database (drill)")
+    rs.add_argument("--yes", action="store_true", help="confirm the destructive restore")
+    rs.set_defaults(func=cmd_restore)
 
     gd = sub.add_parser("gameday", help="rehearse an incident in staging (research extra)")
     gd.add_argument("--scenario", required=True)

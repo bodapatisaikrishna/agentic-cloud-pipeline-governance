@@ -89,6 +89,37 @@ flagged unhealthy in `docker ps`.
 Schema changes are additive/idempotent — `make migrate` (or restart, which re-applies init SQL) is
 safe. State lives entirely in Postgres, so `acde-server` is stateless: kill/restart resumes cleanly.
 
+## Backup & restore (D-099)
+
+Everything durable lives in one Postgres — the audit trail, the tenant registry, everything —
+with no other copy. `acde backup`/`acde restore` wrap `pg_dump`/`pg_restore` directly (the
+production image ships `postgresql-client`; running these from outside the container needs it
+installed locally too).
+
+```bash
+acde backup                                   # -> ./backups/acde_backup_<UTC timestamp>.dump
+acde restore ./backups/acde_backup_....dump --yes   # destructive: restores into the live DB
+```
+
+A cron example for a daily backup:
+
+```
+0 3 * * * docker exec acde-server acde backup
+```
+
+**Restore drill** — verify a backup is actually restorable without touching the live database, by
+pointing `--target-db` at a scratch database instead:
+
+```bash
+createdb -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER acde_restore_drill
+acde restore ./backups/acde_backup_....dump --target-db acde_restore_drill --yes
+# inspect acde_restore_drill, then:
+dropdb -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER acde_restore_drill
+```
+
+`restore` (against any target) refuses to run without `--yes` — it drops and recreates every
+table the dump captured in the target database.
+
 ## Cost control (live LLM)
 
 The loop caches proposals within a cycle and enforces per-run call/token caps

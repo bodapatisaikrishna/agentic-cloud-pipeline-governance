@@ -15,7 +15,17 @@ FROM python:3.11-slim AS runtime
 # The base image's OS packages (openssl, etc.) lag behind fixed CVEs the same way the Python-level
 # ones did (D-075's tension is a Python-packaging issue; this is the OS layer) -- apt upgrade rather
 # than pinning a single package by name, since the next CVE will be in a different package next time.
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+# postgresql-client (D-099): pg_dump/pg_restore, so `acde backup`/`acde restore` actually work
+# inside the real deployed container, not just in local dev where they happen to already exist.
+# The Debian mirror's by-hash index occasionally hash-mismatches against a stale CDN edge (a
+# known transient mirror-propagation issue, reproduced locally while verifying this exact RUN
+# line -- 4 different retries hit 4 different, differently-stale edges). `Acquire::Retries` alone
+# doesn't help here since it's not a dropped connection, it's genuinely different content each
+# time -- looping `apt-get update` until an edge that's actually caught up answers does.
+RUN for i in 1 2 3 4 5; do apt-get update && break || sleep 3; done \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # The app runs entirely out of the self-contained venv copied in below (built by uv) -- system
 # Python's pip/setuptools/wheel are never used at runtime. They're also a recurring source of stale

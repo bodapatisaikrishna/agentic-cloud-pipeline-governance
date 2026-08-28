@@ -149,6 +149,57 @@ def test_tenants_suspend_unknown_prints_error_and_exits_1(monkeypatch, capsys):
     assert "error" in capsys.readouterr().out
 
 
+def test_backup_prints_the_written_path(monkeypatch, capsys):
+    from pathlib import Path
+
+    monkeypatch.setattr("acde.ops.backup.backup", lambda output_dir=None: Path("/tmp/x.dump"))
+    rc = cli.main(["backup"])
+    assert rc == 0
+    assert "/tmp/x.dump" in capsys.readouterr().out
+
+
+def test_backup_error_prints_and_exits_1(monkeypatch, capsys):
+    def _raise(output_dir=None):
+        raise RuntimeError("pg_dump not found")
+
+    monkeypatch.setattr("acde.ops.backup.backup", _raise)
+    rc = cli.main(["backup"])
+    assert rc == 1
+    assert "error" in capsys.readouterr().out
+
+
+def test_restore_without_yes_refuses_and_never_calls_restore(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.ops.backup.restore",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called without --yes")),
+    )
+    rc = cli.main(["restore", "some.dump"])
+    assert rc == 1
+    assert "refusing" in capsys.readouterr().out
+
+
+def test_restore_with_yes_calls_restore(monkeypatch, capsys):
+    captured = {}
+    monkeypatch.setattr(
+        "acde.ops.backup.restore",
+        lambda dump_path, target_db=None: captured.update(path=dump_path, target_db=target_db),
+    )
+    rc = cli.main(["restore", "some.dump", "--yes", "--target-db", "drill"])
+    assert rc == 0
+    assert str(captured["path"]) == "some.dump"
+    assert captured["target_db"] == "drill"
+
+
+def test_restore_error_prints_and_exits_1(monkeypatch, capsys):
+    def _raise(dump_path, target_db=None):
+        raise RuntimeError("no such dump file")
+
+    monkeypatch.setattr("acde.ops.backup.restore", _raise)
+    rc = cli.main(["restore", "some.dump", "--yes"])
+    assert rc == 1
+    assert "error" in capsys.readouterr().out
+
+
 def test_unknown_command_errors():
     import pytest
 

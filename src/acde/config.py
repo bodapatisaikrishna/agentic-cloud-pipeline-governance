@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # trail (agent_actions) is exempt on purpose -- it's the compliance record, not noise.
     retention_days: int = 0
 
+    # --- Backup / restore (D-099) ---
+    backup_dir: str = "./backups"
+
     # --- Postgres (telemetry / warehouse / control schemas) ---
     postgres_host: str = "localhost"
     postgres_port: int = 5433  # host-published port; 5433 avoids clashing with a local pg on 5432

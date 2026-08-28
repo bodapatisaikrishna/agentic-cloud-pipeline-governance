@@ -14,6 +14,9 @@ coverage.xml
 htmlcov/
 dist/
 
+# Database backups (D-099) -- may contain sensitive data, never committed
+backups/
+
 # Experiment outputs (reproducible artifacts, not source)
 results/*
 !results/.gitkeep
