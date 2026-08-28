@@ -17,8 +17,8 @@ tenant, today's behavior, zero regression) — only an admin-provisioned actor w
 tenant binding is isolated to it. A bound actor whose tenant is suspended (``control.tenants``,
 via ``acde.tenancy``) gets 403 at authentication time, before any route runs. Scope: this isolates
 the *read* side of the operator API (``/proposals``, ``/audit``, ``/audit/export``, ``/costs``,
-``/compliance-report``) — the control loop and the human-approval queue remain one
-process/one-tenant-per-deployment, unchanged (see DEVIATIONS D-097 for why).
+``/compliance-report``, ``/decision-quality``) — the control loop and the human-approval queue
+remain one process/one-tenant-per-deployment, unchanged (see DEVIATIONS D-097 for why).
 
 Rate limiting (D-098): an in-process, per-app fixed-window limiter (``server/ratelimit.py``),
 ``Settings.api_rate_limit_per_minute`` (``0`` = unlimited, the default). Runs as middleware —
@@ -48,6 +48,7 @@ from acde.config import get_settings
 from acde.human import approvals
 from acde.logging import get_logger
 from acde.ops.compliance import compliance_report
+from acde.ops.decision_quality import live_decision_quality
 from acde.ops.health import doctor
 from acde.server import dashboard, metrics, ratelimit
 from acde.telemetry import cost
@@ -397,6 +398,15 @@ def create_app(require_key: bool = True) -> FastAPI:
         tenant when they're bound to one (D-097); availability stays global (see that report's
         own docstring)."""
         return compliance_report(since_hours=since_hours, tenant_id=tenant_id)
+
+    @app.get("/decision-quality", dependencies=auth)
+    def decision_quality_endpoint(
+        since_hours: float = 720.0, tenant_id: str | None = Depends(tenant_scope_dep)
+    ) -> dict[str, Any]:
+        """Live decision-quality monitoring (D-100): for real, resolved production incidents,
+        did the acting agent choose an accepted mitigation for that fault type. Restricted to the
+        caller's own tenant when they're bound to one (D-097)."""
+        return live_decision_quality(since_hours=since_hours, tenant_id=tenant_id)
 
     @app.post("/tenants")
     def create_tenant_route(

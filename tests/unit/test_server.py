@@ -27,6 +27,7 @@ def client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -65,6 +66,7 @@ def test_protected_routes_require_key(client):
     assert client.get("/health/ready").status_code == 401
     assert client.get("/costs").status_code == 401
     assert client.get("/compliance-report").status_code == 401
+    assert client.get("/decision-quality").status_code == 401
 
 
 def test_docs_and_openapi_require_auth(client):
@@ -227,6 +229,7 @@ def test_costs_returns_per_tenant_breakdown(client, monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = client.get("/costs", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert r.json() == [
@@ -255,8 +258,10 @@ def test_metrics_includes_per_tenant_cost_gauge(client, monkeypatch):
     ]
     fake.fetch_one.return_value = {"n": 0}
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
-    monkeypatch.setattr("acde.tenancy.db", fake)
-    monkeypatch.setattr("acde.ops.compliance.db", fake)
+    # decision_quality.db deliberately left on the outer `client` fixture's own harmless
+    # return_value=[] fake -- this test's fake has a fixed-length side_effect list sized for
+    # costs_by_tenant's own 2 queries; pointing a third caller (/metrics' new decision-quality
+    # gauge) at it would exhaust it and raise StopIteration, unrelated to what this test covers.
     r = client.get("/metrics", headers={"X-API-Key": "secret"})
     assert r.status_code == 200
     assert 'acde_cost_units_by_tenant{tenant_id="acme"} 3.0' in r.text
@@ -279,6 +284,43 @@ def test_compliance_report_returns_the_report_shape(client, monkeypatch):
     )
     assert r.status_code == 200
     assert r.json() == {"window_hours": 48.0, "availability": {"healthy": True}}
+
+
+def test_decision_quality_requires_auth(client):
+    assert client.get("/decision-quality").status_code == 401
+
+
+def test_decision_quality_returns_the_report_shape(client, monkeypatch):
+    monkeypatch.setattr(
+        "acde.server.app.live_decision_quality",
+        lambda since_hours, tenant_id: {
+            "window_hours": since_hours,
+            "total_scored": 2,
+            "correct": 1,
+            "accuracy": 0.5,
+        },
+    )
+    r = client.get("/decision-quality", params={"since_hours": 48}, headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.json() == {"window_hours": 48.0, "total_scored": 2, "correct": 1, "accuracy": 0.5}
+
+
+def test_metrics_includes_decision_quality_gauge_when_something_was_scored(client, monkeypatch):
+    fake = MagicMock()
+    fake.fetch_all.return_value = [
+        {"event_id": "e1", "fault_type": "cpu_high", "actions_taken": ["scale_workers"]},
+    ]
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    r = client.get("/metrics", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert "acde_decision_quality_accuracy 1.0" in r.text
+
+
+def test_metrics_omits_decision_quality_gauge_when_nothing_scored(client):
+    # the shared `client` fixture's default fetch_all.return_value=[] -> no incidents in window.
+    r = client.get("/metrics", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert "acde_decision_quality_accuracy" not in r.text
 
 
 def test_approvals_endpoints(client, monkeypatch):
@@ -319,6 +361,7 @@ def multi_actor_client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -366,6 +409,7 @@ def role_client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -475,6 +519,7 @@ def tenant_client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     return TestClient(app_mod.create_app())
 
 
@@ -520,6 +565,7 @@ def test_audit_export_and_costs_and_compliance_report_are_also_scoped(tenant_cli
     # reference" pitfall this session has caught repeatedly elsewhere) -- without this, /compliance
     # -report below falls through to the real, unmocked pool.
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
 
     r = tenant_client.get("/audit/export", headers={"X-API-Key": "viv-key"})
     assert r.status_code == 200
@@ -535,6 +581,11 @@ def test_audit_export_and_costs_and_compliance_report_are_also_scoped(tenant_cli
     assert r.status_code == 200
     assert r.json()["policy_verdicts"]["total"] == 0  # ran without error, scoped or not
 
+    r = tenant_client.get("/decision-quality", headers={"X-API-Key": "viv-key"})
+    assert r.status_code == 200
+    dq_sql = fake.fetch_all.call_args.args[0]
+    assert "fe.tenant_id = %(tenant_id)s" in dq_sql
+
 
 def test_suspended_tenant_gets_403(tenant_client, monkeypatch):
     fake = MagicMock()
@@ -546,6 +597,7 @@ def test_suspended_tenant_gets_403(tenant_client, monkeypatch):
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.get("/proposals", headers={"X-API-Key": "viv-key"})
     assert r.status_code == 403
 
@@ -563,6 +615,7 @@ def test_unbound_actor_never_hits_the_tenant_table(tenant_client, monkeypatch):
     fake.fetch_one.side_effect = AssertionError("must not be called for an unbound actor")
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.get("/proposals", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 200
 
@@ -584,6 +637,7 @@ def test_admin_can_create_list_suspend_activate_a_tenant(tenant_client, monkeypa
     ]
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
 
     r = tenant_client.post(
         "/tenants",
@@ -630,6 +684,7 @@ def test_create_duplicate_tenant_is_409(tenant_client, monkeypatch):
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.post(
         "/tenants",
         params={"tenant_id": "acme", "display_name": "Acme Again"},
@@ -648,6 +703,7 @@ def test_admin_can_reactivate_a_suspended_tenant(tenant_client, monkeypatch):
     }
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.post("/tenants/acme/activate", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 200
     assert r.json()["status"] == "active"
@@ -658,6 +714,7 @@ def test_suspend_unknown_tenant_is_404(tenant_client, monkeypatch):
     fake.fetch_one.return_value = None
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.post("/tenants/nope/suspend", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 404
 
@@ -667,6 +724,7 @@ def test_activate_unknown_tenant_is_404(tenant_client, monkeypatch):
     fake.fetch_one.return_value = None
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     r = tenant_client.post("/tenants/nope/activate", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 404
 
@@ -701,6 +759,7 @@ def rate_limited_client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
+    monkeypatch.setattr("acde.ops.decision_quality.db", fake)
     from acde.server.ratelimit import reset_total_rate_limited
 
     reset_total_rate_limited()

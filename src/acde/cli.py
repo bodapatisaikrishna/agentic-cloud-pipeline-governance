@@ -174,6 +174,15 @@ def cmd_compliance_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_decision_quality_report(args: argparse.Namespace) -> int:
+    import json
+
+    from acde.ops.decision_quality import live_decision_quality
+
+    print(json.dumps(live_decision_quality(since_hours=args.since_hours), indent=2))
+    return 0
+
+
 def cmd_backup(args: argparse.Namespace) -> int:
     from pathlib import Path
 
@@ -292,6 +301,10 @@ def build_parser() -> argparse.ArgumentParser:
     cr = sub.add_parser("compliance-report", help="compliance/audit evidence report")
     cr.add_argument("--since-hours", type=float, default=720.0)
     cr.set_defaults(func=cmd_compliance_report)
+
+    dq = sub.add_parser("decision-quality-report", help="live decision-quality monitoring (D-100)")
+    dq.add_argument("--since-hours", type=float, default=720.0)
+    dq.set_defaults(func=cmd_decision_quality_report)
 
     bk = sub.add_parser("backup", help="pg_dump the configured database (D-099)")
     bk.add_argument("--output-dir", default=None, help="override BACKUP_DIR")

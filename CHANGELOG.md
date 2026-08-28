@@ -6,6 +6,15 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Live decision-quality monitoring (D-100)**: `GET /decision-quality`, `acde
+  decision-quality-report`, and a trailing-24h `acde_decision_quality_accuracy` `/metrics` gauge
+  score real, resolved production incidents against an accepted-mitigation taxonomy — extending
+  `experiments/decision_quality.py`'s scoring logic beyond offline chaos experiments for the
+  first time. Found and fixed a real taxonomy gap: the research module's `EXPECTED_ACTIONS` is
+  keyed by chaos scenario names, not the real live detector's fault-type names, so every real
+  incident would have silently scored "incorrect by construction" without the new
+  `LIVE_EXPECTED_ACTIONS` mapping. Verified live: the one genuine incident in the dev database
+  scored correctly, 101 unrelated chaos-run rows correctly excluded rather than miscounted.
 - **Database backup & restore (D-099)**: `acde backup`/`acde restore --yes` wrap real
   `pg_dump`/`pg_restore`; `--target-db` supports a restore drill without touching the live
   database. Fixed a real gap found while planning: the production image never installed

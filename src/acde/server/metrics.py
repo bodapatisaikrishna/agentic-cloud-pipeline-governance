@@ -15,6 +15,7 @@ from __future__ import annotations
 import time
 
 from acde import db
+from acde.ops.decision_quality import live_decision_quality
 from acde.orchestrator.control import heartbeat_age_s
 from acde.server.ratelimit import total_rate_limited
 from acde.telemetry.cost import costs_by_tenant
@@ -121,4 +122,15 @@ def render() -> str:
         "# TYPE acde_rate_limited_requests_total counter",
         f"acde_rate_limited_requests_total {total_rate_limited()}",
     ]
+    # D-100: trailing-24h decision-quality accuracy -- same window convention as the cost gauge
+    # above. Omitted (not emitted as 0) when nothing was scored yet, same "don't fabricate a
+    # number" rule ops/decision_quality.py's own `accuracy: None` already follows.
+    dq = live_decision_quality(since_hours=24.0)
+    if dq["accuracy"] is not None:
+        lines += [
+            "# HELP acde_decision_quality_accuracy Trailing-24h share of real incidents where "
+            "the acting agent chose an accepted mitigation (D-100).",
+            "# TYPE acde_decision_quality_accuracy gauge",
+            f"acde_decision_quality_accuracy {dq['accuracy']}",
+        ]
     return "\n".join(lines) + "\n"

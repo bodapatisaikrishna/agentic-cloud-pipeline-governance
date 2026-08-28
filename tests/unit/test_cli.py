@@ -92,6 +92,18 @@ def test_compliance_report_prints_json(monkeypatch, capsys):
     assert '"healthy": true' in out
 
 
+def test_decision_quality_report_prints_json(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.ops.decision_quality.live_decision_quality",
+        lambda since_hours: {"window_hours": since_hours, "accuracy": 0.75},
+    )
+    rc = cli.main(["decision-quality-report", "--since-hours", "48"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert '"window_hours": 48.0' in out
+    assert '"accuracy": 0.75' in out
+
+
 def test_tenants_create(monkeypatch, capsys):
     monkeypatch.setattr(
         "acde.tenancy.create_tenant",

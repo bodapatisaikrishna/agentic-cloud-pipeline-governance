@@ -1812,3 +1812,70 @@ instability, not a defect in the Dockerfile change, and not chased further local
 watched to green before considering this item done.
 
 Full unit (525) and integration (27) suites green.
+
+## D-100 — Live decision-quality monitoring
+
+User redirected focus after three consecutive deployment/ops increments (D-097 multi-tenant,
+D-098 rate limiting, D-099 backup/restore): "you are completely focused on deploying. i want you
+to focus on software features and new layers, best working software." Saved as an
+`acde-feature-focus` memory. This is the fourth item on the original websearch-grounded feature
+menu the user approved at the start of this arc — never actually built, since the plan pivoted to
+D-091's anomaly-detection prerequisite and then to the user-directed infra items instead.
+
+**What existed, and the real gap**: `experiments/decision_quality.py` (`EXPECTED_ACTIONS` +
+`is_correct()`) answers "did the agent pick the *right* mitigation" — fully tested, but only ever
+exercised against offline chaos-injection experiments. No live signal existed for "is ACDE making
+good decisions on real production incidents" — arguably a governance product's single most
+important quality claim, and one D-091 earlier in this arc specifically made possible to answer
+(before that fix, real incidents never became `failure_events` rows at all).
+
+**A real taxonomy gap found while planning, confirmed against real data**: `EXPECTED_ACTIONS` is
+keyed by chaos scenario name (`schema_drift`, `upstream_delay`, `ingress_burst`,
+`resource_contention`); the real live detector (`agents/detection.py::detect_anomalies`, wired
+into production by D-091) emits different kind names (`task_failed`, `freshness_breach`,
+`cpu_high`, `schema_breaking`). Reusing `expected_for()` against a real `fault_type` would have
+returned an empty set for **every** live incident — every real decision silently scored "incorrect
+by construction." Confirmed this wasn't theoretical: the real dev database already had exactly one
+genuine `schema_breaking` incident (from this arc's own D-091 live-verification testing) sitting
+alongside 101 chaos-scenario rows from research runs.
+
+**Design**: `LIVE_EXPECTED_ACTIONS` — a second, explicit, real-fault-type-keyed taxonomy in the
+same module. Not a fresh judgment call: each set is copied verbatim from the one agent module that
+actually owns "what counts as resolving this" for that kind of problem —
+`agents/recovery.py::_REMEDIATING`, `agents/optimization.py::_RESOLVING`,
+`agents/schema.py::_RESOLVING` (the same three sets `EXPECTED_ACTIONS`'s own buckets already
+mirror). `src/acde/ops/decision_quality.py` (new, following `roi.py`/`compliance.py`'s pattern):
+`live_decision_quality()` — **one** SQL query, not a per-incident loop, joining resolved
+`failure_events` to the `agent_actions` executed inside each incident's own detected→resolved
+window (`LEFT JOIN` + `array_agg`), scored via the new taxonomy. An incident whose `fault_type`
+has no taxonomy entry (a future detector kind, or an `open_fault:*` echo) is excluded from
+`total_scored`/`accuracy` entirely via a separate `unscored` count — not silently counted as
+incorrect, the exact bug this whole item exists to avoid. `GET /decision-quality` (tenant-scoped
+like `/costs`/`/compliance-report`), `acde decision-quality-report` CLI, and a trailing-24h
+`acde_decision_quality_accuracy` `/metrics` gauge (omitted, not emitted as `0`, when nothing's
+been scored yet).
+
+**Mutation-tested**: `expected_for_live`'s "empty for unmapped" behavior replaced with a non-empty
+default — two tests failed exactly as expected: the taxonomy-isolation test (a chaos scenario name
+incorrectly resolved to a non-empty set) and the ops-layer test (an unmapped fault_type got
+folded into `total_scored` instead of `unscored`). Restored, reconfirmed both suites green.
+
+**A live version of this exact session's own recurring `db`-module-reference pitfall, caught
+before pushing this time**: `/metrics` now calls `live_decision_quality()`, which — like every
+report module before it (D-091, D-095, D-097) — has its own separate `db` import. Adding the route
+made every `test_server.py` fixture's `acde.ops.decision_quality.db` patch load-bearing for the
+first time; one existing test (`test_metrics_includes_per_tenant_cost_gauge`) had a
+fixed-length-`side_effect`-list fake that broke the moment a third real query joined the two it was
+sized for (`StopIteration` inside the async request). Fixed by leaving that test's `db` patch on
+the outer fixture's own harmless default instead of its narrow local fake — caught by running the
+full local suite before pushing, not by a red CI run this time.
+
+**Verified live against the real running Postgres, on genuine data, not synthetic fixtures**: `acde
+decision-quality-report --since-hours 100000` and a real `uvicorn` process's `GET
+/decision-quality` (temporary `API_KEY`, cleaned up after, dev stack left untouched this time)
+both returned identical, byte-for-byte matching real output: `total_scored: 1, correct: 1,
+unscored: 101` — the one genuine `schema_breaking` incident scored correct (its actual executed
+action was `quarantine_partition`, in the taxonomy's accepted set), the 101 chaos-scenario rows
+correctly excluded rather than miscounted. `/metrics`'s gauge agreed exactly (`1.0`).
+
+Full unit (541) and integration (27) suites green.
