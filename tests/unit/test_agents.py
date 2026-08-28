@@ -45,6 +45,7 @@ class TestObserve:
             ],  # faults
             [{"metric": "freshness_s", "value": 42.0}],  # metrics
             [{"component": "streaming", "cpu_pct": 5.0, "mem_mb": 10.0, "workers": 3, "ts": NOW}],
+            [],  # task_runs
         ]
         monkeypatch.setattr(base, "db", fake)
         agent = SchemaAgent(experiment_run="t")
@@ -52,6 +53,35 @@ class TestObserve:
         assert snap.schema_compat == "breaking"  # schema_drift fault open
         assert snap.pipeline_metrics["freshness_s"] == 42.0
         assert snap.open_anomalies[0]["fault_type"] == "schema_drift"
+
+    def test_populates_task_runs(self, monkeypatch):
+        # D-091: previously never queried at all, making detection.detect_anomalies()'s
+        # task_failed check structurally dead even once wired in.
+        fake = MagicMock()
+        fake.fetch_all.side_effect = [
+            [],  # faults
+            [],  # metrics
+            [],  # resource
+            [
+                {
+                    "run_id": "r1",
+                    "dag_id": "tpcds_ingest",
+                    "task_id": "ingest",
+                    "state": "failed",
+                    "start_ts": NOW,
+                    "end_ts": NOW,
+                    "duration_s": 5.0,
+                    "try_number": 1,
+                    "error": "boom",
+                }
+            ],
+        ]
+        monkeypatch.setattr(base, "db", fake)
+        agent = SchemaAgent(experiment_run="t")
+        snap = agent.observe()
+        assert len(snap.task_runs) == 1
+        assert snap.task_runs[0].state == "failed"
+        assert snap.task_runs[0].dag_id == "tpcds_ingest"
 
 
 class TestReason:
@@ -323,6 +353,91 @@ class TestAct:
         action, result = agent.reason(_snap("upstream_delay"))
         agent.act(action, result, _snap("upstream_delay"))
         assert any("resolved_ts = now()" in c.args[0] for c in exec_mock.call_args_list)
+
+
+class TestMonitoringObserve:
+    """D-091: real production anomalies must become real failure_events rows, not just
+    agent_actions log entries -- the gap that made MTTR/decision-quality scoring inert outside
+    chaos/research runs.
+
+    Patches ``acde.db`` directly (not ``base.db``): ``monitoring.py`` has its own
+    ``from acde import db`` import, a separate name binding from ``base.py``'s -- patching only
+    ``base.db`` leaves monitoring's own db calls hitting whatever ``acde.db`` really points to.
+    Same lesson as ``TestAct._patch``'s own comment; caught here by a stray row actually landing in
+    the real live database on the first run of this test, cleaned up immediately after.
+    """
+
+    def _agent_with_empty_telemetry(self, monkeypatch):
+        import acde.db as dbmod
+
+        fake = MagicMock()
+        fake.fetch_all.side_effect = [
+            [],  # open_faults (none yet)
+            [],  # pipeline_metrics
+            [{"component": "streaming", "cpu_pct": 99.0, "mem_mb": 10.0, "workers": 1, "ts": NOW}],
+            [],  # task_runs
+        ]
+        monkeypatch.setattr(dbmod, "fetch_all", fake.fetch_all)
+        monkeypatch.setattr(dbmod, "fetch_one", fake.fetch_one)
+        return MonitoringAgent(experiment_run="t"), fake
+
+    def test_new_anomaly_creates_a_failure_events_row(self, monkeypatch):
+        agent, fake = self._agent_with_empty_telemetry(monkeypatch)
+        fake.fetch_one.return_value = {"event_id": "11111111-1111-1111-1111-111111111111"}
+        snap = agent.observe()
+        insert_calls = [
+            c
+            for c in fake.fetch_one.call_args_list
+            if "INSERT INTO telemetry.failure_events" in c.args[0]
+        ]
+        assert len(insert_calls) == 1
+        assert insert_calls[0].args[1][:3] == ("t", "streaming", "cpu_high")
+        # same-tick visibility: the LLM sees it now, not one tick later.
+        assert any(a["fault_type"] == "cpu_high" for a in snap.open_anomalies)
+
+    def test_already_open_fault_is_not_duplicated(self, monkeypatch):
+        import acde.db as dbmod
+
+        fake = MagicMock()
+        fake.fetch_all.side_effect = [
+            [{"event_id": "e1", "scenario": "streaming", "fault_type": "cpu_high"}],  # open_faults
+            [],
+            [{"component": "streaming", "cpu_pct": 99.0, "mem_mb": 10.0, "workers": 1, "ts": NOW}],
+            [],
+        ]
+        monkeypatch.setattr(dbmod, "fetch_all", fake.fetch_all)
+        monkeypatch.setattr(dbmod, "fetch_one", fake.fetch_one)
+        agent = MonitoringAgent(experiment_run="t")
+        agent.observe()
+        insert_calls = [
+            c
+            for c in fake.fetch_one.call_args_list
+            if "INSERT INTO telemetry.failure_events" in c.args[0]
+        ]
+        assert insert_calls == []
+
+    def test_echoed_open_fault_never_creates_a_row(self, monkeypatch):
+        # detect_anomalies() echoes already-open faults back as "open_fault:<kind>" -- those must
+        # never be mistaken for a new detection (they'd otherwise duplicate the row every tick).
+        import acde.db as dbmod
+
+        fake = MagicMock()
+        fake.fetch_all.side_effect = [
+            [{"event_id": "e1", "scenario": "tpcds_ingest", "fault_type": "upstream_delay"}],
+            [],
+            [],
+            [],
+        ]
+        monkeypatch.setattr(dbmod, "fetch_all", fake.fetch_all)
+        monkeypatch.setattr(dbmod, "fetch_one", fake.fetch_one)
+        agent = MonitoringAgent(experiment_run="t")
+        agent.observe()
+        insert_calls = [
+            c
+            for c in fake.fetch_one.call_args_list
+            if "INSERT INTO telemetry.failure_events" in c.args[0]
+        ]
+        assert insert_calls == []
 
 
 class TestAgentProposalsMatchScenario:

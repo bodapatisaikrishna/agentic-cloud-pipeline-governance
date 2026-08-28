@@ -5,6 +5,15 @@ per phase, `v1.0.0` at Phase 9.
 
 ## [Unreleased]
 
+### Fixed
+- **Real anomaly detection wired into production, was chaos-only (D-091)**: `telemetry.
+  failure_events` was only ever written by the chaos injector — a real production anomaly reached
+  the audit trail but never became an incident, making MTTR/decision-quality scoring inert outside
+  chaos runs. `agents/detection.py`'s deterministic detector (9 tests, zero callers) is now wired
+  into `MonitoringAgent.observe()`, creating real `failure_events` rows with same-tick visibility.
+  Also fixed `observe()` never populating `task_runs` (a latent LLM-cache-staleness bug too) and a
+  pre-existing integration-test isolation gap this fix's own test run surfaced.
+
 ### Added
 - **Pod-level securityContext hardening for the Helm chart (D-090)**: `runAsNonRoot` +
   `runAsUser` (matching each image's real non-root UID, not guessed), `allowPrivilegeEscalation:

@@ -26,7 +26,18 @@ RUN = "itest-agents"
 
 @pytest.fixture(autouse=True)
 def _clean_and_restore():
-    for table in ("failure_events", "agent_actions"):
+    # D-091: pipeline_metrics/resource_usage/task_runs were never cleaned between tests -- a real
+    # test-isolation gap that stayed invisible only because nothing read those leftovers into an
+    # anomaly decision before now. detect_anomalies() being wired into observe() correctly caught
+    # test_ingress_burst_triggers_scale_workers's uncleaned freshness_s=140 leaking into
+    # test_nominal_run_is_no_action_and_logged as a real freshness_breach.
+    for table in (
+        "failure_events",
+        "agent_actions",
+        "pipeline_metrics",
+        "resource_usage",
+        "task_runs",
+    ):
         db.execute(f"DELETE FROM telemetry.{table} WHERE experiment_run = %s", (RUN,))
     yield
     tpcds_gen.write()

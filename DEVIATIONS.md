@@ -1353,3 +1353,72 @@ reached `Running 1/1` with the new constraints in place (proving OPA's non-defau
 the dropped capabilities don't break anything), and `uid=10001 gid=10001` printed from inside the
 actual running server pod — confirming the constraint is genuinely enforced, not just declared.
 Full verification infrastructure torn down after.
+
+## D-091 — Real production anomaly detection was never wired in; `failure_events` was chaos-only
+
+**Found while planning a feature roadmap**, not by a failing test: `telemetry.failure_events` — the
+table `ops/roi.py`'s MTTR/incident numbers and `experiments/decision_quality.py`'s scoring both
+depend on — was **only ever written by `chaos/injector.py`** (confirmed by grep: the only two
+`INSERT INTO telemetry.failure_events` sites in the whole codebase, before this fix, were the
+chaos injector and a benchmark script). `agents/monitoring.py`'s `on_after_act` only `UPDATE`d an
+*existing* row's `detected_ts`; it never `INSERT`ed one. In a real deployment with no chaos
+injector running, a genuinely detected production anomaly reached `agent_actions` (fine, that's
+the audit trail) but **never became a `failure_events` row at all** — MTTR, incident counts, and
+decision-quality scoring were structurally incapable of reflecting real production incidents,
+working only in chaos/research runs.
+
+**Compounding it**: `src/acde/agents/detection.py` is a complete, well-tested (9 unit tests)
+deterministic anomaly detector (`detect_anomalies()` — task failures, freshness breaches, CPU
+spikes, schema drift, all from real telemetry, no LLM) implementing exactly the paper's own "§5.6,
+cheap deterministic pre-filter" design — with **zero callers anywhere in the codebase**. Dead code,
+fully built and fully tested, never wired into the live monitoring agent. And `agents/base.py`'s
+`observe()` never queried `telemetry.task_runs` at all, so `detect_anomalies()`'s `task_failed`
+check would have stayed structurally dead even after wiring the rest in.
+
+**Fix**: `observe()` now also populates `task_runs` (D-091 fixes this as a prerequisite). Rewrote
+`MonitoringAgent.observe()` to call `detection.detect_anomalies(snapshot)`; for each anomaly with
+no matching open `failure_events` row, `INSERT` one (`tenant_id`/`environment` stamped via
+`acde.tenancy.current_scope()`, D-085's pattern) and append it into the *same* snapshot's
+`open_anomalies` before returning — same-tick visibility for the LLM, not a 1-tick lag waiting for
+the next `observe()` to re-query. Reuses the exact `open_anomalies` field/shape the LLM already
+understands (chaos-injected faults arrive the same way), so no prompt-file changes were needed —
+simpler than this session's own plan first proposed. `detect_anomalies()`'s `open_fault:*` entries
+(echoes of already-open faults, not new detections) are explicitly excluded from ever creating a
+row, else every tick would re-insert the same fault it's echoing back.
+
+**A real bug this test suite itself caught, twice**:
+- First unit-test run actually wrote a row into the **real live database** — `monkeypatch.setattr
+  (base, "db", fake)` only intercepts calls made through `base.py`'s own `db` name; `monitoring.py`
+  has its own separate `from acde import db` import, unaffected. The exact lesson
+  `TestAct._patch`'s own comment already states, re-learned the hard way. Fixed by patching
+  `acde.db`'s actual attributes directly (`import acde.db as dbmod; monkeypatch.setattr(dbmod,
+  "fetch_all", ...)`), the correct existing pattern; the stray row was found and deleted
+  immediately (`DELETE FROM telemetry.failure_events WHERE experiment_run='t'`).
+- The full integration suite then failed for a genuinely different, pre-existing reason:
+  `tests/integration/test_agents_e2e.py`'s `_clean_and_restore` fixture only ever cleaned
+  `failure_events`/`agent_actions` between tests, never `pipeline_metrics`/`resource_usage`/
+  `task_runs`. `test_ingress_burst_triggers_scale_workers` leaves `freshness_s=140` behind
+  uncleaned; the newly-wired detector correctly caught this real, pre-existing leftover as a
+  genuine `freshness_breach` (140s > the 60s SLA) in the next test, `test_nominal_run_is_no_
+  action_and_logged` — which had silently tolerated this exact test-isolation gap for as long as
+  nothing consumed `detect_anomalies()`'s output. Fixed the fixture to clean all three tables, not
+  the detector (the detector was right; the fixture's incompleteness had just never been visible).
+
+**Mutation-tested**: the new/updated tests were run against the dedup-check deliberately removed —
+failed exactly as expected (a duplicate INSERT for an already-open fault), confirming the tests
+actually catch the defect they claim to, not just pass by coincidence.
+
+**Verified live against the real running stack, not just mocked tests**: seeded a genuine
+CPU-high `resource_usage` row (no chaos injector involved) for a throwaway `experiment_run`, ran a
+real `MonitoringAgent.observe()` cycle, confirmed a real `failure_events` row appeared
+(`fault_type=cpu_high`, correct `tenant_id`/`environment`) and that the *same* observe() call's
+returned snapshot already carried it in `open_anomalies` (same-tick visibility, not next-tick).
+Re-ran `observe()` a second time and confirmed no duplicate row (idempotency). All test data
+cleaned up afterward. Full unit (432) and integration (27) suites green.
+
+**Side effect worth noting, not a new bug**: `task_runs` being populated for the first time means
+`TelemetrySnapshot.cache_key_material()` (the per-run LLM cache key) now correctly differentiates
+ticks with different real task states — previously, since `task_runs` was always empty, two ticks
+with genuinely different Airflow task states but otherwise-identical other fields would have
+produced the *same* cache key and incorrectly reused a stale LLM response. A latent cache-staleness
+bug this fix also happens to close, not something newly introduced.

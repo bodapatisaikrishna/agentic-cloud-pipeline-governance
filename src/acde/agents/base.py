@@ -72,15 +72,37 @@ class BaseAgent:
             "WHERE experiment_run = %s ORDER BY ts DESC LIMIT 50",
             (self.experiment_run,),
         )
+        # D-091: previously never queried, so detection.detect_anomalies()'s task_failed check was
+        # structurally dead even once wired in -- nothing ever populated this field.
+        task_rows = db.fetch_all(
+            "SELECT run_id, dag_id, task_id, state, start_ts, end_ts, duration_s, try_number, "
+            "error FROM telemetry.task_runs WHERE experiment_run = %s "
+            "ORDER BY start_ts DESC NULLS LAST LIMIT 50",
+            (self.experiment_run,),
+        )
         schema_compat: SchemaCompat = (
             "breaking" if any(f["fault_type"] == "schema_drift" for f in open_faults) else "unknown"
         )
-        from acde.contracts import ResourceUsage
+        from acde.contracts import ResourceUsage, TaskRunObservation
 
         return TelemetrySnapshot(
             experiment_run=self.experiment_run,
             window_start=now - dt.timedelta(minutes=5),
             window_end=now,
+            task_runs=[
+                TaskRunObservation(
+                    run_id=r["run_id"] or "",
+                    dag_id=r["dag_id"] or "",
+                    task_id=r["task_id"] or "",
+                    state=r["state"] or "",
+                    start_ts=r["start_ts"],
+                    end_ts=r["end_ts"],
+                    duration_s=r["duration_s"],
+                    try_number=r["try_number"] or 0,
+                    error=r["error"],
+                )
+                for r in task_rows
+            ],
             resource_usage=[
                 ResourceUsage(
                     component=r["component"],
