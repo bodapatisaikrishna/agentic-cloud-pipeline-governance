@@ -190,6 +190,11 @@ class Settings(BaseSettings):
     api_keys: SecretStr = SecretStr("")
     api_host: str = "127.0.0.1"
     api_port: int = 8099
+    # D-098: requests/minute per actor (or per source address pre-auth); 0 = unlimited (default,
+    # zero-regression -- every existing deployment's behavior is unchanged until an operator opts
+    # in). Distinct from rate_limit_max_per_10min above, which caps agent-proposed actions, not
+    # HTTP request volume.
+    api_rate_limit_per_minute: int = 0
 
     @property
     def approval_required_set(self) -> set[str]:

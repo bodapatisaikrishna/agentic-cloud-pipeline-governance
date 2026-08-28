@@ -19,18 +19,25 @@ via ``acde.tenancy``) gets 403 at authentication time, before any route runs. Sc
 the *read* side of the operator API (``/proposals``, ``/audit``, ``/audit/export``, ``/costs``,
 ``/compliance-report``) — the control loop and the human-approval queue remain one
 process/one-tenant-per-deployment, unchanged (see DEVIATIONS D-097 for why).
+
+Rate limiting (D-098): an in-process, per-app fixed-window limiter (``server/ratelimit.py``),
+``Settings.api_rate_limit_per_minute`` (``0`` = unlimited, the default). Runs as middleware —
+*before* ``_authenticate`` — so it also throttles pre-auth key-guessing floods, keyed by the
+resolved actor when credentials match, else the raw client address. Does not trust
+``X-Forwarded-For`` (client-supplied, spoofable). ``/health`` is exempt.
 """
 
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from secrets import compare_digest
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import StreamingResponse
@@ -42,7 +49,7 @@ from acde.human import approvals
 from acde.logging import get_logger
 from acde.ops.compliance import compliance_report
 from acde.ops.health import doctor
-from acde.server import dashboard, metrics
+from acde.server import dashboard, metrics, ratelimit
 from acde.telemetry import cost
 
 log = get_logger("server.app")
@@ -79,6 +86,35 @@ def _authenticate(
         detail="invalid or missing credentials (X-API-Key header or HTTP Basic)",
         headers={"WWW-Authenticate": "Basic"},
     )
+
+
+def _rate_limit_key(request: Request) -> str:
+    """Resolve the rate-limit bucket key for an incoming request (D-098): the actor if valid
+    credentials are already present (so one actor's floods never burn another actor's budget),
+    else the raw client address (so pre-auth floods -- including wrong-key guessing -- still get
+    bucketed by source). Deliberately duplicates ``_authenticate``'s lookup rather than depending
+    on it: middleware runs before FastAPI's dependency injection resolves anything, so there is no
+    already-authenticated identity to reuse here.
+    """
+    key_map = get_settings().api_key_map
+    x_api_key = request.headers.get("x-api-key", "")
+    if x_api_key:
+        for actor, key in key_map.items():
+            if compare_digest(x_api_key.encode(), key.encode()):
+                return actor
+    else:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Basic "):
+            try:
+                username, _, password = (
+                    base64.b64decode(auth_header[6:]).decode("ascii").partition(":")
+                )
+            except (ValueError, UnicodeDecodeError):
+                username, password = "", ""
+            expected = key_map.get(username)
+            if expected is not None and compare_digest(password.encode(), expected.encode()):
+                return username
+    return request.client.host if request.client else "unknown"
 
 
 def _check_tenant_active(actor: str) -> None:
@@ -205,6 +241,28 @@ def create_app(require_key: bool = True) -> FastAPI:
     app = FastAPI(
         title="ACDE Operator API", version="2.2", docs_url=None, redoc_url=None, openapi_url=None
     )
+
+    # D-098: one limiter instance per app (not a module global) -- so tests creating multiple
+    # `create_app()`s, and any future multi-app scenario, never share window state.
+    app.state.rate_limiter = ratelimit.RateLimiter(get_settings().api_rate_limit_per_minute)
+
+    @app.middleware("http")
+    async def rate_limit_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.url.path == "/health":  # load-balancer target -- must never 429
+            return await call_next(request)
+        limiter: ratelimit.RateLimiter = app.state.rate_limiter
+        allowed, retry_after = limiter.check(_rate_limit_key(request))
+        if not allowed:
+            return Response(
+                content=json.dumps({"detail": "rate limit exceeded, try again later"}),
+                status_code=429,
+                media_type="application/json",
+                headers={"Retry-After": str(retry_after)},
+            )
+        return await call_next(request)
+
     auth = [Depends(_authenticate)] if require_key else []
     # In no-auth test mode there's no identity to resolve; fall back to a fixed actor name, full
     # access (no role concept to enforce when auth itself is off).

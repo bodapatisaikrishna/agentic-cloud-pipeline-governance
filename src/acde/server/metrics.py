@@ -16,6 +16,7 @@ import time
 
 from acde import db
 from acde.orchestrator.control import heartbeat_age_s
+from acde.server.ratelimit import total_rate_limited
 from acde.telemetry.cost import costs_by_tenant
 
 
@@ -112,4 +113,12 @@ def render() -> str:
     for row in tenant_costs:
         label = _escape_label(str(row["tenant_id"]))
         lines.append(f'acde_cost_units_by_tenant{{tenant_id="{label}"}} {row["cost_units"]}')
+    # D-098: cumulative count of requests this process has rejected with 429. Process-wide (not
+    # per-app-instance like the limiter's own window state) -- correct for a cumulative counter,
+    # the same as every other counter above.
+    lines += [
+        "# HELP acde_rate_limited_requests_total Requests rejected with 429 (D-098).",
+        "# TYPE acde_rate_limited_requests_total counter",
+        f"acde_rate_limited_requests_total {total_rate_limited()}",
+    ]
     return "\n".join(lines) + "\n"

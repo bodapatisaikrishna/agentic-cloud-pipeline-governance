@@ -1686,3 +1686,64 @@ re-running the fixed test** — it completed in under a second with zero real co
 rather than trusting a second green run against a database that happened to be up again.
 
 Full unit (498) and integration (27) suites green.
+
+## D-098 — Operator API rate limiting
+
+User asked me to pick whatever makes the software best, with no further steering. Audited the
+operator API beyond what D-091–D-097 already closed (auth, RBAC, tenant isolation, audit export,
+cost/compliance reporting): **zero rate limiting, request throttling, or DoS backpressure existed
+anywhere** — grepped `server/` for `CORSMiddleware`/`add_middleware`/`rate.limit`, nothing. A
+single caller — a misbehaving script, a leaked key, or someone brute-forcing `X-API-Key` values —
+could issue unlimited requests against a real Postgres-backed API. The same class of gap the whole
+D-083–D-097 arc has been finding and closing.
+
+Note: `Settings.rate_limit_max_per_10min` already existed but is a *different* concern — the
+OPA-side cap on how many actions an **agent** proposes (`rate_limit.rego`), unrelated to HTTP
+request volume. New setting named distinctly (`api_rate_limit_per_minute`) so the two are never
+confused.
+
+**Design**: in-process, per-app fixed-window limiter (`server/ratelimit.py`), no new dependency —
+the same "hand-roll over adding a client library" call already made for the CSV export (D-094) and
+the Prometheus exposition format (D-088). A distributed/Redis-backed limiter is explicitly out of
+scope: no current deployment target runs multiple API instances sharing one limiter, and
+`docs/OPERATIONS.md` doesn't describe one — documented as a limitation, not silently ignored.
+`Settings.api_rate_limit_per_minute` defaults to `0` (unlimited) — the same "0 = disabled"
+convention `blast_radius_max_per_hour` already established, so every existing deployment's
+behavior is unchanged with zero config edits, the zero-regression rule this whole session has
+followed since D-093.
+
+Registered as `@app.middleware("http")`, not a per-route `Depends()`, deliberately: it must run
+*before* `_authenticate` to also throttle pre-auth floods (wrong-key brute-forcing), and this way
+touches one place instead of every route signature. Keyed by the resolved actor when
+`X-API-Key`/Basic credentials match `Settings.api_key_map` (duplicates `_authenticate`'s own
+lookup, including its `compare_digest` timing-safe comparison — middleware runs before FastAPI's
+dependency injection resolves anything, so there's no already-authenticated identity to reuse),
+else the raw `request.client.host` — one abusive actor never burns another actor's budget, while
+unauthenticated floods still get bucketed by source. **Does not trust `X-Forwarded-For`**
+(client-supplied, spoofable — the same "never trust a client-controlled field for identity" rule
+applied to `tenant_id` in D-097); documented in `docs/SECURITY.md`'s threat table as a real gap for
+a reverse-proxy deployment without its own edge-level limiting, not silently assumed away.
+`/health` is exempt (a load-balancer target must never 429). The limiter instance lives on
+`app.state`, not a module global, so parallel `create_app()` calls (every test in the suite) never
+share window state — the fixed-window choice itself (not sliding-window or a token bucket) is a
+deliberate simplicity trade-off: it can allow a short burst right at a window boundary, acceptable
+for a coarse abuse guard, not a precise billing meter. `acde_rate_limited_requests_total` (a
+process-wide counter, correct for a cumulative metric — the limiter's own per-key state is what's
+instance-scoped, not this) added to `/metrics`; new `ACDERateLimitEngaged` alert.
+
+**Mutation-tested**: (1) disabled the fixed-window reset condition (`if False:` instead of `elapsed
+>= window_s`) — the window-reset test failed exactly as expected (`assert False is True`, a
+request that should have been allowed after the window elapsed stayed blocked forever). (2)
+disabled the `/health` exemption in the middleware — the exemption test failed with a real `429`
+where `200` was required. Restored both, reconfirmed the full suite green.
+
+**Verified live against a real running server**: started `uvicorn` with
+`API_RATE_LIMIT_PER_MINUTE=3`, sent 4 real requests — the first 3 returned `200`, the 4th a real
+`429` with a genuine `retry-after` header (`59.9`); `/health` kept returning `200` throughout. A
+second run with two distinct actors confirmed per-actor budgets are independent, and that
+`/metrics`'s new counter line reflects the real rejection count (`1`) read through a separate
+actor's own unaffected budget. All verification server processes stopped and cleaned up after
+(this time without touching the shared dev Postgres/Airflow stack, unlike D-097's own live
+verification, which is exactly the lesson from the incident recorded there).
+
+Full unit (511) and integration (27) suites green.

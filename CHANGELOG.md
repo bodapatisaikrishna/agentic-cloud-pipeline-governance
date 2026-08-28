@@ -6,6 +6,11 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Operator API rate limiting (D-098)**: in-process, per-actor/per-source fixed-window limiter,
+  `API_RATE_LIMIT_PER_MINUTE` (`0` = unlimited, default). Runs as middleware ahead of auth, so it
+  also throttles pre-auth key-guessing floods; `/health` stays exempt. New
+  `acde_rate_limited_requests_total` metric + `ACDERateLimitEngaged` alert. Verified live against
+  a real running server: 4 requests at limit=3 gave `200,200,200,429` with a real `Retry-After`.
 - **Multi-tenant SaaS layer, admin-provisioned (D-097)**: new `control.tenants` registry
   (`acde tenants create|list|suspend|activate`, `POST/GET /tenants*`, admin-only), an optional
   fourth `actor:key:role:tenant_id` API-key field binding an actor to one tenant (missing =

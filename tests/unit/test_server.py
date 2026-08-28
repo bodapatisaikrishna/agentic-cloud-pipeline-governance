@@ -669,3 +669,82 @@ def test_activate_unknown_tenant_is_404(tenant_client, monkeypatch):
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     r = tenant_client.post("/tenants/nope/activate", headers={"X-API-Key": "admin-key"})
     assert r.status_code == 404
+
+
+# --- D-098: operator API rate limiting -------------------------------------------------------
+
+
+def test_rate_limit_disabled_by_default(client):
+    # the shared `client` fixture uses Settings' 0-default -- many requests, never a 429.
+    for _ in range(30):
+        assert client.get("/proposals", headers={"X-API-Key": "secret"}).status_code == 200
+
+
+@pytest.fixture
+def rate_limited_client(monkeypatch):
+    monkeypatch.setattr(
+        app_mod,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            api_keys="alice:alice-key,bob:bob-key",
+            api_rate_limit_per_minute=2,
+        ),
+    )
+    fake = MagicMock()
+    fake.fetch_all.return_value = []
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr(app_mod, "db", fake)
+    monkeypatch.setattr(app_mod.metrics, "db", fake)
+    monkeypatch.setattr("acde.human.approvals.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    monkeypatch.setattr("acde.telemetry.cost.db", fake)
+    monkeypatch.setattr("acde.tenancy.db", fake)
+    monkeypatch.setattr("acde.ops.compliance.db", fake)
+    from acde.server.ratelimit import reset_total_rate_limited
+
+    reset_total_rate_limited()
+    return TestClient(app_mod.create_app())
+
+
+def test_rate_limit_returns_429_after_the_limit_with_retry_after(rate_limited_client):
+    headers = {"X-API-Key": "alice-key"}
+    assert rate_limited_client.get("/proposals", headers=headers).status_code == 200
+    assert rate_limited_client.get("/proposals", headers=headers).status_code == 200
+    r = rate_limited_client.get("/proposals", headers=headers)
+    assert r.status_code == 429
+    assert float(r.headers["retry-after"]) > 0
+
+
+def test_rate_limit_buckets_by_actor_not_globally(rate_limited_client):
+    # alice exhausts her own budget; bob's is untouched -- proof the key is per-actor, not global.
+    alice = {"X-API-Key": "alice-key"}
+    bob = {"X-API-Key": "bob-key"}
+    rate_limited_client.get("/proposals", headers=alice)
+    rate_limited_client.get("/proposals", headers=alice)
+    assert rate_limited_client.get("/proposals", headers=alice).status_code == 429
+    assert rate_limited_client.get("/proposals", headers=bob).status_code == 200
+
+
+def test_rate_limit_buckets_unauthenticated_callers_by_source(rate_limited_client):
+    # wrong key each time -- never resolves to an actor, so these share the source-address bucket.
+    r1 = rate_limited_client.get("/proposals", headers={"X-API-Key": "wrong-1"})
+    r2 = rate_limited_client.get("/proposals", headers={"X-API-Key": "wrong-2"})
+    r3 = rate_limited_client.get("/proposals", headers={"X-API-Key": "wrong-3"})
+    assert [r1.status_code, r2.status_code] == [401, 401]
+    assert r3.status_code == 429  # rejected before auth even runs
+
+
+def test_health_is_exempt_from_rate_limiting(rate_limited_client):
+    for _ in range(10):
+        assert rate_limited_client.get("/health").status_code == 200
+
+
+def test_metrics_includes_rate_limited_counter(rate_limited_client):
+    headers = {"X-API-Key": "alice-key"}
+    rate_limited_client.get("/proposals", headers=headers)
+    rate_limited_client.get("/proposals", headers=headers)
+    rate_limited_client.get("/proposals", headers=headers)  # 429, increments the counter
+    r = rate_limited_client.get("/metrics", headers={"X-API-Key": "bob-key"})
+    assert r.status_code == 200
+    assert "acde_rate_limited_requests_total 1" in r.text

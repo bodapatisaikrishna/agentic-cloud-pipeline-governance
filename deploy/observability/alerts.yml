@@ -43,6 +43,15 @@ groups:
           summary: "Policy denied {{ $value }} actions in the last 10 minutes"
           description: "Agents are repeatedly proposing actions the policy rejects -- check policy config or a misbehaving/hallucinating LLM (see DEVIATIONS D-082)."
 
+      - alert: ACDERateLimitEngaged
+        # D-098: only fires if API_RATE_LIMIT_PER_MINUTE is actually set (0/unset never engages).
+        expr: increase(acde_rate_limited_requests_total[10m]) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} requests rejected with 429 in the last 10 minutes"
+          description: "A caller (or several) is exceeding API_RATE_LIMIT_PER_MINUTE -- check which actor/source via the API access logs; could be a misbehaving client or a leaked key."
+
       - alert: ACDEBudgetExceeded
         # D-095: keyed off BUDGET_DEFAULT_UNITS, the same per-run budget number the cost OPA
         # policy already enforces (Settings.budget_default_units) -- the alert threshold isn't

@@ -43,6 +43,7 @@ rejection of out-of-allow-list action types. Re-run it in staging after editing 
 |---|---|---|
 | LLM prompt injection via telemetry | model proposes an unsafe action | policy gate + typed contracts contain it (containment = 1.0) |
 | Operator API | unauthorized approvals/reads | mandatory API key, fail-closed; TLS via proxy |
+| Operator API | request floods / key-guessing (D-098) | `API_RATE_LIMIT_PER_MINUTE` (in-process, per-actor/source, 0=off by default — opt in for a real deployment); does **not** trust `X-Forwarded-For`, so behind a proxy every request may share the proxy's address unless the deployment adds its own edge-level limiting too |
 | Connector credentials | pipeline compromise | least-privilege service account; TLS verify; shadow/noop for zero write access |
 | Runaway loop | mass actions | rate-limit policy + blast-radius cap + kill switch |
 
