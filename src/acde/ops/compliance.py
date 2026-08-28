@@ -14,10 +14,12 @@ from acde.config import get_settings
 from acde.orchestrator.control import heartbeat_age_s
 
 
-def _policy_verdict_distribution(window: str) -> dict[str, object]:
+def _policy_verdict_distribution(window: str, tenant_id: str | None) -> dict[str, object]:
+    tenant_clause = " AND tenant_id = %(tenant_id)s" if tenant_id is not None else ""
     rows = db.fetch_all(
         f"SELECT policy_decision, count(*) AS n FROM telemetry.agent_actions "
-        f"WHERE ts > {window} GROUP BY policy_decision"
+        f"WHERE ts > {window}{tenant_clause} GROUP BY policy_decision",
+        {"tenant_id": tenant_id},
     )
     counts = {r["policy_decision"] or "unknown": int(r["n"]) for r in rows}
     total = sum(counts.values())
@@ -25,19 +27,26 @@ def _policy_verdict_distribution(window: str) -> dict[str, object]:
     return {"counts": counts, "percentages": pct, "total": total}
 
 
-def _incidents(window: str) -> dict[str, object]:
+def _incidents(window: str, tenant_id: str | None) -> dict[str, object]:
+    tenant_clause = " AND tenant_id = %(tenant_id)s" if tenant_id is not None else ""
+    params = {"tenant_id": tenant_id}
     resolved = db.fetch_all(
         f"SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr "
         f"FROM telemetry.failure_events "
         f"WHERE resolved_ts IS NOT NULL AND detected_ts IS NOT NULL AND injected_ts > {window}"
+        f"{tenant_clause}",
+        params,
     )
     mttrs = [float(r["mttr"]) for r in resolved if r["mttr"] is not None]
     detected = db.fetch_one(
         f"SELECT count(*) AS n FROM telemetry.failure_events "
-        f"WHERE detected_ts IS NOT NULL AND injected_ts > {window}"
+        f"WHERE detected_ts IS NOT NULL AND injected_ts > {window}{tenant_clause}",
+        params,
     )
     open_now = db.fetch_one(
-        "SELECT count(*) AS n FROM telemetry.failure_events WHERE resolved_ts IS NULL"
+        f"SELECT count(*) AS n FROM telemetry.failure_events WHERE resolved_ts IS NULL"
+        f"{tenant_clause}",
+        params,
     )
     return {
         "detected": int(detected["n"]) if detected else 0,
@@ -68,12 +77,20 @@ def _availability() -> dict[str, object]:
     }
 
 
-def compliance_report(since_hours: float = 720.0) -> dict[str, object]:
-    """Compute a compliance/audit report over the last ``since_hours`` (30-day default window)."""
+def compliance_report(
+    since_hours: float = 720.0, tenant_id: str | None = None
+) -> dict[str, object]:
+    """Compute a compliance/audit report over the last ``since_hours`` (30-day default window).
+
+    ``tenant_id`` (D-097) restricts the policy-verdict and incident sections to one tenant when
+    the calling actor is bound to one; ``None`` (default) keeps today's unscoped result.
+    ``availability`` is never tenant-scoped -- it reports the single control loop process's own
+    liveness, not per-tenant data (see DEVIATIONS D-097's scope note).
+    """
     window = f"now() - interval '{float(since_hours)} hours'"
     return {
         "window_hours": since_hours,
-        "policy_verdicts": _policy_verdict_distribution(window),
-        "incidents": _incidents(window),
+        "policy_verdicts": _policy_verdict_distribution(window, tenant_id),
+        "incidents": _incidents(window, tenant_id),
         "availability": _availability(),
     }

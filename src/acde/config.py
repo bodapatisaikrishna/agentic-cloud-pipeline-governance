@@ -245,6 +245,30 @@ class Settings(BaseSettings):
                 roles[actor] = role.strip() or "admin"
         return roles
 
+    @property
+    def tenant_map(self) -> dict[str, str]:
+        """actor -> tenant_id (D-097), from an optional fourth ``actor:key:role:tenant_id``
+        field. Missing — including the legacy single ``api_key`` and every ``api_keys`` actor
+        configured before this feature existed — means **unscoped**, not ``"default"``: that
+        actor keeps seeing every tenant's data, exactly today's behavior, with no config edit
+        required. Only an actor an admin explicitly binds to a tenant becomes isolated to it —
+        same zero-regression pattern as ``role_map``'s default, applied to a boundary where the
+        wrong default (silently scoping an existing actor down to one tenant) would be a real
+        access regression, not just a permissions one.
+        """
+        tenants: dict[str, str] = {}
+        for pair in self.api_keys.get_secret_value().split(","):
+            pair = pair.strip()
+            if not pair or ":" not in pair:
+                continue
+            actor, _, rest = pair.partition(":")
+            _key, _, role_tenant = rest.partition(":")
+            _role, _, tenant_id = role_tenant.partition(":")
+            actor, tenant_id = actor.strip(), tenant_id.strip()
+            if actor and tenant_id:
+                tenants[actor] = tenant_id
+        return tenants
+
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
     telemetry_interval_s: float = 5.0  # collector sampling period

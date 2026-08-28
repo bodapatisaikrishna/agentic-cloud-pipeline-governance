@@ -10,6 +10,15 @@ RBAC (D-093): three roles, ``viewer < approver < admin``, from ``Settings.role_m
 third ``actor:key:role`` field). An actor missing a role — including every deployment that only
 has ``api_key``/``api_keys`` with no role syntax at all today — defaults to ``admin``, so upgrading
 never silently downgrades anyone's existing access.
+
+Multi-tenant SaaS layer (D-097): an optional fourth ``actor:key:role:tenant_id`` field
+(``Settings.tenant_map``) binds an actor to one tenant. Missing means **unscoped** (sees every
+tenant, today's behavior, zero regression) — only an admin-provisioned actor with an explicit
+tenant binding is isolated to it. A bound actor whose tenant is suspended (``control.tenants``,
+via ``acde.tenancy``) gets 403 at authentication time, before any route runs. Scope: this isolates
+the *read* side of the operator API (``/proposals``, ``/audit``, ``/audit/export``, ``/costs``,
+``/compliance-report``) — the control loop and the human-approval queue remain one
+process/one-tenant-per-deployment, unchanged (see DEVIATIONS D-097 for why).
 """
 
 from __future__ import annotations
@@ -27,7 +36,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from acde import db
+from acde import db, tenancy
 from acde.config import get_settings
 from acde.human import approvals
 from acde.logging import get_logger
@@ -58,16 +67,33 @@ def _authenticate(
     if x_api_key:
         for actor, key in key_map.items():
             if compare_digest(x_api_key.encode(), key.encode()):
+                _check_tenant_active(actor)
                 return actor
     elif basic is not None:
         expected = key_map.get(basic.username)
         if expected is not None and compare_digest(basic.password.encode(), expected.encode()):
+            _check_tenant_active(basic.username)
             return basic.username
     raise HTTPException(
         status_code=401,
         detail="invalid or missing credentials (X-API-Key header or HTTP Basic)",
         headers={"WWW-Authenticate": "Basic"},
     )
+
+
+def _check_tenant_active(actor: str) -> None:
+    """D-097: if ``actor`` is bound to a tenant, that tenant must exist and be ``active`` — a
+    suspended tenant's credentials are valid but not authorized (403, not 401, same reasoning as
+    ``require_role``). An unbound actor (``tenant_map.get`` misses — every actor configured before
+    this feature existed, and every actor an admin never explicitly bound) skips the DB read
+    entirely: zero added latency and zero behavior change for today's single-tenant deployments.
+    """
+    tenant_id = get_settings().tenant_map.get(actor)
+    if tenant_id is None:
+        return
+    tenant = tenancy.get_tenant(tenant_id)
+    if tenant is None or tenant["status"] != "active":
+        raise HTTPException(status_code=403, detail=f"tenant '{tenant_id}' is not active")
 
 
 _EXPORT_COLUMNS = (
@@ -89,12 +115,16 @@ _EXPORT_BATCH_SIZE = 1000
 
 
 def _audit_rows_paginated(
-    since: str | None, until: str | None, batch_size: int = _EXPORT_BATCH_SIZE
+    since: str | None,
+    until: str | None,
+    tenant_id: str | None = None,
+    batch_size: int = _EXPORT_BATCH_SIZE,
 ) -> Iterator[dict[str, Any]]:
     """Every matching audit row, oldest first, fetched in bounded batches (D-094) — unlike
     ``/audit``'s ``LIMIT``, this is a genuine full export: a keyset cursor on ``(ts, action_id)``
     (a plain ``OFFSET`` degrades on a large table, and ``ts`` alone isn't a unique tiebreaker)
     means memory stays bounded to one batch at a time regardless of how large the result is.
+    ``tenant_id`` (D-097) restricts the export to one tenant when the caller is bound to one.
     """
     conditions = ["1=1"]
     params: list[Any] = []
@@ -104,6 +134,9 @@ def _audit_rows_paginated(
     if until:
         conditions.append("ts <= %s")
         params.append(until)
+    if tenant_id is not None:
+        conditions.append("tenant_id = %s")
+        params.append(tenant_id)
     cursor: tuple[Any, str] | None = None
     while True:
         cursor_conditions = list(conditions)
@@ -151,6 +184,13 @@ def require_role(min_role: str) -> Any:
     return _check
 
 
+def tenant_scope(actor: str = Depends(_authenticate)) -> str | None:
+    """The authenticated caller's bound tenant, or ``None`` if unscoped (D-097). Used by the
+    read routes to add an optional ``tenant_id`` filter — a plain lookup against config already
+    resolved during ``_authenticate``, no extra DB round trip."""
+    return get_settings().tenant_map.get(actor)
+
+
 def create_app(require_key: bool = True) -> FastAPI:
     """Build the operator API. Raises if no API key at all is configured (fail-closed)."""
     if require_key and not get_settings().api_key_map:
@@ -170,6 +210,9 @@ def create_app(require_key: bool = True) -> FastAPI:
     # access (no role concept to enforce when auth itself is off).
     actor_dep = _authenticate if require_key else (lambda: "api")
     approver_dep = require_role("approver") if require_key else (lambda: "api")
+    admin_dep = require_role("admin") if require_key else (lambda: "api")
+    # In no-auth test mode there's no bound tenant to resolve either -- every request is unscoped.
+    tenant_scope_dep = tenant_scope if require_key else (lambda: None)
 
     @app.get("/openapi.json", dependencies=auth, include_in_schema=False)
     def openapi_schema() -> dict[str, Any]:
@@ -201,16 +244,28 @@ def create_app(require_key: bool = True) -> FastAPI:
         return Response(content=metrics.render(), media_type="text/plain; version=0.0.4")
 
     @app.get("/proposals", dependencies=auth)
-    def proposals(limit: int = 50) -> list[dict[str, Any]]:
+    def proposals(
+        limit: int = 50, tenant_id: str | None = Depends(tenant_scope_dep)
+    ) -> list[dict[str, Any]]:
+        conditions = ["1=1"]
+        params: list[Any] = []
+        if tenant_id is not None:
+            conditions.append("tenant_id = %s")
+            params.append(tenant_id)
+        params.append(min(limit, 500))
         return db.fetch_all(
             "SELECT agent, action_type, target, policy_decision, executed, outcome, status, ts "
-            "FROM telemetry.agent_actions ORDER BY ts DESC LIMIT %s",
-            (min(limit, 500),),
+            f"FROM telemetry.agent_actions WHERE {' AND '.join(conditions)} "
+            "ORDER BY ts DESC LIMIT %s",
+            tuple(params),
         )
 
     @app.get("/audit", dependencies=auth)
     def audit(
-        limit: int = 100, since: str | None = None, until: str | None = None
+        limit: int = 100,
+        since: str | None = None,
+        until: str | None = None,
+        tenant_id: str | None = Depends(tenant_scope_dep),
     ) -> list[dict[str, Any]]:
         """Audit trail, most recent first. ``since``/``until`` are ISO-8601 timestamps — the actual
         compliance question ("what happened on date X") a `LIMIT`-only query cannot answer."""
@@ -222,6 +277,9 @@ def create_app(require_key: bool = True) -> FastAPI:
         if until:
             conditions.append("ts <= %s")
             params.append(until)
+        if tenant_id is not None:
+            conditions.append("tenant_id = %s")
+            params.append(tenant_id)
         params.append(min(limit, 1000))
         return db.fetch_all(
             "SELECT agent, action_type, target, policy_decision, policy_reason, executed, "
@@ -235,11 +293,12 @@ def create_app(require_key: bool = True) -> FastAPI:
         since: str | None = None,
         until: str | None = None,
         export_format: str = Query("csv", alias="format", pattern="^(csv|json)$"),
+        tenant_id: str | None = Depends(tenant_scope_dep),
     ) -> Response:
         """The full audit trail matching the same ``since``/``until`` filters as ``/audit`` — no
         row cap, unlike that endpoint. CSV (default) streams in bounded batches; JSON collects the
         same paginated query into one response (still uncapped, just not memory-bounded)."""
-        rows = _audit_rows_paginated(since, until)
+        rows = _audit_rows_paginated(since, until, tenant_id)
         if export_format == "json":
             return Response(
                 content=json.dumps(list(rows), default=str),
@@ -264,15 +323,56 @@ def create_app(require_key: bool = True) -> FastAPI:
         )
 
     @app.get("/costs", dependencies=auth)
-    def costs(since_hours: float = 24.0) -> list[dict[str, float | str]]:
-        """Per-tenant cost + LLM token breakdown over the trailing window (D-095)."""
-        return cost.costs_by_tenant(since_hours=since_hours)
+    def costs(
+        since_hours: float = 24.0, tenant_id: str | None = Depends(tenant_scope_dep)
+    ) -> list[dict[str, float | str]]:
+        """Per-tenant cost + LLM token breakdown over the trailing window (D-095). Restricted to
+        the caller's own tenant when they're bound to one (D-097)."""
+        return cost.costs_by_tenant(since_hours=since_hours, tenant_id=tenant_id)
 
     @app.get("/compliance-report", dependencies=auth)
-    def compliance_report_endpoint(since_hours: float = 720.0) -> dict[str, Any]:
+    def compliance_report_endpoint(
+        since_hours: float = 720.0, tenant_id: str | None = Depends(tenant_scope_dep)
+    ) -> dict[str, Any]:
         """Compliance/audit evidence report (D-096): policy verdict distribution, incident
-        count + MTTR, and a point-in-time availability check."""
-        return compliance_report(since_hours=since_hours)
+        count + MTTR, and a point-in-time availability check. Restricted to the caller's own
+        tenant when they're bound to one (D-097); availability stays global (see that report's
+        own docstring)."""
+        return compliance_report(since_hours=since_hours, tenant_id=tenant_id)
+
+    @app.post("/tenants")
+    def create_tenant_route(
+        tenant_id: str, display_name: str, actor: str = Depends(admin_dep)
+    ) -> dict[str, Any]:
+        """Admin-provisioned tenant creation (D-097) -- no public signup."""
+        try:
+            tenant = tenancy.create_tenant(tenant_id, display_name)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        log.info("tenant_created", extra={"tenant_id": tenant_id, "actor": actor})
+        return tenant
+
+    @app.get("/tenants")
+    def list_tenants_route(_actor: str = Depends(admin_dep)) -> list[dict[str, Any]]:
+        return tenancy.list_tenants()
+
+    @app.post("/tenants/{tenant_id}/suspend")
+    def suspend_tenant_route(tenant_id: str, actor: str = Depends(admin_dep)) -> dict[str, Any]:
+        try:
+            tenant = tenancy.set_tenant_status(tenant_id, "suspended")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        log.info("tenant_suspended", extra={"tenant_id": tenant_id, "actor": actor})
+        return tenant
+
+    @app.post("/tenants/{tenant_id}/activate")
+    def activate_tenant_route(tenant_id: str, actor: str = Depends(admin_dep)) -> dict[str, Any]:
+        try:
+            tenant = tenancy.set_tenant_status(tenant_id, "active")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        log.info("tenant_activated", extra={"tenant_id": tenant_id, "actor": actor})
+        return tenant
 
     @app.get("/approvals", dependencies=auth)
     def list_approvals() -> list[dict[str, Any]]:

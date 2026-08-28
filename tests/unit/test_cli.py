@@ -92,6 +92,63 @@ def test_compliance_report_prints_json(monkeypatch, capsys):
     assert '"healthy": true' in out
 
 
+def test_tenants_create(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.tenancy.create_tenant",
+        lambda tenant_id, name: {
+            "tenant_id": tenant_id,
+            "display_name": name,
+            "status": "active",
+        },
+    )
+    rc = cli.main(["tenants", "create", "acme", "--name", "Acme Inc"])
+    assert rc == 0
+    assert "created tenant" in capsys.readouterr().out
+
+
+def test_tenants_create_duplicate_prints_error_and_exits_1(monkeypatch, capsys):
+    def _raise(tenant_id, name):
+        raise ValueError(f"tenant {tenant_id!r} already exists")
+
+    monkeypatch.setattr("acde.tenancy.create_tenant", _raise)
+    rc = cli.main(["tenants", "create", "acme", "--name", "Acme Inc"])
+    assert rc == 1
+    assert "error" in capsys.readouterr().out
+
+
+def test_tenants_list(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.tenancy.list_tenants",
+        lambda: [{"tenant_id": "acme", "status": "active", "display_name": "Acme Inc"}],
+    )
+    rc = cli.main(["tenants", "list"])
+    assert rc == 0
+    assert "acme" in capsys.readouterr().out
+
+
+def test_tenants_suspend_and_activate(monkeypatch, capsys):
+    monkeypatch.setattr(
+        "acde.tenancy.set_tenant_status",
+        lambda tenant_id, status: {"tenant_id": tenant_id, "status": status},
+    )
+    rc = cli.main(["tenants", "suspend", "acme"])
+    assert rc == 0
+    assert "'suspended'" in capsys.readouterr().out
+    rc = cli.main(["tenants", "activate", "acme"])
+    assert rc == 0
+    assert "'active'" in capsys.readouterr().out
+
+
+def test_tenants_suspend_unknown_prints_error_and_exits_1(monkeypatch, capsys):
+    def _raise(tenant_id, status):
+        raise ValueError(f"no such tenant {tenant_id!r}")
+
+    monkeypatch.setattr("acde.tenancy.set_tenant_status", _raise)
+    rc = cli.main(["tenants", "suspend", "nope"])
+    assert rc == 1
+    assert "error" in capsys.readouterr().out
+
+
 def test_unknown_command_errors():
     import pytest
 

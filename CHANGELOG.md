@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Multi-tenant SaaS layer, admin-provisioned (D-097)**: new `control.tenants` registry
+  (`acde tenants create|list|suspend|activate`, `POST/GET /tenants*`, admin-only), an optional
+  fourth `actor:key:role:tenant_id` API-key field binding an actor to one tenant (missing =
+  unscoped, zero regression), and tenant-filtered `/proposals`, `/audit`, `/audit/export`,
+  `/costs`, `/compliance-report`. A suspended tenant's keys get `403` at auth time. Verified live:
+  a tenant-bound key saw zero cross-tenant rows against the real 198-row dataset; suspend/activate
+  flipped `403`/`200` on the real running server.
 - **Compliance/audit evidence report (D-096)**: `acde compliance-report` CLI + `GET
   /compliance-report` (`viewer`+) — policy verdict distribution, incident count + MTTR (now real
   thanks to D-091), and a point-in-time availability check that explicitly does not fabricate a

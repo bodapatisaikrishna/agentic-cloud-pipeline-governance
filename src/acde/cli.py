@@ -138,6 +138,33 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tenants(args: argparse.Namespace) -> int:
+    from acde import tenancy
+
+    if args.action == "create":
+        try:
+            t = tenancy.create_tenant(args.tenant_id, args.name)
+        except ValueError as exc:
+            print(f"error: {exc}")
+            return 1
+        print(f"created tenant {t['tenant_id']!r} ({t['display_name']!r}, status={t['status']!r})")
+        return 0
+    if args.action == "list":
+        for t in tenancy.list_tenants():
+            print(f"  {t['tenant_id']:<20} {t['status']:<10} {t['display_name']}")
+        return 0
+    if args.action in ("suspend", "activate"):
+        status = "suspended" if args.action == "suspend" else "active"
+        try:
+            t = tenancy.set_tenant_status(args.tenant_id, status)
+        except ValueError as exc:
+            print(f"error: {exc}")
+            return 1
+        print(f"tenant {t['tenant_id']!r} is now {t['status']!r}")
+        return 0
+    return 2
+
+
 def cmd_compliance_report(args: argparse.Namespace) -> int:
     import json
 
@@ -244,6 +271,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--actor", default="operator")
     ap.add_argument("--note", default="")
     ap.set_defaults(func=cmd_approvals)
+
+    tp = sub.add_parser("tenants", help="tenant registry (D-097, admin-provisioned)")
+    tp.add_argument("action", choices=["create", "list", "suspend", "activate"])
+    tp.add_argument("tenant_id", nargs="?", default="")
+    tp.add_argument("--name", default="", help="display name (create only)")
+    tp.set_defaults(func=cmd_tenants)
 
     return p
 

@@ -1606,3 +1606,69 @@ currently running against this dev stack, which is exactly the honest "no heartb
 uptime claim" behavior this design decision exists to produce rather than paper over.
 
 Full unit (464) and integration (27) suites green.
+
+## D-097 — Multi-tenant SaaS layer, admin-provisioned
+
+D-085 established `tenant_id`/`environment` columns on every scoped telemetry table but left the
+actual SaaS control plane unbuilt, naming exactly what was missing: *"a tenant registry,
+per-request tenant resolution, or any routing that lets one database serve multiple tenants."*
+User asked for whichever of the two previously-declined "big items" (multi-tenant SaaS layer,
+SSO) was best; confirmed via `AskUserQuestion`: the SaaS layer, **admin-provisioned** (no public
+signup, no email/password/billing flow — an operator creates a tenant, the same trust model as
+every other ACDE deployment operation).
+
+**Explicit scope boundary, stated up front rather than discovered later**: ACDE's control loop is
+one background process per deployment, governing one connector against one OPA policy set. Making
+the control loop itself concurrently govern N tenants' separate pipelines (per-tenant connectors,
+policy sets, execution modes) is a materially larger, separate initiative with its own product
+decisions — not attempted here. This closes the **read/observability side** of the operator API:
+the surface a tenant's operator actually logs into. The control loop and `human/approvals.py`'s
+approval queue (`telemetry.action_approvals` has no `tenant_id` column at all — confirmed by
+reading `infra/postgres/init/04_approvals.sql`) stay global/single-tenant, unchanged; the `/ui`
+dashboard's aggregate counts are likewise not scoped by this change. Both are named follow-on work,
+not a silently inconsistent half-measure.
+
+**What was built**:
+- New `control.tenants` registry (migration `005_tenant_registry.sql`; `tenant_id` PK,
+  `display_name`, `status` ∈ {active, suspended}), seeded with `('default', ...)` so every
+  existing deployment's already-`'default'`-tagged rows get a matching row with zero manual step.
+  `acde.tenancy` gained `create_tenant`/`list_tenants`/`get_tenant`/`set_tenant_status`.
+- `Settings.api_keys` gained an **optional fourth** field: `actor:key:role:tenant_id`. New
+  `Settings.tenant_map` (actor → tenant_id) — **missing means unscoped** (sees every tenant), not
+  `"default"`: every actor configured before this feature existed keeps exactly today's behavior,
+  zero config change required. This is the opposite default direction from `role_map`'s own
+  (missing role → `"admin"`, the *most* access) — deliberately, since the wrong default here
+  (silently narrowing an existing actor to one tenant) would be a real access regression, not a
+  permissions one.
+- `_authenticate` gained a suspension check: a tenant-bound actor whose tenant is `suspended` gets
+  `403` (valid credentials, not authorized — same reasoning as `require_role`'s 403). An unbound
+  actor skips the DB read entirely — zero added latency for every deployment that hasn't opted in.
+- `/proposals`, `/audit`, `/audit/export`, `/costs` (`cost.costs_by_tenant` gained an optional
+  `tenant_id` filter), `/compliance-report` (`compliance_report` likewise) all add a
+  `tenant_id = ...` filter when the caller is bound; `None` (unbound) keeps today's unscoped
+  query. `/metrics`'s Prometheus exposition stays unscoped — an admin-level monitoring stack
+  scrapes it, and `acde_cost_units_by_tenant{tenant_id=...}`'s entire point is showing every
+  tenant.
+- New admin-only routes `POST /tenants`, `GET /tenants`, `POST /tenants/{id}/suspend|activate`
+  (`require_role("admin")`, reusing D-093's factory) and matching `acde tenants
+  create|list|suspend|activate` CLI subcommand.
+
+**Mutation-tested** (both, per the plan's own verification section — "prove an unfiltered query
+really would leak cross-tenant rows"): (1) commented out the suspension `raise` in
+`_check_tenant_active` — `test_suspended_tenant_gets_403` failed exactly as expected (`200` where
+`403` was required). (2) deleted the `tenant_id` filter branch from `/proposals` — the new
+tenant-filter test failed with the tenant clause missing from the captured SQL, the literal proof
+that without this code an isolated tenant's query would have been unfiltered. Restored both,
+reconfirmed the full suite green.
+
+**Verified live against the real running stack, not just mocked tests**: applied migration 005
+against the real Postgres; `acde tenants create acme --name "Acme Inc"` created a real row; started
+a real `uvicorn` process with a tenant-bound key (`viv:viv-key:viewer:acme`) alongside an unbound
+admin key. `viv`'s `/proposals` returned `[]` (every real row in this dev stack is
+`tenant_id='default'`, correctly invisible to `acme`) while the unbound admin key saw everything —
+genuine cross-tenant isolation, not just a passing unit test. Suspended `acme` via the real admin
+API: `viv`'s next request got a real `403`; reactivated: `200` again. `/costs` and
+`/compliance-report` showed the same scoped-vs-unscoped split. Cleaned up the verification tenant
+and server process afterward.
+
+Full unit (497) and integration (27) suites green.

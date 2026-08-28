@@ -98,3 +98,34 @@ class TestRoleMap:
         # this must not silently downgrade anyone's access on upgrade.
         s = Settings(_env_file=None, api_key="", api_keys="alice:key1")
         assert s.role_map == {"alice": "admin"}
+
+
+class TestTenantMap:
+    """D-097."""
+
+    def test_empty_when_nothing_configured(self):
+        assert Settings(_env_file=None, api_key="", api_keys="").tenant_map == {}
+
+    def test_legacy_single_key_is_never_bound_to_a_tenant(self):
+        # the legacy api_key has no syntax for a tenant field at all -- always unscoped.
+        s = Settings(_env_file=None, api_key="secret", api_keys="")
+        assert s.tenant_map == {}
+
+    def test_explicit_tenant_binding_is_read(self):
+        s = Settings(
+            _env_file=None,
+            api_key="",
+            api_keys="viv:key1:viewer:acme,al:key2:approver:beta",
+        )
+        assert s.tenant_map == {"viv": "acme", "al": "beta"}
+
+    def test_missing_tenant_field_on_a_role_bound_actor_is_unscoped_not_default(self):
+        # zero-regression rule: an actor with a role but no 4th field must stay unscoped (sees
+        # every tenant), not silently narrowed to "default" -- the opposite default from role_map's
+        # own (which defaults an unspecified role to "admin", the *most* access, not the least).
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1:viewer")
+        assert s.tenant_map == {}
+
+    def test_missing_role_and_tenant_on_a_bare_actor_is_also_unscoped(self):
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1")
+        assert s.tenant_map == {}

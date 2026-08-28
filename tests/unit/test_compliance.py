@@ -15,7 +15,7 @@ class TestPolicyVerdictDistribution:
             {"policy_decision": "escalated", "n": 1},
         ]
         monkeypatch.setattr(compliance, "db", fake)
-        dist = compliance._policy_verdict_distribution("now() - interval '1.0 hours'")
+        dist = compliance._policy_verdict_distribution("now() - interval '1.0 hours'", None)
         assert dist["total"] == 10
         assert dist["counts"] == {"allowed": 8, "denied": 1, "escalated": 1}
         assert dist["percentages"] == {"allowed": 80.0, "denied": 10.0, "escalated": 10.0}
@@ -24,8 +24,18 @@ class TestPolicyVerdictDistribution:
         fake = MagicMock()
         fake.fetch_all.return_value = []
         monkeypatch.setattr(compliance, "db", fake)
-        dist = compliance._policy_verdict_distribution("now() - interval '1.0 hours'")
+        dist = compliance._policy_verdict_distribution("now() - interval '1.0 hours'", None)
         assert dist == {"counts": {}, "percentages": {}, "total": 0}
+
+    def test_tenant_id_adds_the_filter_clause_and_param(self, monkeypatch):
+        # D-097: proof the tenant filter actually reaches the query, not just that it's accepted.
+        fake = MagicMock()
+        fake.fetch_all.return_value = []
+        monkeypatch.setattr(compliance, "db", fake)
+        compliance._policy_verdict_distribution("now() - interval '1.0 hours'", "acme")
+        sql, params = fake.fetch_all.call_args.args
+        assert "tenant_id = %(tenant_id)s" in sql
+        assert params == {"tenant_id": "acme"}
 
 
 class TestIncidents:
@@ -34,7 +44,7 @@ class TestIncidents:
         fake.fetch_all.return_value = [{"mttr": 10.0}, {"mttr": 30.0}]
         fake.fetch_one.side_effect = [{"n": 2}, {"n": 1}]  # detected, open_now
         monkeypatch.setattr(compliance, "db", fake)
-        inc = compliance._incidents("now() - interval '1.0 hours'")
+        inc = compliance._incidents("now() - interval '1.0 hours'", None)
         assert inc["detected"] == 2
         assert inc["resolved"] == 2
         assert inc["open_now"] == 1
@@ -45,9 +55,22 @@ class TestIncidents:
         fake.fetch_all.return_value = []
         fake.fetch_one.side_effect = [{"n": 0}, {"n": 0}]
         monkeypatch.setattr(compliance, "db", fake)
-        inc = compliance._incidents("now() - interval '1.0 hours'")
+        inc = compliance._incidents("now() - interval '1.0 hours'", None)
         assert inc["mttr_median_s"] == 0.0
         assert inc["mttr_p90_s"] == 0.0
+
+    def test_tenant_id_filters_all_three_queries(self, monkeypatch):
+        fake = MagicMock()
+        fake.fetch_all.return_value = []
+        fake.fetch_one.side_effect = [{"n": 0}, {"n": 0}]
+        monkeypatch.setattr(compliance, "db", fake)
+        compliance._incidents("now() - interval '1.0 hours'", "acme")
+        resolved_sql = fake.fetch_all.call_args.args[0]
+        detected_sql = fake.fetch_one.call_args_list[0].args[0]
+        open_now_sql = fake.fetch_one.call_args_list[1].args[0]
+        assert "tenant_id = %(tenant_id)s" in resolved_sql
+        assert "tenant_id = %(tenant_id)s" in detected_sql
+        assert "tenant_id = %(tenant_id)s" in open_now_sql
 
 
 class TestAvailability:
