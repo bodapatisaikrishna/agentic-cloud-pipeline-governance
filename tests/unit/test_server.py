@@ -60,6 +60,22 @@ def test_protected_routes_require_key(client):
     assert client.get("/health/ready").status_code == 401
 
 
+def test_docs_and_openapi_require_auth(client):
+    # D-092: FastAPI's built-in docs_url/redoc_url/openapi_url are unauthenticated by
+    # construction -- disabled and re-added as regular routes; this is the regression test.
+    assert client.get("/docs").status_code == 401
+    assert client.get("/redoc").status_code == 401
+    assert client.get("/openapi.json").status_code == 401
+
+
+def test_docs_and_openapi_work_with_a_valid_key(client):
+    assert client.get("/docs", headers={"X-API-Key": "secret"}).status_code == 200
+    assert client.get("/redoc", headers={"X-API-Key": "secret"}).status_code == 200
+    r = client.get("/openapi.json", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+    assert r.json()["info"]["title"] == "ACDE Operator API"
+
+
 def test_valid_key_grants_access(client):
     r = client.get("/proposals", headers={"X-API-Key": "secret"})
     assert r.status_code == 200

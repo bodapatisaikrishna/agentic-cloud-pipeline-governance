@@ -13,6 +13,8 @@ from secrets import compare_digest
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from acde import db
@@ -63,10 +65,28 @@ def create_app(require_key: bool = True) -> FastAPI:
             "ACDE has no api_key/api_keys configured — refusing to start unauthenticated"
         )
 
-    app = FastAPI(title="ACDE Operator API", version="2.2")
+    # D-092: FastAPI's own docs_url/redoc_url/openapi_url routes are unauthenticated by
+    # construction (framework-level routes, not subject to per-route `dependencies=`) — anyone
+    # could read the full API schema with zero credentials. Disabled here, re-added below as
+    # regular routes behind the same `auth` every other endpoint uses.
+    app = FastAPI(
+        title="ACDE Operator API", version="2.2", docs_url=None, redoc_url=None, openapi_url=None
+    )
     auth = [Depends(_authenticate)] if require_key else []
     # In no-auth test mode there's no identity to resolve; fall back to a fixed actor name.
     actor_dep = _authenticate if require_key else (lambda: "api")
+
+    @app.get("/openapi.json", dependencies=auth, include_in_schema=False)
+    def openapi_schema() -> dict[str, Any]:
+        return get_openapi(title=app.title, version=app.version, routes=app.routes)
+
+    @app.get("/docs", dependencies=auth, include_in_schema=False)
+    def docs() -> Response:
+        return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{app.title} — Swagger UI")
+
+    @app.get("/redoc", dependencies=auth, include_in_schema=False)
+    def redoc() -> Response:
+        return get_redoc_html(openapi_url="/openapi.json", title=f"{app.title} — ReDoc")
 
     @app.get("/health")
     def health() -> dict[str, Any]:

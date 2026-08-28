@@ -6,6 +6,9 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Fixed
+- **`/docs` and `/openapi.json` were unauthenticated (D-092)**: FastAPI's built-in docs routes
+  aren't subject to the per-route auth pattern every other endpoint uses — confirmed live, `200`
+  with zero credentials. Disabled the framework's own routes, re-added them behind the same auth.
 - **Real anomaly detection wired into production, was chaos-only (D-091)**: `telemetry.
   failure_events` was only ever written by the chaos injector — a real production anomaly reached
   the audit trail but never became an incident, making MTTR/decision-quality scoring inert outside

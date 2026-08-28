@@ -1422,3 +1422,27 @@ ticks with different real task states — previously, since `task_runs` was alwa
 with genuinely different Airflow task states but otherwise-identical other fields would have
 produced the *same* cache key and incorrectly reused a stale LLM response. A latent cache-staleness
 bug this fix also happens to close, not something newly introduced.
+
+## D-092 — `/docs` and `/openapi.json` were unauthenticated
+
+**Found while researching a feature roadmap**, verified live: `TestClient` against a real `create_
+app(require_key=True)` returned `200` for both `/docs` and `/openapi.json` with zero credentials.
+FastAPI's `docs_url`/`redoc_url`/`openapi_url` are framework-level routes, added internally by
+`FastAPI.__init__`, not subject to the per-route `dependencies=auth` pattern every other endpoint
+in this file uses — so anyone could read the full API schema (every route, every parameter shape)
+on a deployed instance without a key. Not a credential leak, but real information disclosure, the
+same class of finding as D-087's `/health` split.
+
+**Fix**: `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` disables the framework's own
+unauthenticated routes; `/openapi.json`, `/docs`, `/redoc` re-added as regular `@app.get` routes
+with `dependencies=auth` — the documented FastAPI pattern (`fastapi.openapi.utils.get_openapi`,
+`fastapi.openapi.docs.get_swagger_ui_html`/`get_redoc_html`).
+
+**Mutation-tested**: reverted to plain `FastAPI(title=..., version=...)` (the original
+unauthenticated construction) — the new test failed exactly as expected (`200` where `401` should
+be; FastAPI's own built-in route wins over the later custom one when both are registered).
+Restored, reconfirmed 21/21 `test_server.py` green.
+
+**Verified live**, the same check that found the bug in the first place, now the other way:
+`/docs` and `/openapi.json` both `401` unauthenticated, `/docs` `200` with a real key. Full unit
+(434) and integration (27) suites green.
