@@ -72,3 +72,29 @@ class TestApiKeyMap:
     def test_malformed_pairs_are_skipped(self):
         s = Settings(_env_file=None, api_key="", api_keys="alice:key1, no-colon-here, :novalue")
         assert s.api_key_map == {"alice": "key1"}
+
+    def test_key_extraction_unaffected_by_an_optional_role_field(self):
+        # actor:key:role must still yield the right key, not "key:role" or "key" truncated wrong.
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1:viewer,bob:key2")
+        assert s.api_key_map == {"alice": "key1", "bob": "key2"}
+
+
+class TestRoleMap:
+    """D-093."""
+
+    def test_empty_when_nothing_configured(self):
+        assert Settings(_env_file=None, api_key="", api_keys="").role_map == {}
+
+    def test_legacy_single_key_defaults_to_admin(self):
+        s = Settings(_env_file=None, api_key="secret", api_keys="")
+        assert s.role_map == {"operator": "admin"}
+
+    def test_explicit_role_is_read(self):
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1:viewer,bob:key2:approver")
+        assert s.role_map == {"alice": "viewer", "bob": "approver"}
+
+    def test_missing_role_on_a_multi_key_actor_defaults_to_admin(self):
+        # every deployment that already has api_keys configured today has no role syntax at all --
+        # this must not silently downgrade anyone's access on upgrade.
+        s = Settings(_env_file=None, api_key="", api_keys="alice:key1")
+        assert s.role_map == {"alice": "admin"}

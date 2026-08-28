@@ -1446,3 +1446,39 @@ Restored, reconfirmed 21/21 `test_server.py` green.
 **Verified live**, the same check that found the bug in the first place, now the other way:
 `/docs` and `/openapi.json` both `401` unauthenticated, `/docs` `200` with a real key. Full unit
 (434) and integration (27) suites green.
+
+## D-093 — RBAC: viewer / approver / admin
+
+No role concept existed at all before this — every authenticated actor had identical access
+(confirmed by grep before starting: no `role` field anywhere). Every B2B SaaS enterprise-readiness
+source found while researching this feature roadmap lists RBAC as table-stakes alongside SSO/audit
+logs; this closes it for the write path (approve/reject) while every read route stays open to any
+authenticated actor (`viewer` is the floor, not an extra gate).
+
+**Design**: `Settings.api_keys` gained an optional third `actor:key:role` field.
+`Settings.role_map` (actor → role) parses it; **a missing role — including every deployment that
+only has `api_key`/`api_keys` today, with no role syntax at all — defaults to `admin`**, so
+upgrading never silently downgrades anyone's existing access. `server/app.py` gained
+`require_role(min_role)`, a dependency factory nesting `Depends(_authenticate)` and checking
+`_ROLE_RANK[role] >= _ROLE_RANK[min_role]` (403, not 401 — the caller is a real authenticated
+actor, just not authorized for *this* action); it returns the actor string, so it drops into any
+slot that already expects `Depends(actor_dep)` with zero signature changes elsewhere. Both the
+JSON API's `/approvals/*/approve|reject` and the dashboard's `/ui/approvals/*/approve|reject` now
+use it — `dashboard.add_routes` gained an optional `approver_dep` parameter (defaults to
+`actor_dep` if omitted, so no other caller breaks), closing the finding that the dashboard's own
+write actions would otherwise stay a **weaker, unRBAC'd path** to the exact same side effect the
+JSON API now gates.
+
+**Mutation-tested**: the role-rank comparison was replaced with `if False:` (always allow) — the
+new viewer-403 test failed exactly as expected (the mutated code let the request past the check
+into real, unmocked downstream approval logic it should never have reached). Restored, reconfirmed
+25/25 `test_server.py` and 8/8 `test_dashboard.py` green.
+
+**Verified live against a real running server, not just `TestClient`**: started `acde serve` with
+`API_KEYS="viv:viv-key:viewer,al:al-key:approver"`, confirmed a real `curl -X POST .../approve`
+with the viewer key returns `403`, the same viewer's `GET /proposals` returns `200`, and the
+approver key's `POST .../approve` against a nonexistent approval id returns
+`{"status":"not_found",...}` — proof it passed the role gate and reached real business logic, not
+just that the gate itself returns the right status code in isolation.
+
+Full unit (444) and integration (27) suites green.

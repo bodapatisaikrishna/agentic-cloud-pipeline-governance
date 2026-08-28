@@ -22,8 +22,16 @@ from acde.server import metrics
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
-def add_routes(app: FastAPI, actor_dep: Callable[..., str]) -> None:
-    """Register the /ui routes on ``app``, authenticated via the same dependency as the JSON API."""
+def add_routes(
+    app: FastAPI, actor_dep: Callable[..., str], approver_dep: Callable[..., str] | None = None
+) -> None:
+    """Register the /ui routes on ``app``, authenticated via the same dependency as the JSON API.
+
+    ``approver_dep`` (D-093) gates the write actions (approve/reject) to role ``approver``+; any
+    authenticated actor (``viewer``+) can view the dashboard itself. Defaults to ``actor_dep`` for
+    backward compatibility with any caller not yet passing the second dependency.
+    """
+    write_dep = approver_dep or actor_dep
 
     @app.get("/ui", response_class=HTMLResponse)
     def dashboard(request: Request, actor: str = Depends(actor_dep)) -> HTMLResponse:
@@ -41,14 +49,14 @@ def add_routes(app: FastAPI, actor_dep: Callable[..., str]) -> None:
         )
 
     @app.post("/ui/approvals/{approval_id}/approve")
-    def ui_approve(approval_id: int, actor: str = Depends(actor_dep)) -> RedirectResponse:
+    def ui_approve(approval_id: int, actor: str = Depends(write_dep)) -> RedirectResponse:
         result = approvals.approve(approval_id, actor=actor)
         ok = "1" if result["status"] == "executed" else "0"
         msg = f"#{approval_id}: {result['status']} — {result['outcome']}"
         return RedirectResponse(f"/ui?flash={quote(msg)}&ok={ok}", status_code=303)
 
     @app.post("/ui/approvals/{approval_id}/reject")
-    def ui_reject(approval_id: int, actor: str = Depends(actor_dep)) -> RedirectResponse:
+    def ui_reject(approval_id: int, actor: str = Depends(write_dep)) -> RedirectResponse:
         result = approvals.reject(approval_id, actor=actor)
         msg = f"#{approval_id}: {result['status']}"
         return RedirectResponse(f"/ui?flash={quote(msg)}&ok=1", status_code=303)

@@ -5,6 +5,11 @@ Basic (browser dashboard — username=actor, password=key) against ``Settings.ap
 resolved *actor name* — not a client-supplied field — is what lands in the audit trail. The app
 **refuses to build** with no key configured at all, so it can never be exposed unauthenticated by
 accident. TLS is expected to be terminated by a reverse proxy (documented in docs/OPERATIONS.md).
+
+RBAC (D-093): three roles, ``viewer < approver < admin``, from ``Settings.role_map`` (an optional
+third ``actor:key:role`` field). An actor missing a role — including every deployment that only
+has ``api_key``/``api_keys`` with no role syntax at all today — defaults to ``admin``, so upgrading
+never silently downgrades anyone's existing access.
 """
 
 from __future__ import annotations
@@ -58,6 +63,29 @@ def _authenticate(
     )
 
 
+_ROLE_RANK = {"viewer": 0, "approver": 1, "admin": 2}
+
+
+def require_role(min_role: str) -> Any:
+    """Dependency factory: authenticate (nested ``Depends(_authenticate)``), then require the
+    resolved actor's role to be at least ``min_role`` (403, not 401 — the caller is a real,
+    authenticated actor, just not authorized for this action). Returns the actor string, so this
+    drops into any route or ``dashboard.add_routes`` slot that already expects
+    ``Depends(actor_dep)``.
+    """
+
+    def _check(actor: str = Depends(_authenticate)) -> str:
+        role = get_settings().role_map.get(actor, "admin")
+        if _ROLE_RANK.get(role, -1) < _ROLE_RANK[min_role]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"actor '{actor}' has role '{role}', this action needs '{min_role}'+",
+            )
+        return actor
+
+    return _check
+
+
 def create_app(require_key: bool = True) -> FastAPI:
     """Build the operator API. Raises if no API key at all is configured (fail-closed)."""
     if require_key and not get_settings().api_key_map:
@@ -73,8 +101,10 @@ def create_app(require_key: bool = True) -> FastAPI:
         title="ACDE Operator API", version="2.2", docs_url=None, redoc_url=None, openapi_url=None
     )
     auth = [Depends(_authenticate)] if require_key else []
-    # In no-auth test mode there's no identity to resolve; fall back to a fixed actor name.
+    # In no-auth test mode there's no identity to resolve; fall back to a fixed actor name, full
+    # access (no role concept to enforce when auth itself is off).
     actor_dep = _authenticate if require_key else (lambda: "api")
+    approver_dep = require_role("approver") if require_key else (lambda: "api")
 
     @app.get("/openapi.json", dependencies=auth, include_in_schema=False)
     def openapi_schema() -> dict[str, Any]:
@@ -140,14 +170,16 @@ def create_app(require_key: bool = True) -> FastAPI:
         return approvals.list_pending()
 
     @app.post("/approvals/{approval_id}/approve")
-    def approve(approval_id: int, actor: str = Depends(actor_dep)) -> dict[str, Any]:
+    def approve(approval_id: int, actor: str = Depends(approver_dep)) -> dict[str, Any]:
         return approvals.approve(approval_id, actor=actor)
 
     @app.post("/approvals/{approval_id}/reject")
-    def reject(approval_id: int, note: str = "", actor: str = Depends(actor_dep)) -> dict[str, Any]:
+    def reject(
+        approval_id: int, note: str = "", actor: str = Depends(approver_dep)
+    ) -> dict[str, Any]:
         return approvals.reject(approval_id, actor=actor, note=note)
 
-    dashboard.add_routes(app, actor_dep)
+    dashboard.add_routes(app, actor_dep, approver_dep)
     return app
 
 

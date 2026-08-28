@@ -88,3 +88,21 @@ def test_ui_reject_calls_same_function_as_json_api_and_redirects(client, monkeyp
 def test_ui_actions_require_auth(client):
     r = client.post("/ui/approvals/7/approve", follow_redirects=False)
     assert r.status_code == 401
+
+
+def test_ui_viewer_cannot_approve_or_reject_but_can_view(monkeypatch):
+    # D-093: the dashboard's write actions go through the same approver_dep as the JSON API --
+    # a viewer role can see the page but not act from it either.
+    monkeypatch.setattr(
+        app_mod, "get_settings", lambda: Settings(_env_file=None, api_keys="viv:viv-key:viewer")
+    )
+    fake = MagicMock()
+    fake.fetch_all.return_value = []
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr(app_mod, "db", fake)
+    monkeypatch.setattr(app_mod.metrics, "db", fake)
+    monkeypatch.setattr("acde.human.approvals.db", fake)
+    client = TestClient(app_mod.create_app())
+    assert client.get("/ui", auth=("viv", "viv-key")).status_code == 200
+    r = client.post("/ui/approvals/7/approve", auth=("viv", "viv-key"), follow_redirects=False)
+    assert r.status_code == 403

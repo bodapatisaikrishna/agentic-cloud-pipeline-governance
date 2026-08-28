@@ -200,6 +200,61 @@ def test_http_basic_auth_resolves_actor(multi_actor_client, monkeypatch):
     assert captured["actor"] == "alice"
 
 
+@pytest.fixture
+def role_client(monkeypatch):
+    """D-093: viewer, approver, admin, each with a distinct key."""
+    monkeypatch.setattr(
+        app_mod,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            api_keys="viv:viv-key:viewer,approver_al:approver-key:approver,admin_amy:admin-key:admin",
+        ),
+    )
+    fake = MagicMock()
+    fake.fetch_all.return_value = []
+    fake.fetch_one.return_value = {"n": 0}
+    monkeypatch.setattr(app_mod, "db", fake)
+    monkeypatch.setattr(app_mod.metrics, "db", fake)
+    monkeypatch.setattr("acde.human.approvals.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
+    return TestClient(app_mod.create_app())
+
+
+def test_viewer_can_read_but_not_approve_or_reject(role_client):
+    assert role_client.get("/proposals", headers={"X-API-Key": "viv-key"}).status_code == 200
+    assert role_client.get("/audit", headers={"X-API-Key": "viv-key"}).status_code == 200
+    r_approve = role_client.post("/approvals/1/approve", headers={"X-API-Key": "viv-key"})
+    r_reject = role_client.post("/approvals/1/reject", headers={"X-API-Key": "viv-key"})
+    assert r_approve.status_code == 403
+    assert r_reject.status_code == 403
+
+
+def test_approver_can_approve_and_reject(role_client, monkeypatch):
+    monkeypatch.setattr("acde.human.approvals.approve", lambda i, actor: {"status": "executed"})
+    monkeypatch.setattr(
+        "acde.human.approvals.reject", lambda i, actor, note="": {"status": "rejected"}
+    )
+    r_approve = role_client.post("/approvals/1/approve", headers={"X-API-Key": "approver-key"})
+    r_reject = role_client.post("/approvals/2/reject", headers={"X-API-Key": "approver-key"})
+    assert r_approve.status_code == 200
+    assert r_reject.status_code == 200
+
+
+def test_admin_can_approve_too(role_client, monkeypatch):
+    monkeypatch.setattr("acde.human.approvals.approve", lambda i, actor: {"status": "executed"})
+    r = role_client.post("/approvals/1/approve", headers={"X-API-Key": "admin-key"})
+    assert r.status_code == 200
+
+
+def test_legacy_single_key_deployment_keeps_full_access(client, monkeypatch):
+    # the regression test that matters most: no role syntax at all, the config every existing
+    # deployment already has, must keep working exactly as before this feature landed.
+    monkeypatch.setattr("acde.human.approvals.approve", lambda i, actor: {"status": "executed"})
+    r = client.post("/approvals/1/approve", headers={"X-API-Key": "secret"})
+    assert r.status_code == 200
+
+
 def test_client_cannot_spoof_actor(multi_actor_client, monkeypatch):
     # a client authenticated as "alice" cannot claim to be "bob" via a request body/query field —
     # the actor comes solely from the authenticated identity, there's no client-writable field left.

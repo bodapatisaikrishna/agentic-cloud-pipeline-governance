@@ -215,11 +215,35 @@ class Settings(BaseSettings):
             pair = pair.strip()
             if not pair or ":" not in pair:
                 continue
-            actor, _, key = pair.partition(":")
+            actor, _, rest = pair.partition(":")
+            key = rest.partition(":")[0]  # drop an optional third :role field, role_map reads it
             actor, key = actor.strip(), key.strip()
             if actor and key:
                 keys[actor] = key
         return keys
+
+    @property
+    def role_map(self) -> dict[str, str]:
+        """actor -> role (D-093), from an optional third ``actor:key:role`` field. Missing role
+        (including the legacy single ``api_key``, always actor "operator") defaults to
+        ``"admin"`` — every existing deployment's current full-access behavior, unchanged, with no
+        config edit required. Same "simplest defensible default, documented" pattern as D-057's
+        provider default: an underspecified role for an already-configured actor should never
+        silently downgrade that actor's access on upgrade.
+        """
+        roles: dict[str, str] = {}
+        if self.api_key.get_secret_value():
+            roles["operator"] = "admin"
+        for pair in self.api_keys.get_secret_value().split(","):
+            pair = pair.strip()
+            if not pair or ":" not in pair:
+                continue
+            actor, _, rest = pair.partition(":")
+            _key, _, role = rest.partition(":")
+            actor = actor.strip()
+            if actor:
+                roles[actor] = role.strip() or "admin"
+        return roles
 
     # --- Telemetry ---
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)

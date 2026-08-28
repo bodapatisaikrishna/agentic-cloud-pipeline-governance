@@ -5,6 +5,14 @@ per phase, `v1.0.0` at Phase 9.
 
 ## [Unreleased]
 
+### Added
+- **RBAC: viewer / approver / admin (D-093)**: no role concept existed before this. Optional
+  third `actor:key:role` field on `api_keys`; a missing role defaults to `admin`, so no existing
+  deployment's access silently changes. `require_role(min_role)` gates
+  `/approvals/*/approve|reject` on both the JSON API and the dashboard (previously a weaker,
+  unRBAC'd path to the same side effect). Verified live against a real running server: viewer
+  `403` on approve, `200` on read; approver's request reaches real approval logic.
+
 ### Fixed
 - **`/docs` and `/openapi.json` were unauthenticated (D-092)**: FastAPI's built-in docs routes
   aren't subject to the per-route auth pattern every other endpoint uses — confirmed live, `200`
