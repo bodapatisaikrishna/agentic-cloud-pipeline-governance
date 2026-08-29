@@ -1879,3 +1879,57 @@ action was `quarantine_partition`, in the taxonomy's accepted set), the 101 chao
 correctly excluded rather than miscounted. `/metrics`'s gauge agreed exactly (`1.0`).
 
 Full unit (541) and integration (27) suites green.
+
+## D-101 — Slack rich formatting + PagerDuty integration
+
+Second item on the feature-focus mandate (D-100 was the first). Picked from a menu of real
+product-surface gaps: `notify/webhook.py` was a single generic-URL POST with a **plain-text-only**
+payload — functional for Slack's incoming-webhook format but visually flat (no color-by-severity,
+no structured fields), and there was **no PagerDuty integration at all**, a real on-call team's
+primary paging tool entirely unsupported. Confirmed via `AskUserQuestion`: rich formatting +
+PagerDuty this pass, **not** Slack interactive approve/reject buttons — those need a new
+public-facing endpoint authenticated by signature verification rather than the existing
+API-key/RBAC system, a materially different attack surface deliberately deferred rather than
+bundled in.
+
+**Design**: `build_payload()` gained a Slack `attachments: [{"color": ..., "blocks": [...]}]`
+block — additive alongside the existing `text`/`acde` fields, so a generic JSON receiver reading
+only those is unaffected; Slack renders the richer block instead. Color-by-severity reuses the
+same event→meaning mapping the existing `_EMOJI` table already encodes (grey/informational for
+`shadow_proposal`, amber for `pending_approval`, red for `escalation`/`execution_failure`). New
+`src/acde/notify/pagerduty.py` (mirrors `webhook.py`'s shape exactly): PagerDuty Events API v2,
+`dedup_key=str(action.action_id)` for UI de-duplication, trigger-only (no matching resolve call
+site exists yet — a stated limitation, not silently half-wired). `notify()` now dispatches to both
+channels independently, each on its own daemon thread, both still gated by the existing
+`webhook_events` filter so one config drives both destinations. `shadow_proposal` is **hard**-excluded
+from PagerDuty regardless of that filter — a shadow-mode "here's what I would have done" log entry
+is informational, not something a human should be paged for.
+
+**Mutation-tested**: (1) removed the `shadow_proposal` PagerDuty exclusion — the test failed
+exactly as expected (a shadow proposal would have paged someone). (2) removed the empty-routing-
+key disable check — the "disabled when no routing key" test failed with a real page attempted.
+Restored both, reconfirmed the full suite green.
+
+**Verified live over real HTTP, not just mocked assertions — the practical substitute for real
+Slack/PagerDuty accounts this session doesn't have**: ran a local `http.server` listener as a
+stand-in for both the webhook URL and (via a one-line `_EVENTS_URL` override) PagerDuty's own
+endpoint, called the real, unmocked `notify()` end to end, and inspected the actual bytes
+received on the other side. Both matched the designed shape exactly: the Slack payload's
+`attachments[0].color` was `#E01E5A` for a real escalation with the right Block Kit fields; the
+PagerDuty payload had `event_action: "trigger"`, `severity: "critical"`, a real `dedup_key`, and
+no leaked `params` — proof of the real `httpx.post` call, real JSON serialization, and real
+daemon-thread dispatch, not just that a mock was invoked with the right arguments.
+
+**A real Docker Desktop crash hit mid-integration-run, unrelated to this change, diagnosed and
+recovered rather than mistaken for a regression**: the first `make test-integration` run took 36
+minutes and failed 20 of 27 tests with cascading Postgres/OPA/Airflow connection errors; the
+actual cause surfaced in the log tail — `failed to connect to the docker API ... no such file or
+directory` — Docker Desktop itself had gone down partway through (every ACDE container showed
+`Exited (137)`, a kill signal, not an application-level failure) and the harness's own commands
+hung retrying against a dead daemon rather than failing fast, explaining the abnormal runtime.
+`docker info` confirmed Docker was reachable again minutes later; `make up` recreated a fully
+healthy stack; a clean re-run passed 27/27 in the normal ~2 minutes. Recorded here per this
+session's standing rule of disclosing every anomaly investigated, confirmed environmental, and
+resolved — not just the ones that turn out to be real bugs.
+
+Full unit (549) and integration (27) suites green.

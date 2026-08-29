@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from acde.config import Settings
 from acde.contracts import PolicyDecision, ProposedAction
-from acde.notify import webhook
+from acde.notify import pagerduty, webhook
 from acde.orchestrator import control
 
 
@@ -55,6 +55,113 @@ class TestWebhook:
         )
         monkeypatch.setattr(webhook.threading, "Thread", lambda **k: MagicMock(start=lambda: None))
         assert webhook.notify("escalation", _action(), ALLOW_ESCALATE, "prod") is True
+
+    def test_payload_carries_a_slack_attachments_block(self):
+        # D-101: additive, not a replacement -- text/acde must still be present alongside it.
+        p = webhook.build_payload("escalation", _action(), ALLOW_ESCALATE, "prod")
+        assert "text" in p and "acde" in p
+        attachment = p["attachments"][0]
+        assert attachment["color"] == "#E01E5A"  # escalation -> red
+        blocks = attachment["blocks"]
+        assert blocks[0]["text"]["text"] == p["text"]
+        fields_text = " ".join(f["text"] for f in blocks[1]["fields"])
+        assert "quarantine_partition" in fields_text
+        assert "store_sales" in fields_text
+
+    def test_attachment_color_by_severity(self):
+        assert (
+            webhook.build_payload("shadow_proposal", _action(), ALLOW_ESCALATE, "prod")[
+                "attachments"
+            ][0]["color"]
+            == "#868686"
+        )
+        assert (
+            webhook.build_payload("pending_approval", _action(), ALLOW_ESCALATE, "prod")[
+                "attachments"
+            ][0]["color"]
+            == "#ECB22E"
+        )
+
+    def test_notify_dispatches_to_pagerduty_too(self, monkeypatch):
+        monkeypatch.setattr(
+            webhook,
+            "get_settings",
+            lambda: Settings(
+                _env_file=None,
+                webhook_url="",
+                webhook_events="escalation",
+                pagerduty_routing_key="rk",
+            ),
+        )
+        monkeypatch.setattr(
+            pagerduty,
+            "get_settings",
+            lambda: Settings(
+                _env_file=None, webhook_events="escalation", pagerduty_routing_key="rk"
+            ),
+        )
+        monkeypatch.setattr(
+            pagerduty.threading, "Thread", lambda **k: MagicMock(start=lambda: None)
+        )
+        # no webhook_url configured, but PagerDuty is -- notify() must still report success.
+        assert webhook.notify("escalation", _action(), ALLOW_ESCALATE, "prod") is True
+
+
+class TestPagerDuty:
+    def test_disabled_when_no_routing_key(self, monkeypatch):
+        monkeypatch.setattr(
+            pagerduty, "get_settings", lambda: Settings(_env_file=None, pagerduty_routing_key="")
+        )
+        assert pagerduty.send("escalation", _action(), ALLOW_ESCALATE, "prod") is False
+
+    def test_shadow_proposal_never_pages_even_when_configured(self, monkeypatch):
+        # the exact bug this exclusion prevents: without it, a shadow-mode "would have done this"
+        # log entry would page someone for taking no real action at all.
+        monkeypatch.setattr(
+            pagerduty,
+            "get_settings",
+            lambda: Settings(
+                _env_file=None, webhook_events="shadow_proposal", pagerduty_routing_key="rk"
+            ),
+        )
+        assert pagerduty.send("shadow_proposal", _action(), ALLOW_ESCALATE, "prod") is False
+
+    def test_escalation_pages_when_configured(self, monkeypatch):
+        monkeypatch.setattr(
+            pagerduty,
+            "get_settings",
+            lambda: Settings(
+                _env_file=None, webhook_events="escalation", pagerduty_routing_key="rk"
+            ),
+        )
+        monkeypatch.setattr(
+            pagerduty.threading, "Thread", lambda **k: MagicMock(start=lambda: None)
+        )
+        assert pagerduty.send("escalation", _action(), ALLOW_ESCALATE, "prod") is True
+
+    def test_event_payload_shape_and_redaction(self):
+        action = _action()
+        event = pagerduty.build_event("rk", "escalation", action, ALLOW_ESCALATE, "prod")
+        assert event["routing_key"] == "rk"
+        assert event["event_action"] == "trigger"
+        assert event["dedup_key"] == str(action.action_id)
+        assert event["payload"]["severity"] == "critical"
+        assert "params" not in event["payload"]["custom_details"]
+        assert event["payload"]["custom_details"]["action_type"] == "quarantine_partition"
+
+    def test_severity_by_event(self):
+        assert (
+            pagerduty.build_event("rk", "pending_approval", _action(), ALLOW_ESCALATE, "prod")[
+                "payload"
+            ]["severity"]
+            == "warning"
+        )
+        assert (
+            pagerduty.build_event("rk", "execution_failure", _action(), ALLOW_ESCALATE, "prod")[
+                "payload"
+            ]["severity"]
+            == "error"
+        )
 
 
 class TestControl:

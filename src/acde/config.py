@@ -182,6 +182,10 @@ class Settings(BaseSettings):
     webhook_url: str = ""
     webhook_events: str = "pending_approval,escalation,execution_failure"
     webhook_timeout_s: float = 5.0
+    # D-101: PagerDuty Events API v2 routing key. Empty disables. Shares webhook_events/
+    # webhook_timeout_s with the generic/Slack webhook above -- one event-routing config for both
+    # destinations. shadow_proposal never pages regardless (see notify/pagerduty.py).
+    pagerduty_routing_key: SecretStr = SecretStr("")
     # Blast-radius cap: max executed (side-effecting) actions per target per hour (0 = unlimited).
     blast_radius_max_per_hour: int = 0
     # Operator API (acde.server): requires either api_key (single legacy key, resolves to actor

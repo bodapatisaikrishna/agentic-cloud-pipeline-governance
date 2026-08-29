@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Slack rich formatting + PagerDuty integration (D-101)**: outbound notifications gained a
+  Slack Block Kit `attachments` block (colored by severity, structured fields) alongside the
+  existing plain-text payload, and a new PagerDuty Events API v2 dispatch
+  (`PAGERDUTY_ROUTING_KEY`, empty disables). Both channels fire independently off the same
+  `WEBHOOK_EVENTS` filter; `shadow_proposal` never pages PagerDuty regardless. Verified live
+  over real HTTP against local stand-in listeners for both channels — the real, unmocked
+  `notify()` path end to end, not just mocked assertions.
 - **Live decision-quality monitoring (D-100)**: `GET /decision-quality`, `acde
   decision-quality-report`, and a trailing-24h `acde_decision_quality_accuracy` `/metrics` gauge
   score real, resolved production incidents against an accepted-mitigation taxonomy — extending
