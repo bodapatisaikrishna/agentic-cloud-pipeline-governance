@@ -228,6 +228,13 @@ def tenant_scope(actor: str = Depends(_authenticate)) -> str | None:
     return get_settings().tenant_map.get(actor)
 
 
+def actor_role(actor: str = Depends(_authenticate)) -> str:
+    """The authenticated caller's role (D-102) -- the same lookup ``require_role`` already does,
+    threaded into the dashboard so it uses this module's own ``get_settings``, not a second,
+    separately-imported one."""
+    return get_settings().role_map.get(actor, "admin")
+
+
 def create_app(require_key: bool = True) -> FastAPI:
     """Build the operator API. Raises if no API key at all is configured (fail-closed)."""
     if require_key and not get_settings().api_key_map:
@@ -272,6 +279,8 @@ def create_app(require_key: bool = True) -> FastAPI:
     admin_dep = require_role("admin") if require_key else (lambda: "api")
     # In no-auth test mode there's no bound tenant to resolve either -- every request is unscoped.
     tenant_scope_dep = tenant_scope if require_key else (lambda: None)
+    # In no-auth test mode there's no role concept either -- full access, matching actor_dep above.
+    actor_role_dep = actor_role if require_key else (lambda: "admin")
 
     @app.get("/openapi.json", dependencies=auth, include_in_schema=False)
     def openapi_schema() -> dict[str, Any]:
@@ -456,7 +465,7 @@ def create_app(require_key: bool = True) -> FastAPI:
     ) -> dict[str, Any]:
         return approvals.reject(approval_id, actor=actor, note=note)
 
-    dashboard.add_routes(app, actor_dep, approver_dep)
+    dashboard.add_routes(app, actor_dep, approver_dep, tenant_scope_dep, actor_role_dep)
     return app
 
 

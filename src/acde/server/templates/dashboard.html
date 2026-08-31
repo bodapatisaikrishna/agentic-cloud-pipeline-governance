@@ -13,7 +13,24 @@
     <div class="card"><span class="n">{{ m.actions_denied }}</span><span class="label">denied</span></div>
     <div class="card"><span class="n">{{ m.approvals_pending }}</span><span class="label">pending approvals</span></div>
     <div class="card"><span class="n">{{ m.llm_tokens }}</span><span class="label">LLM tokens</span></div>
+    <div class="card"><span class="n">{{ "%.2f"|format(cost_units_24h) }}</span><span class="label">cost units (24h)</span></div>
+    <div class="card"><span class="n">{{ "%.0f%%"|format(allow_rate) if allow_rate is not none else "—" }}</span><span class="label">policy allow rate (24h)</span></div>
+    <div class="card"><span class="n">{{ "%.0f%%"|format(decision_accuracy * 100) if decision_accuracy is not none else "—" }}</span><span class="label">decision accuracy (24h)</span></div>
   </div>
+
+  {% if tenants is not none and tenants|length > 1 %}
+  <h2>Tenants</h2>
+  <table>
+    <tr><th>Tenant</th><th>Name</th><th>Status</th></tr>
+    {% for t in tenants %}
+    <tr>
+      <td>{{ t.tenant_id }}</td>
+      <td>{{ t.display_name }}</td>
+      <td><span class="badge status-{{ t.status }}">{{ t.status }}</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
 
   <h2>Pending approvals</h2>
   {% if approvals %}

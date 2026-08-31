@@ -1933,3 +1933,53 @@ session's standing rule of disclosing every anomaly investigated, confirmed envi
 resolved — not just the ones that turn out to be real bugs.
 
 Full unit (549) and integration (27) suites green.
+
+## D-102 — Richer operator dashboard
+
+Third feature-focus item. `server/dashboard.py`/`templates/dashboard.html` hadn't changed since
+T2.2: metric cards + a pending-approvals table, nothing else. Every report built since — cost
+attribution (D-095), compliance (D-096), tenant registry (D-097), live decision-quality (D-100) —
+had a JSON/CLI face but zero dashboard presence: an operator opening `/ui` couldn't see any of it
+without leaving the browser. Not a missing feature so much as four already-built features
+invisible in the one place a human looks first.
+
+**Design, deliberately conservative on how**: `dashboard.py`'s own docstring already states "no
+JS, no external assets (works air-gapped)" — untouched. Three new summary cards (cost units,
+policy-allow rate, decision-quality accuracy) and an admin-only tenants table, all server-rendered
+Jinja2 calling the exact same functions `server/app.py`'s own report routes already call — no new
+SQL, no new backend computation, purely a presentation layer. `allow_rate` distinguishes "no data
+at all" (`total == 0`) from "zero occurrences of `allowed` specifically" (`total > 0` but the key
+is absent from `percentages`, since that dict only holds verdicts that actually occurred) — the
+former renders "—", the latter a real "0%"; conflating them would have silently misrepresented "no
+actions happened" as "everything got denied." The tenants table only appears for `role == "admin"`
+*and* more than one tenant exists, so the common single-tenant deployment doesn't gain a pointless
+one-row table.
+
+**A second instance of this session's own `db`-module-reference pitfall, this time for
+`get_settings` — caught before it shipped**: the first draft had `dashboard.py` compute the
+caller's role via its own `from acde.config import get_settings` import. Tests that monkeypatch
+`server/app.py`'s `get_settings` (the established pattern for every other role/auth test) left
+`dashboard.py`'s separate import pointing at the real, unpatched settings — every dashboard test
+silently computed `role="admin"` from the real environment regardless of what the test intended,
+and an existing passing test (`test_ui_viewer_cannot_approve_or_reject_but_can_view`) had been
+quietly exercising this exact bug already without ever asserting on tenant-table content, so it
+never surfaced. Fixed at the root rather than by patching around it: `dashboard.add_routes` now
+takes a `role_dep` threaded in from `app.py` (mirroring how `tenant_scope_dep` already works) —
+the dashboard never imports `get_settings` at all, so there's no second reference to forget.
+
+**Mutation-tested**: (1) removed the `total`-based `None` guard on `allow_rate` — the "shows dash
+not zero" test failed exactly as expected (a real percentage rendered where "—" was required). (2)
+removed the `role == "admin"` gate on the tenants table — the "hidden for non-admin" test failed
+with the forbidden call actually made. Restored both, reconfirmed the full suite green.
+
+**Verified live against the real running server and real Postgres, cross-checked against the JSON
+API for an exact match, not just "the page loads"**: `/ui`'s rendered cards showed `43.50` cost
+units, `93%` allow rate, `33%` decision accuracy; `GET /costs`, `/compliance-report`, and
+`/decision-quality` with the identical `since_hours=24` window returned `43.50000134326044`,
+`93.3`, and `0.333` respectively — the dashboard's rounding matched the JSON API's raw numbers
+exactly. The tenants table was correctly absent (this dev deployment has exactly one tenant);
+`/ui` still 401s with no credentials. A known pre-existing flaky integration test
+(`test_reset_isolates_reruns`, unrelated to this change, zero diff in that code path) failed in
+the full run and passed cleanly in isolation, consistent with every prior occurrence this session.
+
+Full unit (556) and integration (27) suites green.

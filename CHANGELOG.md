@@ -6,6 +6,11 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Richer operator dashboard (D-102)**: `/ui` gains cost, policy-allow-rate, and decision-quality
+  summary cards, plus an admin-only tenants table (shown only when more than one tenant exists) —
+  four reports that only ever had a JSON/CLI face before are now visible in the browser. Still no
+  JS, no external assets. Verified live: the dashboard's rendered numbers matched the JSON API's
+  own `/costs`/`/compliance-report`/`/decision-quality` exactly for the same window.
 - **Slack rich formatting + PagerDuty integration (D-101)**: outbound notifications gained a
   Slack Block Kit `attachments` block (colored by severity, structured fields) alongside the
   existing plain-text payload, and a new PagerDuty Events API v2 dispatch
