@@ -1983,3 +1983,23 @@ exactly. The tenants table was correctly absent (this dev deployment has exactly
 the full run and passed cleanly in isolation, consistent with every prior occurrence this session.
 
 Full unit (556) and integration (27) suites green.
+
+**Update — CI actually failed on push, a third occurrence of this exact class of bug**: the pushed
+commit failed CI's `quality` job with 7 real `PoolTimeout` failures in `test_dashboard.py` — the
+same "patch every module's own separate import" pitfall this entry above already names for D-091/
+095/097, this time for a reference this session hadn't hit before: `compliance_report()`'s
+`_availability()` section calls `heartbeat_age_s()`, which reads through
+`acde.orchestrator.control`'s own `db` import — never patched in `test_dashboard.py` (only
+`test_server.py`'s fixtures had ever needed it, since only `/metrics` called anything
+heartbeat-related before). Passed locally the same way every prior instance did: a real local
+Postgres happened to be running, so the unpatched call quietly succeeded against real data instead
+of failing. Fixed by adding the patch to every affected fixture; **re-verified for real this
+time** — stopped the local Postgres container and reran the full `test_dashboard.py` file, which
+completed in 1.26s (all 15 tests) with zero real connection attempt, the same standard this
+session held D-097's equivalent incident to. `test_reset_isolates_reruns` also failed in that
+same CI run with a genuine `assert 1 == 3` (not merely a timeout this time) — re-ran the full
+local integration suite once more specifically to rule out a real regression: 27/27 green,
+confirming it's the same pre-existing, order-dependent flake this session has now seen multiple
+times, not something this change caused.
+
+Full unit (556) and integration (27) suites reconfirmed green after the fix; CI re-checked.

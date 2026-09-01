@@ -25,6 +25,7 @@ def client(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     return TestClient(app_mod.create_app())
 
@@ -167,6 +168,7 @@ def test_dashboard_tenants_table_hidden_for_non_admin(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr(
         "acde.tenancy.list_tenants",
         lambda: (_ for _ in ()).throw(AssertionError("must not be called for a non-admin")),
@@ -191,6 +193,7 @@ def test_dashboard_tenants_table_hidden_for_a_single_tenant_deployment(monkeypat
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr(
         "acde.tenancy.list_tenants",
         lambda: [{"tenant_id": "default", "display_name": "Default Tenant", "status": "active"}],
@@ -214,6 +217,7 @@ def test_dashboard_tenants_table_shown_for_admin_with_multiple_tenants(monkeypat
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr(
         "acde.tenancy.list_tenants",
         lambda: [
@@ -289,6 +293,7 @@ def test_ui_viewer_cannot_approve_or_reject_but_can_view(monkeypatch):
     monkeypatch.setattr("acde.telemetry.cost.db", fake)
     monkeypatch.setattr("acde.ops.compliance.db", fake)
     monkeypatch.setattr("acde.ops.decision_quality.db", fake)
+    monkeypatch.setattr("acde.orchestrator.control.db", fake)
     monkeypatch.setattr("acde.tenancy.db", fake)
     client = TestClient(app_mod.create_app())
     assert client.get("/ui", auth=("viv", "viv-key")).status_code == 200
