@@ -69,6 +69,19 @@ per phase, `v1.0.0` at Phase 9.
   `403` on approve, `200` on read; approver's request reaches real approval logic.
 
 ### Fixed
+- **The recurring "unmocked db reference" bug class, closed for good (D-103)**: independently
+  hand-fixed four separate times (D-091, D-095, D-097, D-102 ×2) — a module's own `db` import left
+  unpatched in a test, passing locally against a real Postgres, then hanging 30s in CI. New
+  autouse `tests/unit/conftest.py` fixture patches the single choke point every real call funnels
+  through (`acde.db.get_pool`), turning any future instance into an instant, clear failure instead
+  of a CI-only surprise. Verified with Docker fully down (not just stopped): the whole suite
+  passed, proving it's hermetic in fact; mutation-tested by removing a real mock and confirming
+  the guard catches it in 2.5s instead of a 30s hang.
+- **The real cause of the recurring `test_reset_isolates_reruns` flake**: `experiments/runner.py`'s
+  reset never cleared `telemetry.task_runs`, so a stale row could be re-detected as a real anomaly
+  by D-091's live detector on the very next rerun — reproduced by hand, fixed, and the test itself
+  rewritten (its old `== 1` assertion assumed chaos injection was the only source of incidents,
+  no longer true with real detection live).
 - **`/docs` and `/openapi.json` were unauthenticated (D-092)**: FastAPI's built-in docs routes
   aren't subject to the per-route auth pattern every other endpoint uses — confirmed live, `200`
   with zero credentials. Disabled the framework's own routes, re-added them behind the same auth.

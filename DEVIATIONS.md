@@ -2050,3 +2050,52 @@ which has now failed on this exact mechanism twice — confirm it for real, rath
 victory on local runs alone given this test's own history in this file.
 
 Full unit (556) and integration (28) suites green.
+
+## D-103 — A single choke point closes the recurring "unmocked db reference" bug class for good
+
+This exact class of bug — some module's own `from acde import db` import left unpatched in a
+test, silently succeeding locally against a real Postgres that happened to be running, then
+failing in CI's docker-free `quality` job with a 30-second `psycopg_pool.PoolTimeout` — was
+independently rediscovered and separately hand-fixed in D-091, D-095, D-097, and twice more in
+D-102. Each fix patched the one specific module reference that specific test needed; none of them
+closed the *class* of bug, so the next new report/route calling into yet another of the ~30
+modules with their own `db` import was guaranteed to reopen it. Four incidents was the signal to
+stop fixing instances and fix the mechanism.
+
+**The actual mechanism**: every one of those ~30 modules' `fetch_all`/`fetch_one`/`execute` calls
+funnels through exactly one function, `acde.db.get_pool()`, regardless of which module imported
+`db` or how many layers of indirection sit between the test and that call. Patching each calling
+module's own `db` name individually (the pattern this whole file's prior entries used) works, but
+only for the modules a test author remembered to enumerate — a fundamentally enumerate-everything
+approach in a codebase that keeps adding new report modules.
+
+**Fix**: one new autouse fixture in `tests/unit/conftest.py`,
+`_refuse_real_database_connections`, patches `acde.db.get_pool` itself to raise a clear
+`RuntimeError` by default, for every unit test, unconditionally. A test whose own module-level
+mocks are complete never reaches this at all (a `MagicMock`-replaced `db` reference never calls
+the real `fetch_all`, so never reaches the real `get_pool`). A test that forgets one — the exact
+mistake this file already documents four separate times — now fails in milliseconds with a
+message naming the actual problem, instead of a 30-second hang whose root cause has to be
+re-diagnosed by hand each time from a stack trace that only says "PoolTimeout." `tests/unit/
+test_db.py`, which deliberately exercises `get_pool` machinery, is unaffected: its own
+`monkeypatch.setattr(db, "get_pool", ...)` calls happen inside the test body and simply win over
+the autouse fixture's default, the ordinary way `monkeypatch` composes.
+
+**Verified, not just argued**: ran the full unit suite (556 tests) with the local Postgres
+container's host, Docker Desktop, **fully down** (confirmed via `docker info` failing outright,
+not merely stopped containers) — every test passed, proving the entire suite is now hermetic in
+fact, not just by convention, independent of whatever happens to be running on the developer's
+machine. Then mutation-tested the guard itself: removed one real, currently-load-bearing
+`monkeypatch.setattr("acde.tenancy.db", fake)` line from `test_dashboard.py`'s fixture (the exact
+shape of every prior incident) and reran that file — 6 tests failed immediately, the whole file
+finishing in 2.5 seconds with the new guard's own message pinpointing the cause, versus what
+would have been 6×30s of unexplained hangs discoverable only via a CI round-trip before this fix
+existed. Restored the deliberate mutation, reconfirmed 556/556 green.
+
+This does not retroactively make any of D-091/095/097/102's individual fixes unnecessary — those
+were still the correct, specific patches at the time. It means the fifth occurrence of this bug
+class, whenever a future module gets its own `db` import and a future test forgets to mock it,
+surfaces to whoever's running `make test-unit` locally in under a second with a clear message,
+never again silently deferred to a CI failure discovered minutes later.
+
+Full unit (556) suite green with zero real infrastructure reachable during the run.

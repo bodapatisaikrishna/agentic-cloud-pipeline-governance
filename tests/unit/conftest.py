@@ -46,3 +46,30 @@ def _reset_settings_cache():
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _refuse_real_database_connections(monkeypatch):
+    """Unit tests must never reach a real Postgres (CLAUDE.md: "tests/unit/ — no docker, no
+    network"). Every one of the ~30 modules with their own ``from acde import db`` import funnels
+    through this single choke point (``fetch_all``/``fetch_one``/``execute`` all call
+    ``get_pool()`` internally) regardless of which module's own ``db`` reference a test did or
+    didn't mock -- so patching it here, once, turns a forgotten per-module mock (the exact bug
+    this session hit independently in D-091, D-095, D-097, and twice more in D-102) into an
+    immediate, clear failure instead of a 30-second ``psycopg_pool.PoolTimeout`` that then only
+    ever surfaces in CI's docker-free environment, long after "it passed locally."
+
+    A test that deliberately exercises the real pool machinery (``test_db.py``) overrides this
+    with its own ``monkeypatch.setattr(db, "get_pool", ...)`` inside the test body, which wins —
+    this is only ever the *default*, not a hard rule.
+    """
+    import acde.db as db_mod
+
+    def _refuse() -> None:
+        raise RuntimeError(
+            "a unit test tried to open a real database connection -- some module's `db` "
+            "reference was left unmocked (tests/unit must never touch the network; see "
+            "conftest.py's _refuse_real_database_connections)"
+        )
+
+    monkeypatch.setattr(db_mod, "get_pool", _refuse)
