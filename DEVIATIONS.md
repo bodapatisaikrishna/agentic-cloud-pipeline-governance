@@ -2003,3 +2003,50 @@ confirming it's the same pre-existing, order-dependent flake this session has no
 times, not something this change caused.
 
 Full unit (556) and integration (27) suites reconfirmed green after the fix; CI re-checked.
+
+**Update — the "pre-existing flake" was real, and this entry's earlier dismissals of it were
+wrong**: the `test_dashboard.py` fix above went green on CI, but `test_reset_isolates_reruns`
+failed *again*, identically (`assert 1 == 3`) — the second time in a row with that exact
+signature, not a timeout. Two identical CI failures is not a coincidence; this session's own
+prior occurrences of this test failing were too readily written off as "known pre-existing
+flake, passes in isolation" without ever asking *why* it only fails in the full suite. It does,
+and there's a real reason.
+
+**Root cause, confirmed by reproduction, not guessed**: D-091 (earlier in this session) wired
+`agents/detection.py`'s real anomaly detector into the live monitoring path, including a
+`task_failed` check over `telemetry.task_runs` — but `experiments/runner.py`'s own
+`_reset_run()`/`_RUN_TABLES` (the reset this exact test exists to verify) was never updated to
+clear that table. D-091's own DEVIATIONS entry already fixed this gap once, but only in
+`tests/integration/test_agents_e2e.py`'s test fixture — the *production* code path,
+`runner.run_one()`, still had the hole. Reproduced by hand: seeded a stale `telemetry.task_runs`
+row for the test's `experiment_run`, ran `test_reset_isolates_reruns`, and watched it fail with
+the fault re-detected as new on the second run. Fixed by adding `telemetry.task_runs` to
+`_RUN_TABLES`.
+
+**The original test's assertion was also wrong on its own terms, independent of the missing
+reset**: `assert n1 == n2 == 1` assumes chaos injection is the *only* thing that can produce a
+`failure_events` row. It no longer is — D-091 means a real Airflow task that genuinely retries
+during either `run_one()` call (ordinary, expected behavior under load, not a bug) adds its own
+correctly-detected row on top of the chaos-injected one. A hardcoded `== 1` was already a latent
+false-flake generator the moment D-091 landed; the `task_runs` gap just made it fire more often.
+Also discovered while fixing this: `event_id`-set disjointness between the two runs' rows is
+**not** a valid replacement check either — `telemetry.failure_events` itself is unconditionally
+reset every `run_one()` call, so old rows are always physically deleted and new ones always get
+fresh UUIDs regardless of whether cross-run contamination occurred; disjointness would pass even
+with the bug still present (verified: it did, when tested against the still-broken mutation).
+
+**Final design**: split into two tests. (1)
+`test_reset_run_clears_every_run_scoped_table_including_task_runs` — calls `_reset_run` directly
+against a hand-seeded `task_runs` row, a fully deterministic proof of the actual fixed mechanism,
+independent of live Airflow timing. Mutation-tested: removing `task_runs` from `_RUN_TABLES`
+makes this test fail immediately and reliably (`assert 1 == 0`), confirming it actually catches
+the bug this entry describes. (2) `test_reruns_still_produce_at_least_the_chaos_injected_fault` —
+a lighter end-to-end smoke check (`n >= 1`, not `== 1`) that doesn't overclaim precision a live
+system with real anomaly detection can't guarantee.
+
+**Verified**: full local integration suite green at 28/28 (the split adds one test) after the
+fix, including three consecutive clean runs of the previously-flaky area. Pushing to let CI —
+which has now failed on this exact mechanism twice — confirm it for real, rather than declaring
+victory on local runs alone given this test's own history in this file.
+
+Full unit (556) and integration (28) suites green.

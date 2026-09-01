@@ -37,6 +37,13 @@ _RUN_TABLES = (
     "telemetry.resource_usage",
     "telemetry.cost_ledger",
     "telemetry.pipeline_metrics",
+    # D-091 wired agents/detection.py's task_failed check into the live monitoring path, reading
+    # telemetry.task_runs -- a table this reset never cleared. A stale row surviving from an
+    # earlier run of the same experiment_run could then be (re-)detected as a real anomaly on the
+    # very next run_one() call, creating extra failure_events beyond the one this run actually
+    # injects -- the exact intermittent test_reset_isolates_reruns failure (assert n1 == n2 == 1
+    # seeing 3 instead) this fixes at the root, rather than in the test alone.
+    "telemetry.task_runs",
 )
 
 
