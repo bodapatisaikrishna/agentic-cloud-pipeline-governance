@@ -6,6 +6,23 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Journal-paper readiness (D-104)**: per-run LLM accounting that counts real API calls, cache
+  hits, degraded and invalid outputs (`api_tokens`, `llm_calls`, `llm_cache_hits`, `llm_degraded`,
+  `llm_invalid`, `llm_latency_s`); full run provenance in every manifest line and atomic per-run row
+  replacement in `raw.csv` (a mid-run kill can no longer double-count a run on resume); a campaign
+  supervisor (`make campaign-pilot` / `make campaign`: health gates, live token ceiling,
+  degraded-LLM backoff, code-drift abort, heartbeat, stop file, one run per child process); a
+  generated adversarial corpus (5 547 policy cases + 84 contract probes) graded by an independent
+  specification oracle with Wilson CIs; closed-form sensitivity analyses (human-latency break-even,
+  cost-model break-even); campaign-level statistics (Mann–Whitney, bootstrap CIs for Cliff's δ and
+  median differences, live-vs-mock comparison, provenance gate); deterministic generation of every
+  manuscript table, figure and quoted number. Also `--configs`/`--max-runs` on the runner and a
+  `pilot` profile.
+- Adversarial corpus **findings fixed**: scaling targets must now be integers ≥ 1 (zero/negative/
+  non-numeric `n_workers`/`slots` were budget-legal or crashed the gate before the audit row was
+  written); a live-OPA integration test now guards the policy against OPA-version regressions
+  (a Homebrew OPA 1.19.1 mis-evaluated some float budget comparisons; the pinned 0.68.0 is correct).
+
 - **Richer operator dashboard (D-102)**: `/ui` gains cost, policy-allow-rate, and decision-quality
   summary cards, plus an admin-only tenants table (shown only when more than one tenant exists) —
   four reports that only ever had a JSON/CLI face before are now visible in the browser. Still no

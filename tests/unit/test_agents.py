@@ -12,7 +12,7 @@ from acde.agents.optimization import OptimizationAgent
 from acde.agents.recovery import RecoveryAgent
 from acde.agents.schema import SchemaAgent
 from acde.contracts import PolicyDecision, TelemetrySnapshot
-from acde.llm.client import LLMResult
+from acde.llm.client import LLMResult, LLMStats
 
 NOW = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.UTC)
 
@@ -31,6 +31,7 @@ def _snap(fault=None, compat="unknown", freshness=0.0):
 class FakeLLM:
     def __init__(self, action_json):
         self._aj = action_json
+        self.stats = LLMStats()
 
     def propose(self, agent, snapshot, system_prompt):
         return LLMResult(action_json=self._aj, tokens_in=100, tokens_out=20, model="mock")

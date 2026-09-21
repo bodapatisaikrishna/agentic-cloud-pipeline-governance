@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents experiment-smoke experiment-quick experiment-paper analyze report \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -95,11 +95,33 @@ soak:  ## Inject two overlapping chaos scenarios and run the loop (DURATION seco
 experiment-smoke:  ## Tiny 2-run profile (baseline+full) — used by the integration gate
 	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile smoke
 
-experiment-quick:  ## Quick matrix: 6 configs x 4 scenarios x N=3 = 72 runs (resumable)
+experiment-quick:  ## Quick matrix: 8 configs x 4 scenarios x N=3 = 96 runs (resumable)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile quick
 
-experiment-paper:  ## Paper matrix: baseline/full N=20 + 4 ablations N=10 = 320 runs (resumable)
+experiment-paper:  ## Paper matrix (MOCK LLM): 3 baselines + full at N=20, 4 ablations at N=10 = 480 runs (resumable)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.runner --profile paper
+
+## --- Paper campaign (D-104) — real API spend, multi-day; see docs/CAMPAIGN.md ---
+
+campaign-pilot:  ## LIVE pilot: 8 runs at paper timings (~1-2h) to measure cost/time; needs MAX_TOKENS
+	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
+	caffeinate -i $(UV) python -m acde.experiments.campaign --profile pilot --max-tokens $(MAX_TOKENS)
+
+campaign:  ## LIVE paper campaign (~49h; arms A live agents, B baselines, C mock full); needs MAX_TOKENS
+	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
+	caffeinate -i $(UV) python -m acde.experiments.campaign --profile paper --max-tokens $(MAX_TOKENS)
+
+campaign-smoke:  ## Free 2-run mock drill of the supervisor (kill it mid-run, re-run: it resumes)
+	MOCK_LLM=1 $(UV) python -m acde.experiments.campaign --profile smoke --results-root $${ROOT:-results}
+
+campaign-status:  ## Show the campaign heartbeat
+	@cat results/campaign_status.json
+
+campaign-stop:  ## Ask a running campaign to stop after the current run (resumable)
+	touch results/CAMPAIGN_STOP
+
+adversarial-corpus:  ## D-104: generated adversarial corpus vs the live (pinned) OPA -> results/adversarial.json
+	MOCK_LLM=1 $(UV) python -m acde.eval.adversarial_corpus --out results/adversarial.json
 
 analyze:  ## Phase 8: compute statistics from results/raw.csv
 	MOCK_LLM=1 $(UV) python -m acde.analysis.analyze

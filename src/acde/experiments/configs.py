@@ -55,10 +55,18 @@ def _matrix(configs: tuple[str, ...], n: int) -> list[Run]:
 # quick: all 8 configs x 4 scenarios x N=3 = 96 runs (smoke of the full matrix).
 # paper: the 3 baselines + full at N=20, the four single-agent ablations at N=10 = 480 runs.
 # smoke: a tiny 2-run profile for the automated gate.
+# pilot (D-104): 8 live runs at paper timings -- {full, recovery_only} x 2 scenarios x 2 replicates
+# -- to measure wall time / tokens / calls / budget hits / 429s before committing to the campaign.
 PROFILES: dict[str, list[Run]] = {
     "smoke": [Run("baseline", "upstream_delay", 0), Run("full", "upstream_delay", 0)],
     "quick": _matrix(ALL_CONFIGS, 3),
     "paper": (_matrix((*BASELINE_CONFIGS, "full"), 20) + _matrix(SINGLE_ABLATIONS, 10)),
+    "pilot": [
+        Run(config, scenario, r)
+        for config in ("full", "recovery_only")
+        for scenario in ("schema_drift", "resource_contention")
+        for r in range(2)
+    ],
 }
 
 

@@ -12,8 +12,10 @@ reasoning model (temperature=0), retry 429/5xx up to 3x, and degrade to ``no_act
 from __future__ import annotations
 
 import json
+import statistics
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from acde.config import get_settings
@@ -50,6 +52,44 @@ class BudgetTracker:
         self.tokens += tokens_in + tokens_out
 
 
+@dataclass
+class LLMStats:
+    """What a client *actually did* over its lifetime (D-104), for the paper's measurements.
+
+    Distinct from the per-action rows in ``telemetry.agent_actions``: a cache hit hands the *same*
+    ``LLMResult`` to a new action row, so summing row-level tokens counts one real API call once per
+    replay and overstates true usage. These counters are incremented at the moment a call is (or is
+    not) made, so they are the billing-accurate figure. ``degraded_replays`` counts cache hits that
+    replayed an earlier *degraded* answer -- a transient failure is cached for that snapshot key, so
+    one 429 storm can silently keep degrading later identical snapshots; that has to be visible.
+    """
+
+    real_calls: int = 0
+    cache_hits: int = 0
+    degraded_budget: int = 0
+    degraded_unavailable: int = 0
+    degraded_replays: int = 0
+    invalid_outputs: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    latencies_s: list[float] = field(default_factory=list)
+
+    def as_metrics(self) -> dict[str, float]:
+        """Run-level metrics this contributes to ``raw.csv`` (all zero for a run with no LLM)."""
+        return {
+            "api_tokens": float(self.tokens_in + self.tokens_out),
+            "llm_calls": float(self.real_calls),
+            "llm_cache_hits": float(self.cache_hits),
+            "llm_degraded": float(
+                self.degraded_budget + self.degraded_unavailable + self.degraded_replays
+            ),
+            "llm_invalid": float(self.invalid_outputs),
+            "llm_latency_s": (
+                float(statistics.median(self.latencies_s)) if self.latencies_s else 0.0
+            ),
+        }
+
+
 def _no_action(agent: AgentName, reason: str) -> dict[str, Any]:
     return {
         "agent": agent,
@@ -79,6 +119,8 @@ class LLMClient:
             settings.llm_max_calls_per_run, settings.llm_max_tokens_per_run
         )
         self._cache: dict[tuple[str, str], LLMResult] = {}
+        self._degraded_keys: set[tuple[str, str]] = set()
+        self.stats = LLMStats()
         self._anthropic: Any = None
         self._gemini: Any = None
         self._oai: Any = None
@@ -98,6 +140,9 @@ class LLMClient:
         """Return a proposal for ``agent`` given ``snapshot`` (cached, budgeted, degradable)."""
         key = (agent, snapshot.cache_key_material())
         if key in self._cache:
+            self.stats.cache_hits += 1
+            if key in self._degraded_keys:
+                self.stats.degraded_replays += 1
             return self._cache[key]
 
         model = self.model_for(agent)
@@ -111,17 +156,29 @@ class LLMClient:
                     "experiment_run": snapshot.experiment_run,
                 },
             )
+            self.stats.degraded_budget += 1
             return LLMResult(
                 _no_action(agent, "budget exhausted; degraded to no_action"), 0, 0, model
             )
 
         settings = get_settings()
+        unavailable_before = self.stats.degraded_unavailable
+        started = time.monotonic()
         if settings.mock_llm:
             from acde.llm import mock
 
             result = mock.mock_propose(agent, snapshot)
         else:
             result = self._live_call(agent, snapshot, system_prompt, model)
+        elapsed = time.monotonic() - started
+
+        if self.stats.degraded_unavailable == unavailable_before:
+            self.stats.real_calls += 1
+            self.stats.tokens_in += result.tokens_in
+            self.stats.tokens_out += result.tokens_out
+            self.stats.latencies_s.append(elapsed)
+        else:
+            self._degraded_keys.add(key)
 
         self.budget.add(result.tokens_in, result.tokens_out)
         self._cache[key] = result
@@ -170,6 +227,7 @@ class LLMClient:
                     "experiment_run": snapshot.experiment_run,
                 },
             )
+            self.stats.degraded_unavailable += 1
             return LLMResult(
                 _no_action(agent, "LLM unavailable; degraded to no_action"), 0, 0, model
             )

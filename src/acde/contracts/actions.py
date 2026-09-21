@@ -5,6 +5,7 @@ never generate code. Any LLM output that fails validation here is rejected,
 logged, and counted as ``agent_output_invalid``.
 """
 
+import math
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -33,6 +34,20 @@ ACTION_TYPES: dict[AgentName, set[str]] = {
 }
 
 
+# The one numeric parameter each scaling action prices and executes on (D-104).
+SCALE_TARGET_PARAM = {"scale_workers": "n_workers", "adjust_pool_slots": "slots"}
+
+
+def _positive_int(value: Any) -> int | None:
+    """``value`` as an int >= 1, or None. Accepts ints and integral finite floats (6.0)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and not (math.isfinite(value) and value.is_integer()):
+        return None
+    n = int(value)
+    return n if n >= 1 else None
+
+
 class ProposedAction(BaseModel):
     """An operational action proposed by an agent, pending policy evaluation."""
 
@@ -52,6 +67,26 @@ class ProposedAction(BaseModel):
                 f"action_type {self.action_type!r} is not allowed for agent "
                 f"{self.agent!r}; allowed: {sorted(allowed)}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _scale_target_is_a_positive_integer(self) -> "ProposedAction":
+        """Scaling targets must be integers >= 1 (D-104).
+
+        The cost policy only prices a target against the budget, so ``n_workers=0`` (halting
+        ingestion) or a negative "scale-down" was budget-legal, and an unparseable value crashed the
+        gate *before* the write-ahead audit row. Rejecting here keeps the invalid output on the
+        normal ``agent_output_invalid`` path: rejected, logged, counted, and never priced.
+        """
+        key = SCALE_TARGET_PARAM.get(self.action_type)
+        if key is None or key not in self.params:
+            return self
+        n = _positive_int(self.params[key])
+        if n is None:
+            raise ValueError(
+                f"{self.action_type} param {key!r}={self.params[key]!r} must be an integer >= 1"
+            )
+        self.params[key] = n
         return self
 
 

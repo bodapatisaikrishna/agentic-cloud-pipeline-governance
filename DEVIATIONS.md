@@ -2099,3 +2099,106 @@ surfaces to whoever's running `make test-unit` locally in under a second with a 
 never again silently deferred to a CI failure discovered minutes later.
 
 Full unit (556) suite green with zero real infrastructure reachable during the run.
+
+
+## D-104 — Journal-paper readiness: an evidence campaign, an independent safety oracle, and the measurement fixes they forced
+
+**Context.** The user asked for the project to be made journal-paper ready (one long paper covering
+both the empirical replication/extension of arXiv:2512.23737 *and* the production-hardening story;
+generic venue for now; a full live-LLM paper matrix; LaTeX compiled with tectonic). Auditing what
+existed before writing a word found the evidence was not yet publishable, and *why* is the paper's
+thesis: **governance claims only hold if the evaluation path is the production path.** The mock-LLM
+matrix behind the README headline ("MTTR ↓100 %") compares a near-zero-latency mock against a
+simulated human; the only live pass (D-081, quick timings) showed `full` at 57 s vs baseline 390 s,
+`full`'s manual interventions (1.5) *worse* than baseline's (1.0), and live `rule_based` beating live
+`full`. The paper reports whatever the paper-timing live matrix shows. Decisions below.
+
+**D-104a — Arm design (alternatives: one live matrix; live + mock everywhere).** Only 240 of the 480
+paper runs call an LLM (`full` ×80, four ablations ×40); the 240 non-agent runs
+(`baseline`/`rule_based`/`autoscale`) are identical live-vs-mock, so they run under `MOCK_LLM=1` at no
+API cost. Arms are separate results dirs: A `paper-live` (240 live agent runs), B `paper-baselines`
+(240 static), C `paper-mock` (`full` mock, N=20 — the paired live-vs-mock comparison). Estimated
+≈49 h sequential (parallel runs would contaminate the CPU-stress scenario, D-081), not the ≈28–30 h
+D-081 quoted, which covered arm A only. A **pilot** (8 live runs, paper timings) measures wall time,
+tokens, calls, budget hits and 429s before the campaign is committed to; the user gates the go/no-go.
+
+**D-104b — LLM accounting was not billing-accurate.** Row-level `llm_tokens` sums
+`agent_actions.llm_tokens_*`, but a cache hit hands the *same* `LLMResult` to a new action row, so one
+real API call is counted once per replay. Added `LLMStats` counters on `LLMClient` (real calls, cache
+hits, degraded: budget / unavailable / replayed, invalid outputs, tokens, latency), harvested as new
+metrics `api_tokens, llm_calls, llm_cache_hits, llm_degraded, llm_invalid, llm_latency_s`. The old
+`llm_tokens` is kept for continuity with earlier results and documented as overstating. Also found:
+a transient failure is cached *per snapshot key*, so one 429 storm can keep degrading later identical
+snapshots — `degraded_replays` makes that visible instead of letting it masquerade as model quality.
+
+**D-104c — Provenance and atomic per-run replacement.** Every manifest line now records profile,
+`llm_mode` (`none`/`mock`/`live`), provider, model ids (never keys), timings, human-latency model,
+provisioning parameters, LLM budget, git SHA, and whether *experiment code* was dirty. Analysis
+refuses (`ProvenanceError`) to merge a dataset that mixes any of these. Separately, `raw.csv` and
+`manifest.jsonl` were two non-atomic writes: a kill between them left rows for a run the manifest
+didn't list, and the resume appended a *second* copy — silently double-counting a run. `_drop_run_rows`
+now replaces a run's rows atomically (temp file + `os.replace`) before writing.
+
+**D-104d — Campaign supervisor (`experiments/campaign.py`).** One run per child process; between runs
+it health-gates Postgres/OPA/Airflow (Docker Desktop crashed repeatedly in this project), enforces a
+**live-arm token ceiling** (`--max-tokens` is *required* for live arms — set from the pilot), detects
+degraded-LLM streaks (back off, then abort), aborts if experiment code changes mid-campaign, refuses a
+dirty tree at start, writes an atomic heartbeat, and honours a stop file. `CODE_PATHS` deliberately
+excludes `src/acde/analysis` (post-hoc code that only reads results) so analysis can be fixed
+mid-campaign without invalidating the dataset. Drill: kill-and-resume tested (see CHANGELOG).
+
+**D-104e — Adversarial evaluation with an independent oracle.** The old suite had 4 hand-written cases
+and a self-graded "containment = 1.0". `eval/adversarial_corpus.py` generates 5 547 policy-layer cases
+(exhaustive grid over every legal agent×action pair × rate-limit/cost-vs-budget/schema/prior-version
+boundaries incl. ε; scale-parameter extremes priced by the real gate; hostile-string injection;
+contract-bypassing defence-in-depth probes; seeded fuzz) plus 84 contract-layer probes. Expected
+verdicts come from `spec_verdict`, a Python restatement of the *documented* semantics that shares no
+code with the Rego (a test asserts its allowlist equals `contracts.ACTION_TYPES`). Independence is of
+implementation, **not of authorship** — the same authors wrote spec and policy; the paper says so.
+Reported: containment, over-blocking, exact agreement, fail-opens, each with Wilson 95 % CIs. The grid
+is exhaustive, so its CI reflects grid size, not sampling.
+
+**D-104f — What the corpus found (before → after).**
+1. *Unbounded / unparseable scale targets.* The cost policy only prices a target against the budget, so
+   `n_workers=0` (halts ingestion) or a negative "scale-down" was budget-legal, and non-numeric values
+   (`None`, `"abc"`, NaN, ∞, lists) raised inside `gate.build_context` — *before* the write-ahead audit
+   row, so the rejected proposal left no audit record (14/20 malformed probes raised; 6 coerced and
+   were allowed; 8/8 non-positive were allowed). **Fix** in the contract layer (`ProposedAction`
+   validator): scaling targets must be integers ≥ 1 (integral finite floats normalised). Invalid output
+   now takes the ordinary `agent_output_invalid` path (rejected, logged, counted). Trade-off: a live LLM
+   that emits `"6"` (string) now counts as invalid instead of being coerced; `llm_invalid` surfaces it.
+2. *OPA version sensitivity.* Against a Homebrew OPA **1.19.1** the corpus reported 38 fail-opens:
+   float budget comparisons such as cost `1000.0` vs budget `10.0` (also `100.0` vs `10.0`, `1000.0`
+   vs `100.0`) evaluated "within remaining budget"; the same values as integers, and all cases on the
+   project's **pinned OPA 0.68.0** (D-004), were correct. Pattern consistent with a mantissa-only
+   comparison of trailing-zero floats; **not root-caused and not reported upstream** — the paper states
+   only the observation. Consequence: the pin is load-bearing, and `tests/integration/
+   test_adversarial_corpus.py` is now a regression guard for any OPA bump. Pre-fix result files are
+   kept as evidence (`paper/data/adversarial_before_fix_*.json`).
+3. After the fix on pinned OPA 0.68.0: containment 3 867/3 867, over-blocking 0/1 680, exact oracle
+   agreement 5 547/5 547, contract layer 84/84 refused, zero gate exceptions.
+
+**D-104g — "Paired" statistics were only nominally paired.** The mandated seed policy hashes the config
+name into every run seed, so runs matched on (scenario, replicate) share no fault or human-latency
+randomness. The Wilcoxon *signed-rank* test on those pairs is kept for continuity, but the primary test
+is now **Mann–Whitney U** (independent samples), with Cliff's δ and median differences carrying
+bootstrap 95 % CIs, all Holm-corrected as one family. The seed policy is a non-negotiable rule
+(CLAUDE.md #5) and is unchanged.
+
+**D-104h — Sensitivity, not assertion (`analysis/sensitivity.py`).** The human-latency model is a
+scale family (`sample_latency = median·exp(σZ)`), so all-human outcomes scale exactly linearly in the
+median (verified against the real sampler in a unit test): closed-form **break-even human latency** per
+config, plus a smooth P(automation faster) over a (median, σ) grid. Cost model v2's reduction is
+dominated by the *assumed* static-vs-right-sized provisioning gap: on the existing data `full` breaks
+even against baseline at ≈3.2 static units versus 3.0 right-sized, and plain `autoscale` captures the
+same saving without any agent — the paper must present cost as contingent on that assumption.
+
+**D-104i — Manuscript conventions.** Generic `article` class (venue-swappable); no hand-typed results —
+every table/figure/number is generated (`analysis/paper_artifacts.py`, deterministic, fixed metadata,
+Okabe-Ito palette); verified bibliography only (anything unverifiable is omitted and listed for the
+author); front matter, authorship, funding, ORCID, Zenodo DOI and the journal's AI-assistance
+disclosure are the author's to supply. The author of record must review every claim.
+
+**Status.** Pre-flight instrumentation, supervisor, corpus, sensitivity and artifact generation are
+implemented and unit-tested (739 tests, 95 % coverage). The pilot and the campaign are pending the
+user's go/no-go; results, claims audit and manuscript follow the data.

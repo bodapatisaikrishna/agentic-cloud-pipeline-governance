@@ -114,14 +114,24 @@ def _query_opa(payload: dict[str, Any]) -> dict[str, Any]:
 
 def evaluate(action: ProposedAction, context: dict[str, Any]) -> PolicyDecision:
     """Evaluate ``action`` against OPA; fail safe (escalate) if OPA is unreachable."""
-    payload = {"action": action.model_dump(mode="json"), "context": context}
+    return evaluate_payload({"action": action.model_dump(mode="json"), "context": context})
+
+
+def evaluate_payload(payload: dict[str, Any]) -> PolicyDecision:
+    """Evaluate a raw ``{"action": ..., "context": ...}`` OPA input, failing safe on any error.
+
+    The production path always arrives here via :func:`evaluate` with a contract-validated action.
+    It is public so the adversarial eval can send payloads the contract layer would have refused,
+    to measure the policy layer's own defence-in-depth through the *same* fail-safe handling.
+    """
+    action_id = str(payload.get("action", {}).get("action_id", ""))
     try:
         result = _query_opa(payload)
     except httpx.HTTPError:
-        log.warning("opa_unavailable_failsafe_escalate", extra={"action_id": str(action.action_id)})
+        log.warning("opa_unavailable_failsafe_escalate", extra={"action_id": action_id})
         return _ESCALATE_ON_FAILURE
     if not result:
-        log.warning("opa_empty_result_failsafe", extra={"action_id": str(action.action_id)})
+        log.warning("opa_empty_result_failsafe", extra={"action_id": action_id})
         return _ESCALATE_ON_FAILURE
     decision = PolicyDecision(
         allowed=bool(result["allowed"]),
@@ -129,12 +139,13 @@ def evaluate(action: ProposedAction, context: dict[str, Any]) -> PolicyDecision:
         reason=str(result["reason"]),
         policy_id=str(result["policy_id"]),
     )
+    action = payload.get("action", {})
     log.info(
         "policy_decision",
         extra={
-            "action_id": str(action.action_id),
-            "agent": action.agent,
-            "action_type": action.action_type,
+            "action_id": action_id,
+            "agent": action.get("agent"),
+            "action_type": action.get("action_type"),
             "allowed": decision.allowed,
             "escalate": decision.escalate,
             "policy_id": decision.policy_id,

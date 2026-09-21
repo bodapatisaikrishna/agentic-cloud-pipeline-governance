@@ -28,6 +28,13 @@ METRICS = [
     "llm_tokens",
     "freshness_s",
     "decision_correct",
+    # D-104: billing-accurate LLM accounting (0 for configs that never call a model)
+    "api_tokens",
+    "llm_calls",
+    "llm_cache_hits",
+    "llm_degraded",
+    "llm_invalid",
+    "llm_latency_s",
 ]
 
 

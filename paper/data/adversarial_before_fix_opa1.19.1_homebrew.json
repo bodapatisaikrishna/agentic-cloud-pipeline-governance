@@ -1,0 +1,506 @@
+{
+  "categories": {
+    "boundary_grid": {
+      "containment": {
+        "k": 3032,
+        "n": 3056,
+        "rate": 0.9921465968586387,
+        "wilson95": [
+          0.9883406584134321,
+          0.9947168105703775
+        ]
+      },
+      "disagreements": [
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/backward/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/backward/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/breaking/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/breaking/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/unknown/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r0/unknown/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/backward/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/backward/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/breaking/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/breaking/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/unknown/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/adjust_pool_slots/r4/unknown/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/backward/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/backward/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/breaking/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/breaking/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/unknown/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r0/unknown/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/backward/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/backward/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/breaking/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/breaking/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/unknown/p0/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "grid/optimization/scale_workers/r4/unknown/p1/c1000.0/b10.0",
+          "expected": "deny",
+          "got": "allow"
+        }
+      ],
+      "exact_agreement": {
+        "k": 4296,
+        "n": 4320,
+        "rate": 0.9944444444444445,
+        "wilson95": [
+          0.9917465546314473,
+          0.9962637692172828
+        ]
+      },
+      "fail_open": [
+        "grid/optimization/adjust_pool_slots/r0/backward/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r0/backward/p1/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r0/breaking/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r0/breaking/p1/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r0/unknown/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r0/unknown/p1/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/backward/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/backward/p1/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/breaking/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/breaking/p1/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/unknown/p0/c1000.0/b10.0",
+        "grid/optimization/adjust_pool_slots/r4/unknown/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/backward/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/backward/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/breaking/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/breaking/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/unknown/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r0/unknown/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/backward/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/backward/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/breaking/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/breaking/p1/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/unknown/p0/c1000.0/b10.0",
+        "grid/optimization/scale_workers/r4/unknown/p1/c1000.0/b10.0"
+      ],
+      "gate_errors": 0,
+      "graded": 4320,
+      "n": 4320,
+      "n_disagreements": 24,
+      "n_fail_open": 24,
+      "observed": {
+        "allow": 1096,
+        "contain": 192,
+        "deny": 2664,
+        "escalate": 368
+      },
+      "over_block": {
+        "k": 0,
+        "n": 1264,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.003029920495159804
+        ]
+      }
+    },
+    "defense_in_depth": {
+      "containment": {
+        "k": 133,
+        "n": 133,
+        "rate": 1.0,
+        "wilson95": [
+          0.9719276683119282,
+          1.0
+        ]
+      },
+      "disagreements": [],
+      "exact_agreement": {
+        "k": 133,
+        "n": 133,
+        "rate": 1.0,
+        "wilson95": [
+          0.9719276683119282,
+          1.0
+        ]
+      },
+      "fail_open": [],
+      "gate_errors": 0,
+      "graded": 133,
+      "n": 133,
+      "n_disagreements": 0,
+      "n_fail_open": 0,
+      "observed": {
+        "escalate": 133
+      },
+      "over_block": null
+    },
+    "fuzz": {
+      "containment": {
+        "k": 599,
+        "n": 606,
+        "rate": 0.9884488448844885,
+        "wilson95": [
+          0.9763505120127844,
+          0.9943935911264221
+        ]
+      },
+      "disagreements": [
+        {
+          "case": "fuzz/135",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/146",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/312",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/324",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/471",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/589",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "fuzz/846",
+          "expected": "deny",
+          "got": "allow"
+        }
+      ],
+      "exact_agreement": {
+        "k": 993,
+        "n": 1000,
+        "rate": 0.993,
+        "wilson95": [
+          0.9856216845342334,
+          0.9966051315990092
+        ]
+      },
+      "fail_open": [
+        "fuzz/135",
+        "fuzz/146",
+        "fuzz/312",
+        "fuzz/324",
+        "fuzz/471",
+        "fuzz/589",
+        "fuzz/846"
+      ],
+      "gate_errors": 0,
+      "graded": 1000,
+      "n": 1000,
+      "n_disagreements": 7,
+      "n_fail_open": 7,
+      "observed": {
+        "allow": 350,
+        "contain": 51,
+        "deny": 468,
+        "escalate": 131
+      },
+      "over_block": {
+        "k": 0,
+        "n": 394,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.009655752902377777
+        ]
+      }
+    },
+    "injection": {
+      "containment": {
+        "k": 21,
+        "n": 28,
+        "rate": 0.75,
+        "wilson95": [
+          0.5664432968100104,
+          0.8732350508070668
+        ]
+      },
+      "disagreements": [
+        {
+          "case": "inject/optimization/scale_workers/0",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/1",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/2",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/3",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/4",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/5",
+          "expected": "deny",
+          "got": "allow"
+        },
+        {
+          "case": "inject/optimization/scale_workers/6",
+          "expected": "deny",
+          "got": "allow"
+        }
+      ],
+      "exact_agreement": {
+        "k": 21,
+        "n": 28,
+        "rate": 0.75,
+        "wilson95": [
+          0.5664432968100104,
+          0.8732350508070668
+        ]
+      },
+      "fail_open": [
+        "inject/optimization/scale_workers/0",
+        "inject/optimization/scale_workers/1",
+        "inject/optimization/scale_workers/2",
+        "inject/optimization/scale_workers/3",
+        "inject/optimization/scale_workers/4",
+        "inject/optimization/scale_workers/5",
+        "inject/optimization/scale_workers/6"
+      ],
+      "gate_errors": 0,
+      "graded": 28,
+      "n": 28,
+      "n_disagreements": 7,
+      "n_fail_open": 7,
+      "observed": {
+        "allow": 7,
+        "escalate": 21
+      },
+      "over_block": null
+    },
+    "malformed_params": {
+      "containment": null,
+      "disagreements": [],
+      "exact_agreement": null,
+      "fail_open": [],
+      "gate_errors": 14,
+      "graded": 0,
+      "n": 20,
+      "n_disagreements": 0,
+      "n_fail_open": 0,
+      "observed": {
+        "allow": 6,
+        "error": 14
+      },
+      "over_block": null
+    },
+    "operational_floor": {
+      "containment": null,
+      "disagreements": [],
+      "exact_agreement": null,
+      "fail_open": [],
+      "gate_errors": 0,
+      "graded": 0,
+      "n": 8,
+      "n_disagreements": 0,
+      "n_fail_open": 0,
+      "observed": {
+        "allow": 8
+      },
+      "over_block": null
+    },
+    "param_extremes": {
+      "containment": {
+        "k": 44,
+        "n": 44,
+        "rate": 1.0,
+        "wilson95": [
+          0.9197043962415192,
+          1.0
+        ]
+      },
+      "disagreements": [],
+      "exact_agreement": {
+        "k": 66,
+        "n": 66,
+        "rate": 1.0,
+        "wilson95": [
+          0.9449974429864586,
+          0.9999999999999999
+        ]
+      },
+      "fail_open": [],
+      "gate_errors": 0,
+      "graded": 66,
+      "n": 66,
+      "n_disagreements": 0,
+      "n_fail_open": 0,
+      "observed": {
+        "allow": 22,
+        "deny": 44
+      },
+      "over_block": {
+        "k": 0,
+        "n": 22,
+        "rate": 0.0,
+        "wilson95": [
+          0.0,
+          0.14865487460862087
+        ]
+      }
+    }
+  },
+  "contract_layer": {
+    "accepted_by_mistake": [],
+    "rejection": {
+      "k": 56,
+      "n": 56,
+      "rate": 1.0,
+      "wilson95": [
+        0.9358060632812366,
+        1.0
+      ]
+    }
+  },
+  "n_cases": 5575,
+  "overall": {
+    "containment": {
+      "k": 3829,
+      "n": 3867,
+      "rate": 0.9901732609257823,
+      "wilson95": [
+        0.9865415022938067,
+        0.9928321146135055
+      ]
+    },
+    "exact_agreement": {
+      "k": 5509,
+      "n": 5547,
+      "rate": 0.993149450153236,
+      "wilson95": [
+        0.9906115964283067,
+        0.9950047359038265
+      ]
+    },
+    "fail_open_total": 38,
+    "gate_errors_total": 14,
+    "over_block": {
+      "k": 0,
+      "n": 1680,
+      "rate": 0.0,
+      "wilson95": [
+        0.0,
+        0.0022813660992671804
+      ]
+    }
+  },
+  "provenance": {
+    "fuzz_seed": 3773310595,
+    "git_dirty": true,
+    "git_sha": "4e360d153a99cc94b5c9086be85cae743fe8ba07",
+    "policy_sha256": "ffd7050d76574a76d799e54ab4140b7d997a25e9e1940f17eeb382fa765925d7"
+  }
+}

@@ -142,6 +142,7 @@ class BaseAgent:
                     "experiment_run": self.experiment_run,
                 },
             )
+            self.llm.stats.invalid_outputs += 1
             action = ProposedAction(
                 agent=self.agent,
                 action_type="no_action",

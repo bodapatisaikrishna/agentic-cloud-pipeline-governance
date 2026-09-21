@@ -160,3 +160,74 @@ class TestBudgetTracker:
         assert BudgetTracker(max_calls=1, max_tokens=100, calls=1).exceeded()
         assert BudgetTracker(max_calls=10, max_tokens=100, tokens=100).exceeded()
         assert not BudgetTracker(max_calls=10, max_tokens=100).exceeded()
+
+
+class TestLLMStats:
+    """D-104: the counters that make LLM accounting billing-accurate, not row-level."""
+
+    def test_cache_hits_are_not_counted_as_api_tokens(self):
+        client = LLMClient(budget=BudgetTracker(max_calls=10, max_tokens=1_000_000))
+        first = client.propose("schema", _snap(), "sys")
+        for _ in range(3):
+            client.propose("schema", _snap(), "sys")
+        assert client.stats.real_calls == 1
+        assert client.stats.cache_hits == 3
+        billed = client.stats.tokens_in + client.stats.tokens_out
+        assert billed == first.tokens_in + first.tokens_out
+
+    def test_budget_degrade_counted(self):
+        client = LLMClient(budget=BudgetTracker(max_calls=0, max_tokens=1_000_000))
+        client.propose("schema", _snap(), "sys")
+        assert client.stats.degraded_budget == 1
+        assert client.stats.real_calls == 0
+        assert client.stats.as_metrics()["llm_degraded"] == 1.0
+
+    def test_unavailable_is_cached_and_replay_is_visible(self, monkeypatch):
+        """A transient failure is cached per snapshot key; later replays must be counted."""
+        client = LLMClient(budget=BudgetTracker(max_calls=10, max_tokens=1_000_000))
+        monkeypatch.setattr(
+            client_mod, "get_settings", lambda: Settings(_env_file=None, mock_llm=False)
+        )
+
+        def fake_live(agent, snapshot, system_prompt, model):
+            client.stats.degraded_unavailable += 1  # what _run_with_degrade does on final failure
+            return LLMResult({"action_type": "no_action"}, 0, 0, model)
+
+        monkeypatch.setattr(client, "_live_call", fake_live)
+        client.propose("schema", _snap(), "sys")
+        client.propose("schema", _snap(), "sys")
+        client.propose("schema", _snap(), "sys")
+        assert client.stats.real_calls == 0  # failures aren't real calls
+        assert client.stats.degraded_unavailable == 1
+        assert client.stats.degraded_replays == 2  # poisoned-cache replays are surfaced
+        assert client.stats.as_metrics()["llm_degraded"] == 3.0
+
+    def test_final_failure_increments_unavailable(self):
+        def _boom() -> LLMResult:
+            raise RuntimeError("provider exploded")
+
+        client = LLMClient()
+        client._run_with_degrade("schema", _snap(), "m", _boom, lambda exc: False)
+        assert client.stats.degraded_unavailable == 1
+
+    def test_as_metrics_empty_is_all_zero(self):
+        from acde.llm.client import LLMStats
+
+        assert set(LLMStats().as_metrics().values()) == {0.0}
+
+    def test_latency_is_median_of_real_calls(self):
+        from acde.llm.client import LLMStats
+
+        stats = LLMStats(latencies_s=[1.0, 9.0, 2.0])
+        assert stats.as_metrics()["llm_latency_s"] == 2.0
+
+    def test_invalid_output_counted_by_agent(self, monkeypatch):
+        from acde.agents.schema import SchemaAgent
+
+        client = LLMClient()
+        agent = SchemaAgent(experiment_run="t", llm=client)
+        bad = LLMResult({"action_type": "definitely_not_valid"}, 1, 1, "m")
+        monkeypatch.setattr(client, "propose", lambda *a, **k: bad)
+        action, _ = agent.reason(_snap())
+        assert action.action_type == "no_action"
+        assert client.stats.invalid_outputs == 1
