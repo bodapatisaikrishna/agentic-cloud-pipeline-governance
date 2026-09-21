@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime as dt
+import time
 from contextlib import contextmanager
 from unittest.mock import MagicMock
 
@@ -165,6 +166,24 @@ class TestTick:
         monkeypatch.setattr(loop_mod.control, "record_heartbeat", lambda run: recorded.append(run))
         asyncio.run(cl._tick())
         assert recorded == ["t"]
+
+
+class TestTickDeadline:
+    def test_stuck_tick_ends_the_run_instead_of_hanging_it(self, monkeypatch):
+        cl = ControlLoop("t", "full")
+
+        async def stuck() -> None:
+            await asyncio.sleep(60)
+
+        monkeypatch.setattr(cl, "_tick", stuck)
+        # the run's deadline is 0.05 s; the tick's allowance is deadline + 30 s grace, so shrink it
+        real_wait_for = asyncio.wait_for
+        monkeypatch.setattr(
+            loop_mod.asyncio, "wait_for", lambda coro, timeout: real_wait_for(coro, timeout=0.1)
+        )
+        started = time.monotonic()
+        asyncio.run(cl.run(0.05))  # returns (does not hang) despite the stuck tick
+        assert time.monotonic() - started < 5.0
 
 
 class TestResolveConflicts:

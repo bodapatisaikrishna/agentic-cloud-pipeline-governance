@@ -2215,6 +2215,21 @@ could hold an agent tick for most of a 300 s control loop: added `LLM_REQUEST_TI
 per attempt, SDK retries disabled so tenacity's 3 attempts bound the worst case). Both are live-arm
 validity fixes; the fast-model change means results are **not** comparable with D-081's pass.
 
+**D-104k — A pilot run hung for 18 minutes; cause not confirmed, fixed defensively.** Run 2 of the
+relaunched pilot (`full`, schema_drift replicate 1, a column *drop*) logged its first monitoring action
+at 16:41:27 and then nothing until it was killed at ≈17:00, well past its 300 s loop. Evidence: no
+Postgres lock waits (all connections idle), no held transactions, the runner process alive at ~0 % CPU
+with its main thread blocked on a lock and one worker thread in `poll()`; one established socket to the
+provider. That fits a stalled network call but does **not** prove it — no Python stack was available
+(py-spy absent), and an idle keep-alive socket looks the same. Three defensive changes, none of which
+depends on the diagnosis: (1) `call_with_deadline` bounds every provider call by *wall-clock* time
+(daemon thread abandoned on timeout; `TimeoutError` is retryable) — SDK/httpx timeouts bound per-chunk
+reads, not the whole call; (2) `ControlLoop.run` wraps each tick in `asyncio.wait_for` (remaining loop
+time + 30 s), because the loop deadline was only consulted *between* ticks; (3) a `faulthandler`
+watchdog in the runner dumps every thread's Python stack to the campaign log if a run exceeds twice its
+nominal length, so a recurrence diagnoses itself. If it recurs with a stack that shows a different
+cause, this entry is to be corrected.
+
 **Status.** Pre-flight instrumentation, supervisor, corpus, sensitivity and artifact generation are
 implemented and unit-tested (739 tests, 95 % coverage). The pilot and the campaign are pending the
 user's go/no-go; results, claims audit and manuscript follow the data.

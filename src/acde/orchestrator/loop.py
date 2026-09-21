@@ -196,7 +196,15 @@ class ControlLoop:
         )
         while not self._stop.is_set() and loop.time() < deadline:
             try:
-                await self._tick()
+                # A tick may not outlive the run by more than a grace period: the deadline above is
+                # only consulted *between* ticks, so without this one stuck call ends nothing.
+                budget_s = max(deadline - loop.time(), 1.0) + 30.0
+                await asyncio.wait_for(self._tick(), timeout=budget_s)
+            except TimeoutError:
+                log.warning(
+                    "control_loop_tick_timeout", extra={"experiment_run": self.experiment_run}
+                )
+                break
             except Exception:  # a bad tick must not kill the loop
                 log.warning(
                     "control_loop_tick_failed", extra={"experiment_run": self.experiment_run}

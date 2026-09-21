@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import csv
 import datetime as dt
+import faulthandler
 import json
 import os
 import statistics
@@ -318,6 +319,10 @@ def run_one(
     seed = run_seed(run.config, run.scenario, run.replicate)
     _reset_run(experiment_run)
     t0 = time.monotonic()
+    # Hang watchdog: if a run overruns twice its nominal length, dump every thread's Python stack to
+    # stderr (the campaign log) so a stuck run diagnoses itself instead of failing silently.
+    nominal_s = timings.warmup_s + timings.loop_s + timings.settle_s
+    faulthandler.dump_traceback_later(2 * nominal_s + 120, repeat=False)
 
     time.sleep(timings.warmup_s)
     _sample_resources(experiment_run)
@@ -338,6 +343,7 @@ def run_one(
     )
     _write_rows(results_dir / "raw.csv", run, seed, metrics)
     _append_manifest(results_dir / "manifest.jsonl", run, seed, metrics, provenance)
+    faulthandler.cancel_dump_traceback_later()
     log.info("run_complete", extra={"experiment_run": experiment_run, **metrics})
     return metrics
 

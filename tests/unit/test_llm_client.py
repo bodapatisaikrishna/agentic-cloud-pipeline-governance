@@ -162,6 +162,49 @@ class TestBudgetTracker:
         assert not BudgetTracker(max_calls=10, max_tokens=100).exceeded()
 
 
+class TestWallClockDeadline:
+    """A call that never returns must not hold the caller (the 18-minute pilot hang)."""
+
+    def test_returns_value_within_deadline(self):
+        assert client_mod.call_with_deadline(lambda: 42, 1.0) == 42
+
+    def test_reraises_the_callees_exception(self):
+        def boom():
+            raise ValueError("provider said no")
+
+        with pytest.raises(ValueError, match="provider said no"):
+            client_mod.call_with_deadline(boom, 1.0)
+
+    def test_stalled_call_times_out_instead_of_blocking(self):
+        import threading
+        import time
+
+        release = threading.Event()
+        started = time.monotonic()
+        with pytest.raises(TimeoutError, match="deadline"):
+            client_mod.call_with_deadline(lambda: release.wait(30), 0.2)
+        assert time.monotonic() - started < 2.0  # bounded by the deadline, not the 30 s stall
+        release.set()
+
+    def test_stalled_provider_degrades_after_retries(self, monkeypatch):
+        import threading
+
+        monkeypatch.setattr(
+            client_mod,
+            "get_settings",
+            lambda: Settings(_env_file=None, llm_request_timeout_s=0.05),
+        )
+        monkeypatch.setattr("tenacity.nap.time.sleep", lambda s: None)  # skip backoff waits
+        release = threading.Event()
+        client = LLMClient()
+        out = client._run_with_degrade(
+            "schema", _snap(), "m", lambda: release.wait(30) or None, lambda exc: False
+        )
+        release.set()
+        assert out.action_json["action_type"] == "no_action"
+        assert client.stats.degraded_unavailable == 1
+
+
 class TestRequestTimeout:
     def test_default_is_bounded_well_under_a_control_loop(self):
         s = Settings(_env_file=None)

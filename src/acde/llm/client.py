@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import statistics
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -99,6 +100,36 @@ def _no_action(agent: AgentName, reason: str) -> dict[str, Any]:
         "justification": reason,
         "confidence": 0.0,
     }
+
+
+def call_with_deadline(fn: Callable[[], Any], timeout_s: float) -> Any:
+    """Run ``fn`` and give up after ``timeout_s`` of *wall-clock* time (D-104).
+
+    SDK/httpx timeouts bound the wait for each chunk of bytes, not the whole call, so a provider
+    that accepts the connection and then trickles or stalls can hold a call -- and, because the
+    control loop awaits it, the whole run -- indefinitely. (A pilot run hung 18 minutes with the
+    process blocked on a network wait; no Python stack was available to confirm this was the
+    cause, which is why the runner now also carries a stack-dumping watchdog.) The call runs in a
+    daemon thread that is abandoned on timeout: a leaked thread finishing later is harmless, a
+    blocked control loop is not. Raises :class:`TimeoutError`, which the retry policy treats as
+    transient.
+    """
+    box: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # re-raised on the caller's thread
+            box["error"] = exc
+
+    worker = threading.Thread(target=target, daemon=True, name="llm-call")
+    worker.start()
+    worker.join(timeout_s)
+    if worker.is_alive():
+        raise TimeoutError(f"LLM call exceeded its {timeout_s:g}s wall-clock deadline")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -209,12 +240,13 @@ class LLMClient:
     ) -> LLMResult:
         from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+        deadline_s = get_settings().llm_request_timeout_s
         runner = retry(
-            retry=retry_if_exception(retryable),
+            retry=retry_if_exception(lambda e: isinstance(e, TimeoutError) or retryable(e)),
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=0.5, max=8),
             reraise=True,
-        )(once)
+        )(lambda: call_with_deadline(once, deadline_s))
         try:
             return runner()
         except Exception as exc:  # final failure → degrade
