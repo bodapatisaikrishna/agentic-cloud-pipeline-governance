@@ -95,12 +95,16 @@ class Settings(BaseSettings):
     oai_base_url: str = "https://integrate.api.nvidia.com/v1"
     oai_api_key: SecretStr = SecretStr("")
     oai_model_reasoning: str = "z-ai/glm-5.2"
-    oai_model_fast: str = "nvidia/nemotron-3-nano-30b-a3b"
+    oai_model_fast: str = "nvidia/nemotron-3-super-120b-a12b"
     oai_max_tokens_per_call: int = 8192
     mock_llm: bool = True  # default everywhere; live runs must opt out explicitly
     llm_max_calls_per_run: int = 60
     llm_max_tokens_per_run: int = 150_000
     llm_max_tokens_per_call: int = 1024
+    # Per-attempt request timeout (D-104). Without one the OpenAI/Anthropic SDKs wait ~10 minutes,
+    # so a stalled provider could hold one agent tick for most of a 300 s control loop. Worst case
+    # is 3 attempts (tenacity), so keep 3 x this comfortably under the loop duration.
+    llm_request_timeout_s: float = 60.0
 
     # --- Cost model (§5.5, disclosed in README/DEVIATIONS) ---
     cost_rate_compute_unit_second: float = 0.05

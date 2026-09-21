@@ -1,0 +1,52 @@
+\section{Introduction}\label{sec:intro}
+
+Data pipelines fail in ways that are cheap to describe and expensive to fix: an upstream schema
+changes type, a source stalls, a co-tenant starves compute, ingress bursts past capacity. The
+standard remedy is an on-call human, whose response time dominates recovery time. Kirubakaran et
+al.~\cite{kirubakaran2025governing} propose replacing part of that loop with four bounded LLM agents
+(monitoring, optimisation, schema, recovery) whose only output is a structured action proposal,
+gated by a policy engine before anything executes, and report reductions of up to 45\% in recovery
+time, about 25\% in cost, and over 70\% in manual interventions against static orchestration.
+
+This paper asks whether that claim survives an evaluation in which the agents are a real, remote
+language model rather than a simulation, in which the baselines include cheap automation rather than
+only a slow human, and in which the safety guarantee is attacked rather than asserted. It is a
+replication and extension of \cite{kirubakaran2025governing}, together with the engineering record
+of taking the resulting system from a research artefact to something an operator could run.
+
+\paragraph{Thesis.}
+Governance claims hold only if the evaluation path is the production path. Every headline number in
+the replicated paper's family of results depends on choices about \emph{how} the system is exercised
+--- a mock or a live model, a modelled or a measured human, an assumed or a measured provisioning gap
+--- and each of those choices, made for tractability, silently changes what is being measured. We
+make that dependence measurable rather than arguing it away.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item \textbf{A live-model replication} on a full matrix of eight configurations (three
+    non-agent comparison points, the full system, and four single-agent ablations) over four fault
+    scenarios, with per-run provenance and billing-accurate LLM accounting (\S\ref{sec:method}).
+  \item \textbf{A measured mock-versus-live divergence}: the same configuration under a
+    deterministic mock and under a live model, compared directly (\S\ref{sec:results}).
+  \item \textbf{Credible baselines and decision quality}: rule-based and autoscaling comparators,
+    and a correct-mitigation metric in addition to speed.
+  \item \textbf{An adversarial evaluation with an independent specification oracle}, reporting
+    containment, over-blocking and exact agreement with Wilson intervals, and the defects it found
+    (\S\ref{sec:results}, \S\ref{sec:lessons}).
+  \item \textbf{Closed-form sensitivity analyses} for the two modelled assumptions the headline
+    numbers rest on --- the simulated human's latency and the cost model's provisioning gap.
+  \item \textbf{Production-hardening lessons}, each tied to a defect measured in this system and to
+    the design record (\S\ref{sec:lessons}).
+\end{enumerate}
+
+\paragraph{What is not novel.}
+The architecture --- three planes, four bounded agents, a policy gate, an observe--reason--propose
+loop --- is that of \cite{kirubakaran2025governing}; we implement it, we did not invent it. We claim no
+new agent design, no new policy language, and no new statistical method. The contribution is the
+evidence, the measurement discipline, and the defects found by holding the system to its own claims.
+
+\paragraph{Roadmap.}
+Section~\ref{sec:related} places the work; \S\ref{sec:system} describes the system as implemented;
+\S\ref{sec:method} the experimental design; \S\ref{sec:results} the results;
+\S\ref{sec:lessons} the hardening lessons; \S\ref{sec:discussion} limitations and threats to
+validity.

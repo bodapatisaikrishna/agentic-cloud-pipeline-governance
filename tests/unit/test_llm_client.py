@@ -77,7 +77,7 @@ class TestProviderRouting:
             lambda: Settings(_env_file=None, llm_provider="openai_compatible"),
         )
         client = LLMClient()
-        assert client.model_for("monitoring") == "nvidia/nemotron-3-nano-30b-a3b"
+        assert client.model_for("monitoring") == "nvidia/nemotron-3-super-120b-a12b"
         assert client.model_for("schema") == "z-ai/glm-5.2"
 
     def test_live_call_dispatches_to_openai_compatible(self, monkeypatch):
@@ -160,6 +160,13 @@ class TestBudgetTracker:
         assert BudgetTracker(max_calls=1, max_tokens=100, calls=1).exceeded()
         assert BudgetTracker(max_calls=10, max_tokens=100, tokens=100).exceeded()
         assert not BudgetTracker(max_calls=10, max_tokens=100).exceeded()
+
+
+class TestRequestTimeout:
+    def test_default_is_bounded_well_under_a_control_loop(self):
+        s = Settings(_env_file=None)
+        # tenacity makes 3 attempts; the worst case must not consume a 300 s loop
+        assert s.llm_request_timeout_s > 0 and 3 * s.llm_request_timeout_s < 300
 
 
 class TestLLMStats:

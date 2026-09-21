@@ -2199,6 +2199,22 @@ Okabe-Ito palette); verified bibliography only (anything unverifiable is omitted
 author); front matter, authorship, funding, ORCID, Zenodo DOI and the journal's AI-assistance
 disclosure are the author's to supply. The author of record must review every claim.
 
+**D-104j — The pilot found the configured fast model retired; LLM calls had no timeout.** Within
+minutes of launching the pilot the provider answered HTTP 410 for the monitoring agent's model
+(`nvidia/nemotron-3-nano-30b-a3b`, end of life 2026-09-01). Monitoring is the detector in every
+non-baseline config, so an unnoticed full campaign would have measured provider retirement, not the
+system. The pilot was stopped after the first fault injection (no data kept). Probing the account's
+reachable models with one real monitoring call each: `nemotron-nano-3-30b-a3b` — listed, but "not found
+for account"; `nemotron-3.5-lightning-30b-a3b` — three timeouts; `llama-3.1-nemotron-70b`, `glm-5.3-flash`,
+`gpt-oss-20b` — unavailable/timeouts; `mistral-nemotron` — valid but 57 s; **`nemotron-3-super-120b-a12b`
+— valid in 4.1 s** (chosen as the fast model, `OAI_MODEL_FAST`; the reasoning model stays
+`nemotron-3-ultra-550b-a55b`, 19 s on the same probe). A model appearing in `/v1/models` is not
+evidence it is usable. The same probing exposed that the OpenAI/Anthropic/Gemini clients were built
+with no request timeout (SDK default ≈10 min, plus SDK-internal retries), so one stalled provider call
+could hold an agent tick for most of a 300 s control loop: added `LLM_REQUEST_TIMEOUT_S` (default 60 s
+per attempt, SDK retries disabled so tenacity's 3 attempts bound the worst case). Both are live-arm
+validity fixes; the fast-model change means results are **not** comparable with D-081's pass.
+
 **Status.** Pre-flight instrumentation, supervisor, corpus, sensitivity and artifact generation are
 implemented and unit-tested (739 tests, 95 % coverage). The pilot and the campaign are pending the
 user's go/no-go; results, claims audit and manuscript follow the data.

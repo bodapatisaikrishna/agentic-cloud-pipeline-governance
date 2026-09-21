@@ -1,0 +1,32 @@
+\section{Background and related work}\label{sec:related}
+
+\paragraph{The replicated work.}
+Kirubakaran et al.~\cite{kirubakaran2025governing} describe a data plane, a policy plane and an
+agentic control plane, four bounded agents whose output is a validated action proposal, and an
+evaluation comparing that system with static orchestration and a human on-call across injected
+failures. Our implementation follows that decomposition; where the description is under-specified we
+record the decision and its alternatives in a numbered design-deviation log
+(Appendix~\ref{app:deviations}).
+
+\paragraph{LLM agents for operations.}
+Reasoning-and-acting loops \cite{yao2022react} are the general pattern behind agents that observe a
+system and propose actions. In cloud operations, LLMs have been applied to incident triage and root-cause
+analysis from production incident data \cite{chen2024rcacopilot}. Those systems recommend; the design
+studied here additionally \emph{executes}, which is what makes the gating question central.
+
+\paragraph{Fault injection.}
+Deliberately injecting faults to test resilience is established practice \cite{basiri2016chaos}. We
+use four injected scenarios (schema drift, upstream delay, resource contention, ingress burst) and a
+seeded injector so a fault condition can be reproduced.
+
+\paragraph{Policy as code.}
+The policy gate is implemented in Open Policy Agent~\cite{opa} and its Rego language. The safety
+argument of the replicated design is that policy, not the model, bounds what can happen; that
+argument is only as strong as the policy's behaviour on inputs its authors did not think of, which
+is what our adversarial evaluation tests.
+
+\paragraph{Statistics.}
+We use bootstrap resampling \cite{efron1979}, the Mann--Whitney rank-sum \cite{mann1947} and
+Wilcoxon signed-rank \cite{wilcoxon1945} tests, Holm's step-down correction \cite{holm1979}, Cliff's
+$\delta$ as an ordinal effect size \cite{cliff1993}, and Wilson score intervals \cite{wilson1927}
+for proportions near 1, where the normal approximation collapses to a zero-width interval.

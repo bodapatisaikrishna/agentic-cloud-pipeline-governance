@@ -173,6 +173,53 @@ class TestGuards:
         assert 600.0 not in sleeps
 
 
+_GOOD = {
+    "action_type": "no_action",
+    "target": "none",
+    "params": {},
+    "justification": "j",
+    "confidence": 0.5,
+}
+
+
+class _StubClient:
+    """Stands in for LLMClient: returns a canned proposal or a degraded one."""
+
+    def __init__(self, action, unavailable=False):
+        from acde.llm.client import LLMResult, LLMStats
+
+        self.stats = LLMStats()
+        self._res = LLMResult(action, 1, 1, "m")
+        self._unavailable = unavailable
+
+    def model_for(self, agent):
+        return f"model-for-{agent}"
+
+    def propose(self, agent, snapshot, prompt):
+        self.stats.degraded_unavailable += int(self._unavailable)
+        return self._res
+
+
+class TestPreflight:
+    def test_healthy_models_pass(self):
+        assert campaign.preflight_live_models(lambda: _StubClient(_GOOD)) == []
+
+    def test_unavailable_model_is_named(self):
+        problems = campaign.preflight_live_models(lambda: _StubClient(_GOOD, unavailable=True))
+        assert len(problems) == 2  # both roles probed
+        assert "model-for-monitoring" in problems[0] and "unavailable" in problems[0]
+
+    def test_invalid_output_is_a_problem(self):
+        bad = {
+            "action_type": "delete_database",
+            "target": "t",
+            "justification": "j",
+            "confidence": 0.5,
+        }
+        problems = campaign.preflight_live_models(lambda: _StubClient(bad))
+        assert len(problems) == 2 and "invalid output" in problems[0]
+
+
 class TestPrimitives:
     def test_write_status_is_atomic_and_leaves_no_temp(self, tmp_path):
         campaign.write_status(tmp_path / "s.json", {"a": 1})

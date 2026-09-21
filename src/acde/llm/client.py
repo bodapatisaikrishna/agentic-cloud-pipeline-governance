@@ -239,7 +239,9 @@ class LLMClient:
 
         settings = get_settings()
         if self._anthropic is None:
-            self._anthropic = anthropic.Anthropic()
+            self._anthropic = anthropic.Anthropic(
+                timeout=settings.llm_request_timeout_s, max_retries=0
+            )
 
         def _retryable(exc: BaseException) -> bool:
             if isinstance(exc, anthropic.APIConnectionError):
@@ -278,7 +280,10 @@ class LLMClient:
 
         settings = get_settings()
         if self._gemini is None:
-            self._gemini = genai.Client(api_key=settings.gemini_api_key.get_secret_value() or None)
+            self._gemini = genai.Client(
+                api_key=settings.gemini_api_key.get_secret_value() or None,
+                http_options=types.HttpOptions(timeout=int(settings.llm_request_timeout_s * 1000)),
+            )
 
         def _retryable(exc: BaseException) -> bool:
             code = getattr(exc, "code", None)
@@ -316,6 +321,8 @@ class LLMClient:
             self._oai = openai.OpenAI(
                 base_url=settings.oai_base_url,
                 api_key=settings.oai_api_key.get_secret_value() or "missing",
+                timeout=settings.llm_request_timeout_s,
+                max_retries=0,  # tenacity owns retries; SDK retries would multiply the worst case
             )
 
         def _retryable(exc: BaseException) -> bool:

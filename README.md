@@ -343,7 +343,7 @@ fault is open), via `LLMClient.model_for()` ([`llm/client.py`](src/acde/llm/clie
 |---|---|---|---|
 | `anthropic` (code default) | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` | `claude-sonnet-4-6` |
 | `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash` | `gemini-2.5-pro` |
-| `openai_compatible` (NVIDIA NIM / Groq / OpenRouter / z.ai, via `OAI_BASE_URL`) | `OAI_API_KEY` | `nvidia/nemotron-3-nano-30b-a3b` | `z-ai/glm-5.2` |
+| `openai_compatible` (NVIDIA NIM / Groq / OpenRouter / z.ai, via `OAI_BASE_URL`) | `OAI_API_KEY` | `nvidia/nemotron-3-super-120b-a12b` | `z-ai/glm-5.2` |
 
 Every field is overridable per-model (`MODEL_FAST`, `OAI_MODEL_REASONING`, …) without a code change.
 All providers run at **temperature 0**, are budget-capped (`LLM_MAX_CALLS_PER_RUN=60`,

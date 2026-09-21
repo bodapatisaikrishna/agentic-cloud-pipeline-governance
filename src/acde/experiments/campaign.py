@@ -34,8 +34,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from acde import db
 from acde.config import Settings, get_settings
+from acde.contracts import ProposedAction, TelemetrySnapshot
 from acde.experiments.configs import (
     ALL_CONFIGS,
     BASELINE_CONFIGS,
@@ -44,6 +47,7 @@ from acde.experiments.configs import (
 )
 from acde.experiments.runner import CODE_PATHS, _git_state, remaining_runs, run_id_for
 from acde.experiments.scenarios import TIMINGS
+from acde.llm.client import LLMClient
 from acde.logging import get_logger
 
 log = get_logger("experiments.campaign")
@@ -151,6 +155,41 @@ def missing_credentials(settings: Settings) -> str | None:
     if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
         return "ANTHROPIC_API_KEY is not set"
     return None
+
+
+def preflight_live_models(client_factory: Callable[[], LLMClient] = LLMClient) -> list[str]:
+    """One real call per model role; reasons any is unusable (empty == both roles work).
+
+    A model can be listed by a provider yet retired, unentitled, or hanging (the pilot met all
+    three). Monitoring routes to the fast model and every other agent to the reasoning model, so
+    probing one agent of each role covers both. An unavailable model would degrade to ``no_action``
+    for the whole campaign and the numbers would measure the outage, not the system.
+    """
+    from acde.agents.base import load_prompt
+
+    now = dt.datetime.now(dt.UTC)
+    snapshot = TelemetrySnapshot(
+        experiment_run="preflight",
+        window_start=now,
+        window_end=now,
+        open_anomalies=[
+            {"event_id": "preflight", "scenario": "schema_drift", "fault_type": "schema_drift"}
+        ],
+        schema_compat="breaking",
+    )
+    problems: list[str] = []
+    for agent in ("monitoring", "recovery"):
+        client = client_factory()
+        model = client.model_for(agent)
+        result = client.propose(agent, snapshot, load_prompt(agent))
+        if client.stats.degraded_unavailable:
+            problems.append(f"{agent}: model {model} is unavailable")
+            continue
+        try:
+            ProposedAction.model_validate({**result.action_json, "agent": agent})
+        except ValidationError as exc:
+            problems.append(f"{agent}: model {model} returned invalid output ({exc.error_count()})")
+    return problems
 
 
 def code_changed_since(sha: str) -> bool:
@@ -372,6 +411,10 @@ def main() -> None:  # pragma: no cover - CLI
             sys.exit("--max-tokens is required when a live arm is scheduled (set from pilot)")
         if (why := missing_credentials(settings)) is not None:
             sys.exit(f"live arm cannot run: {why}")
+        os.environ["MOCK_LLM"] = "0"  # the preflight must hit the real provider
+        get_settings.cache_clear()
+        if bad := preflight_live_models():
+            sys.exit("live model preflight failed: " + "; ".join(bad))
 
     state = _git_state()
     if not args.allow_dirty and (state["git_dirty"] or state["git_sha"] == "unknown"):
