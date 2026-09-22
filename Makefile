@@ -103,9 +103,9 @@ experiment-paper:  ## Paper matrix (MOCK LLM): 3 baselines + full at N=20, 4 abl
 
 ## --- Paper campaign (D-104) — real API spend, multi-day; see docs/CAMPAIGN.md ---
 
-campaign-pilot:  ## LIVE pilot: 8 runs at paper timings (~1-2h) to measure cost/time; needs MAX_TOKENS
+campaign-pilot:  ## LIVE pilot at paper timings to measure cost/time; needs MAX_TOKENS; PROFILE=pilot|pilot2
 	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
-	caffeinate -i $(UV) python -m acde.experiments.campaign --profile pilot --max-tokens $(MAX_TOKENS)
+	caffeinate -i $(UV) python -m acde.experiments.campaign --profile $${PROFILE:-pilot} --max-tokens $(MAX_TOKENS)
 
 campaign:  ## LIVE paper campaign (~49h; arms A live agents, B baselines, C mock full); needs MAX_TOKENS
 	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
