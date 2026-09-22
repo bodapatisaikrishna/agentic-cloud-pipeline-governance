@@ -2230,6 +2230,17 @@ watchdog in the runner dumps every thread's Python stack to the campaign log if 
 nominal length, so a recurrence diagnoses itself. If it recurs with a stack that shows a different
 cause, this entry is to be corrected.
 
+**D-104l — The pilot found live cache poisoning in practice, not just in theory.** Run
+`full__schema_drift__r1` hit one real HTTP 503 from the provider on the monitoring agent, then
+replayed that cached "unavailable" answer for **29 further cycles** of a 300 s loop —
+`llm_degraded=30` for one transient blip, and the detector was effectively off for most of the run.
+This is exactly the cache-poisoning risk `LLMStats.degraded_replays` was built to *surface*
+(D-104b); the pilot showed it should instead be **prevented**. Fix: `propose()` no longer caches or
+budget-charges a `degraded_unavailable` result — the next tick makes a fresh call instead of
+replaying the outage. `degraded_replays` is removed (nothing left to count). Covered by
+`tests/unit/test_llm_client.py::test_unavailable_is_not_cached_or_charged_so_the_next_tick_retries`;
+not yet re-validated against a live provider (the pilot that found it predates the fix).
+
 **Status.** Pre-flight instrumentation, supervisor, corpus, sensitivity and artifact generation are
 implemented and unit-tested (739 tests, 95 % coverage). The pilot and the campaign are pending the
 user's go/no-go; results, claims audit and manuscript follow the data.

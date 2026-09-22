@@ -232,25 +232,31 @@ class TestLLMStats:
         assert client.stats.real_calls == 0
         assert client.stats.as_metrics()["llm_degraded"] == 1.0
 
-    def test_unavailable_is_cached_and_replay_is_visible(self, monkeypatch):
-        """A transient failure is cached per snapshot key; later replays must be counted."""
+    def test_unavailable_is_not_cached_or_charged_so_the_next_tick_retries(self, monkeypatch):
+        """One 503 must not blind later identical snapshots (the pilot saw 29 replays of one)."""
         client = LLMClient(budget=BudgetTracker(max_calls=10, max_tokens=1_000_000))
         monkeypatch.setattr(
             client_mod, "get_settings", lambda: Settings(_env_file=None, mock_llm=False)
         )
+        outcomes = iter(["down", "down", "up"])
 
         def fake_live(agent, snapshot, system_prompt, model):
-            client.stats.degraded_unavailable += 1  # what _run_with_degrade does on final failure
-            return LLMResult({"action_type": "no_action"}, 0, 0, model)
+            if next(outcomes) == "down":
+                client.stats.degraded_unavailable += 1  # what _run_with_degrade does on failure
+                return LLMResult({"action_type": "no_action"}, 0, 0, model)
+            return LLMResult({"action_type": "raise_anomaly"}, 5, 5, model)
 
         monkeypatch.setattr(client, "_live_call", fake_live)
-        client.propose("schema", _snap(), "sys")
-        client.propose("schema", _snap(), "sys")
-        client.propose("schema", _snap(), "sys")
-        assert client.stats.real_calls == 0  # failures aren't real calls
-        assert client.stats.degraded_unavailable == 1
-        assert client.stats.degraded_replays == 2  # poisoned-cache replays are surfaced
-        assert client.stats.as_metrics()["llm_degraded"] == 3.0
+        first = client.propose("schema", _snap(), "sys")
+        second = client.propose("schema", _snap(), "sys")
+        third = client.propose("schema", _snap(), "sys")  # provider recovered: really called
+        fourth = client.propose("schema", _snap(), "sys")  # now a genuine cache hit
+        assert first.action_json["action_type"] == second.action_json["action_type"] == "no_action"
+        assert third.action_json["action_type"] == "raise_anomaly" and fourth is third
+        assert client.stats.degraded_unavailable == 2
+        assert client.stats.real_calls == 1 and client.stats.cache_hits == 1
+        assert client.budget.calls == 1  # failures spent nothing
+        assert client.stats.as_metrics()["llm_degraded"] == 2.0
 
     def test_final_failure_increments_unavailable(self):
         def _boom() -> LLMResult:

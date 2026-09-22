@@ -1,0 +1,25 @@
+\section{Reproduction guide}\label{app:repro}
+
+\paragraph{Artefact.}
+Code, policies, configuration, the campaign supervisor, the adversarial corpus, the analysis and this
+manuscript's generator are in one repository; the per-run results used here are committed under
+\texttt{paper/data/} (the working \texttt{results/} directory is git-ignored). Archived release and
+identifier: \AUTHOR{Zenodo DOI, minted at release}.
+
+\paragraph{Regenerating tables and figures from committed data (minutes).}
+\begin{verbatim}
+uv sync --extra research
+make paper-repro-quick     # tables, figures, numbers.tex, then this PDF
+\end{verbatim}
+The generator is deterministic (fixed seeds and PDF metadata); running it twice yields identical file
+hashes, recorded in \texttt{paper/generated/SHA256SUMS}.
+
+\paragraph{Re-running the experiments (about two days, real API cost).}
+See \texttt{docs/CAMPAIGN.md}: bring up the stack, run the pilot, then \texttt{make campaign} with a
+token ceiling. The supervisor is resumable; each arm's manifest records provenance, and analysis
+refuses to merge arms whose provenance differs.
+
+\paragraph{Environment.}
+\AUTHOR{hardware, OS, container runtime versions, model identifiers and dates of the live campaign;
+taken from the run manifests}. The policy engine is pinned; a different release may change results
+(\S\ref{sec:lessons}, L6).

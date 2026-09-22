@@ -60,16 +60,15 @@ class LLMStats:
     Distinct from the per-action rows in ``telemetry.agent_actions``: a cache hit hands the *same*
     ``LLMResult`` to a new action row, so summing row-level tokens counts one real API call once per
     replay and overstates true usage. These counters are incremented at the moment a call is (or is
-    not) made, so they are the billing-accurate figure. ``degraded_replays`` counts cache hits that
-    replayed an earlier *degraded* answer -- a transient failure is cached for that snapshot key, so
-    one 429 storm can silently keep degrading later identical snapshots; that has to be visible.
+    not) made, so they are the billing-accurate figure. A provider failure
+    (``degraded_unavailable``) is never cached and never charged to the budget: caching it would
+    replay one transient outage against every later identical snapshot (D-104l).
     """
 
     real_calls: int = 0
     cache_hits: int = 0
     degraded_budget: int = 0
     degraded_unavailable: int = 0
-    degraded_replays: int = 0
     invalid_outputs: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
@@ -81,9 +80,7 @@ class LLMStats:
             "api_tokens": float(self.tokens_in + self.tokens_out),
             "llm_calls": float(self.real_calls),
             "llm_cache_hits": float(self.cache_hits),
-            "llm_degraded": float(
-                self.degraded_budget + self.degraded_unavailable + self.degraded_replays
-            ),
+            "llm_degraded": float(self.degraded_budget + self.degraded_unavailable),
             "llm_invalid": float(self.invalid_outputs),
             "llm_latency_s": (
                 float(statistics.median(self.latencies_s)) if self.latencies_s else 0.0
@@ -150,7 +147,6 @@ class LLMClient:
             settings.llm_max_calls_per_run, settings.llm_max_tokens_per_run
         )
         self._cache: dict[tuple[str, str], LLMResult] = {}
-        self._degraded_keys: set[tuple[str, str]] = set()
         self.stats = LLMStats()
         self._anthropic: Any = None
         self._gemini: Any = None
@@ -172,8 +168,6 @@ class LLMClient:
         key = (agent, snapshot.cache_key_material())
         if key in self._cache:
             self.stats.cache_hits += 1
-            if key in self._degraded_keys:
-                self.stats.degraded_replays += 1
             return self._cache[key]
 
         model = self.model_for(agent)
@@ -203,14 +197,15 @@ class LLMClient:
             result = self._live_call(agent, snapshot, system_prompt, model)
         elapsed = time.monotonic() - started
 
-        if self.stats.degraded_unavailable == unavailable_before:
-            self.stats.real_calls += 1
-            self.stats.tokens_in += result.tokens_in
-            self.stats.tokens_out += result.tokens_out
-            self.stats.latencies_s.append(elapsed)
-        else:
-            self._degraded_keys.add(key)
-
+        if self.stats.degraded_unavailable != unavailable_before:
+            # A provider failure is transient: caching it would replay the outage against every
+            # later identical snapshot (the pilot saw one 503 blind the detector for 29 further
+            # cycles), and it spent nothing, so it is not charged to the budget. Next tick retries.
+            return result
+        self.stats.real_calls += 1
+        self.stats.tokens_in += result.tokens_in
+        self.stats.tokens_out += result.tokens_out
+        self.stats.latencies_s.append(elapsed)
         self.budget.add(result.tokens_in, result.tokens_out)
         self._cache[key] = result
         return result

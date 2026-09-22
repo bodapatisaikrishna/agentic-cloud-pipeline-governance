@@ -1,0 +1,22 @@
+\section{Design-deviation log}\label{app:deviations}
+
+Every decision that the source paper left under-specified, and every defect found and fixed, is
+recorded in a numbered log in the repository (\texttt{DEVIATIONS.md}) giving the decision, the
+alternatives considered and the rationale. The entries this paper leans on:
+
+\begin{center}
+\begin{tabular}{@{}lp{0.78\linewidth}@{}}
+\toprule
+Entry & Subject \\
+\midrule
+D-024 & Simulated human latency: seeded log-normal \\
+D-061 & Cost model v2: avoided over-provisioning \\
+D-074 & Concurrent partition creation race; advisory lock \\
+D-084 & Write-ahead audit trail \\
+D-091 & Production anomaly detection was never wired in \\
+D-100 & Live decision-quality monitoring; taxonomy mismatch \\
+D-103 & Single choke point for unit-test hermeticity \\
+D-104 & This work: arms, accounting, provenance, supervisor, adversarial oracle and findings, statistics, sensitivity, dead-model pilot finding \\
+\bottomrule
+\end{tabular}
+\end{center}
