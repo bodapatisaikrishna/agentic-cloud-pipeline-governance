@@ -67,6 +67,14 @@ PROFILES: dict[str, list[Run]] = {
         for scenario in ("schema_drift", "resource_contention")
         for r in range(2)
     ],
+    # pilot2 (D-104): fills exactly the gaps the first pilot left -- the three ablations it never
+    # ran and the two scenarios it never touched. Together the two pilots cover every agent config
+    # and every scenario at least once before the full campaign.
+    "pilot2": [
+        Run(config, scenario, 0)
+        for config in ("full", "recovery_only", "optimization_only", "schema_only", "monitor_only")
+        for scenario in ("upstream_delay", "ingress_burst")
+    ],
 }
 
 

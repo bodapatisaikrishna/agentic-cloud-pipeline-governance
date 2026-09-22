@@ -80,8 +80,8 @@ def arms_for(profile: str, root: Path) -> list[Arm]:
     is identical live-vs-mock and runs under ``MOCK_LLM=1`` at no API cost; arm C is the mock
     counterpart of arm A's ``full`` cell for the paired live-vs-mock comparison.
     """
-    if profile == "pilot":
-        return [Arm("pilot", root / "pilot", frozenset(ALL_CONFIGS), True, "pilot")]
+    if profile in ("pilot", "pilot2"):
+        return [Arm(profile, root / profile, frozenset(ALL_CONFIGS), True, profile)]
     if profile == "smoke":  # mock, seconds per run: exercises the supervisor end to end for free
         return [Arm("smoke", root / "smoke", frozenset(ALL_CONFIGS), False, "smoke")]
     return [
@@ -389,7 +389,7 @@ def run_campaign(
 
 def main() -> None:  # pragma: no cover - CLI
     parser = argparse.ArgumentParser(description="ACDE paper-campaign supervisor")
-    parser.add_argument("--profile", choices=["paper", "pilot", "smoke"], default="paper")
+    parser.add_argument("--profile", choices=["paper", "pilot", "pilot2", "smoke"], default="paper")
     parser.add_argument("--results-root", default=None)
     parser.add_argument("--arms", default=None, help="comma-separated arm names (default: all)")
     parser.add_argument(

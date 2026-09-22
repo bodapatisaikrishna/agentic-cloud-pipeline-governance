@@ -223,6 +223,28 @@ class TestConfigFilter:
         assert runner.run_profile("smoke", tmp_path, max_runs=1) == 1
         assert ran == ["baseline"]
 
+    def test_pilot2_covers_the_gaps_pilot_left(self):
+        from acde.experiments.configs import profile_runs
+
+        pilot1 = {(r.config, r.scenario) for r in profile_runs("pilot")}
+        pilot2 = {(r.config, r.scenario) for r in profile_runs("pilot2")}
+        assert pilot1.isdisjoint(pilot2)
+        configs = {c for c, _ in pilot1 | pilot2}
+        scenarios = {s for _, s in pilot1 | pilot2}
+        assert configs == {
+            "full",
+            "recovery_only",
+            "optimization_only",
+            "schema_only",
+            "monitor_only",
+        }
+        assert scenarios == {
+            "schema_drift",
+            "resource_contention",
+            "upstream_delay",
+            "ingress_burst",
+        }
+
     def test_pilot_profile_uses_paper_timings(self):
         from acde.experiments.configs import profile_runs
 

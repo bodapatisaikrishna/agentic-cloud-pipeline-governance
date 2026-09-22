@@ -68,6 +68,10 @@ class TestArms:
         covered = live.configs | base.configs
         assert covered == set(runner.ALL_CONFIGS)  # arms A+B cover the whole paper matrix
 
+    def test_pilot2_is_one_live_arm(self, tmp_path):
+        (arm,) = campaign.arms_for("pilot2", tmp_path)
+        assert arm.live and arm.profile == "pilot2"
+
     def test_smoke_is_one_free_mock_arm(self, tmp_path):
         (arm,) = campaign.arms_for("smoke", tmp_path)
         assert not arm.live and arm.profile == "smoke"

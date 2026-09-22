@@ -31,4 +31,5 @@ TIMINGS: dict[str, RunTimings] = {
     "paper": RunTimings(warmup_s=120.0, loop_s=300.0, settle_s=5.0),
     # The pilot exists to *measure* the paper campaign's cost, so it runs at the paper's timings.
     "pilot": RunTimings(warmup_s=120.0, loop_s=300.0, settle_s=5.0),
+    "pilot2": RunTimings(warmup_s=120.0, loop_s=300.0, settle_s=5.0),
 }
