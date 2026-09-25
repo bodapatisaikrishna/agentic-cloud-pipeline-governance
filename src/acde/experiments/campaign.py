@@ -47,7 +47,7 @@ from acde.experiments.configs import (
 )
 from acde.experiments.runner import CODE_PATHS, _git_state, remaining_runs, run_id_for
 from acde.experiments.scenarios import TIMINGS
-from acde.llm.client import LLMClient
+from acde.llm.client import LLMClient, call_with_deadline
 from acde.logging import get_logger
 
 log = get_logger("experiments.campaign")
@@ -129,12 +129,19 @@ def _http_ok(url: str) -> bool:
         return False
 
 
+# psycopg_pool's checkout has no reliably-short bound when the server is refusing connections (a
+# real incident: ``db.fetch_one`` blocked for 2+ hours while Postgres was down, silently freezing
+# the whole health-check loop -- not just this one check). Give it a hard wall-clock deadline like
+# every LLM call already has, so a dead database can never again stall the supervisor itself.
+_HEALTH_DB_TIMEOUT_S = 10.0
+
+
 def check_health(settings: Settings | None = None) -> list[str]:
     """Names of unhealthy dependencies (empty list == healthy)."""
     s = settings or get_settings()
     problems: list[str] = []
     try:
-        db.fetch_one("SELECT 1 AS ok")
+        call_with_deadline(lambda: db.fetch_one("SELECT 1 AS ok"), _HEALTH_DB_TIMEOUT_S)
     except Exception:
         problems.append("postgres")
     if not _http_ok(f"{s.opa_url.rstrip('/')}/health"):

@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -269,6 +271,15 @@ class TestPrimitives:
         monkeypatch.setattr(campaign.db, "fetch_one", lambda *a, **k: {"ok": 1})
         monkeypatch.setattr(campaign, "_http_ok", lambda url: True)
         assert campaign.check_health(Settings(_env_file=None)) == []
+
+    def test_check_health_bounds_a_hanging_db_call(self, monkeypatch):
+        """A real incident: db.fetch_one blocked 2+h with Postgres down, freezing health checks."""
+        monkeypatch.setattr(campaign, "_HEALTH_DB_TIMEOUT_S", 0.05)
+        monkeypatch.setattr(campaign.db, "fetch_one", lambda *a, **k: threading.Event().wait(30))
+        monkeypatch.setattr(campaign, "_http_ok", lambda url: True)
+        started = time.monotonic()
+        assert campaign.check_health(Settings(_env_file=None)) == ["postgres"]
+        assert time.monotonic() - started < 2.0  # bounded, not the 30s stall
 
     def test_http_ok(self, monkeypatch):
         class Resp:
