@@ -25,5 +25,8 @@ results/*
 data/*
 !data/.gitkeep
 
+# LaTeX build output (reproducible from paper/data/ + paper/generated/ via `make paper-repro-quick`)
+paper/build/
+
 # OS
 .DS_Store

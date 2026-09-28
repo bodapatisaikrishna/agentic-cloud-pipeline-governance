@@ -61,4 +61,10 @@ uv run python -m acde.analysis.paper_artifacts --root results --out paper/genera
 ```
 
 Analysis refuses to merge arms whose provenance differs (code version, timings, human/cost model,
-budgets, LLM mode) — see `paper_stats.provenance_problems`.
+budgets, LLM mode) — see `paper_stats.provenance_problems`. If the supervisor was killed and restarted
+mid-campaign (e.g. after a host/Docker crash) while a code fix landed in between, later runs will carry
+a different `git_sha` than earlier ones and this check will fail. Before reaching for
+`paper_artifacts --allow-unclean` to override it, verify by `git diff --stat <old_sha> <new_sha>` that
+the change touched nothing on the run's execution path (agents, contracts, policy, runner) — only then
+is it safe to override, and the override must be recorded in `DEVIATIONS.md` with that diff as evidence
+(see D-104n for the template this project used the one time it happened).

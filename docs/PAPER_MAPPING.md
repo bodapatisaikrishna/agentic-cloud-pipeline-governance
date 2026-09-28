@@ -27,12 +27,31 @@ Maps each section/claim of arXiv:2512.23737 *"Governing Cloud Data Pipelines wit
 
 ## Headline claims (paper §VII.G) vs measured
 
+**Mock quick-matrix** (96 runs, N=3/cell, deterministic `MOCK_LLM=1` — mock agent resolves
+near-instantly):
+
 | Claim | Paper | ACDE (full vs baseline) | Status |
 |---|---|---|---|
 | MTTR reduction | ↓~45% | ↓~99.98% (mock recovery vs human baseline) | ✅ direction, larger |
 | Manual interventions | ↓>70% | ↓~100% | ✅ |
 | Data freshness | maintained | maintained (streaming-stall model, D-060) | ✅ |
 | Operational cost | ↓~25% | v1 compute-only: ↑ (⚠️); v2 provisioning-aware (D-061): ↓ | ⚠️→✅ with disclosed model |
+
+**Live paper campaign** (560 runs, real remote model at paper timings, D-104, completed
+2026-09-26 — see `paper/` for the full manuscript and `paper/generated/` for every table/figure):
+
+| Claim | Paper | ACDE live (full vs baseline) | Status |
+|---|---|---|---|
+| MTTR reduction | ↓~45% | ↓38% (235 s vs 378 s median), significant | ✅ direction, smaller magnitude |
+| Manual interventions | ↓>70% | **↑500%** (6.00 vs 1.00 median), significant | ❌ opposite direction |
+| Operational cost | ↓~25% | ↓56% (69.8 vs 158 units), significant | ✅ direction, larger — but see the provisioning-gap sensitivity in `paper/` |
+| Decision correctness *(new)* | — | full correct-mitigation rate ≈0.42 | far from perfect; only `full`/`optimization_only`/`schema_only` move it significantly |
+| vs. cheap automation | — | `rule_based`/`autoscale` beat `full` on MTTR (↓92%/↓86%) and manual interventions | live results do **not** repeat the mock matrix's "full dominates every baseline" |
+| Mock vs. live, same config | — | MTTR 235 s live vs. 0.193 s mock; decision-correct 0 vs. 1.00 | ~1000× divergence — the central methodological finding of the live campaign |
+
+The mock quick-matrix's "full dominates every baseline" and "manual interventions ↓100%" do not
+survive contact with a live model at real paper timings. This divergence, not either single dataset,
+is the headline result of the D-104 evidence campaign.
 
 ## Beyond the paper (our contributions)
 

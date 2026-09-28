@@ -8,7 +8,10 @@ ACDE is a working, tested research replication with a real trust core (OPA gate,
 autonomy, kill switch, blast radius). A systematic audit found defects that do not show up in a
 demo or in CI but break a real deployment. This document is the design for closing them.
 
-The audit findings, with evidence:
+The audit findings, as observed at the time of this 2026-08-27 audit (every one of these has since
+been fixed — see `DEVIATIONS.md` D-083 through D-090 and the Production hardening row of the README
+phase table; this table is a historical record of what the audit found, not a description of the
+current codebase):
 
 | # | Severity | Finding | Evidence |
 |---|---|---|---|

@@ -29,5 +29,7 @@ two data sources the pipelines use. (Code-level design rationales live in `DEVIA
 
 ## Code
 
-No open-source `LICENSE` is provided for the ACDE source at this time (all rights reserved by the
-repository owner). See `DEVIATIONS.md` D-054.
+ACDE is licensed **Apache-2.0** (`LICENSE` + `NOTICE` at the repository root). This supersedes an
+earlier "no code license" decision (`DEVIATIONS.md` D-054); see `DEVIATIONS.md` D-067 for the
+rationale (a permissive, patent-granting license lowers the barrier to enterprise adoption now that
+this is a product companies run, not only a research artifact).

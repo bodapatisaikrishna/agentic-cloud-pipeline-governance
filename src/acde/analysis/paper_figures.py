@@ -93,7 +93,7 @@ def effect_forest(rows: Sequence[dict[str, Any]], metrics: Sequence[str], out: P
             ax.hlines(y, lo, hi, color=colour, linewidth=1.5)
             ax.plot(r["cliffs_delta"], y, "o", color=colour, markersize=3.5)
         ax.axvline(0, color="black", linewidth=0.6)
-        ax.set_xlim(-1.05, 1.05)
+        ax.set_xlim(-1.12, 1.12)
         ax.set_yticks(range(len(sel)))
         ax.set_yticklabels([r["config"] for r in sel], fontsize=6.5)
         ax.set_title(metric.replace("_", " "), fontsize=7.5)
@@ -116,7 +116,7 @@ def human_sensitivity(
     ax.set_ylim(-0.02, 1.02)
     ax.set_xlabel("assumed human median latency (s)")
     ax.set_ylabel("P(automation faster)")
-    ax.legend(frameon=False, fontsize=5.5, loc="lower right")
+    ax.legend(frameon=False, fontsize=6.5, loc="lower right")
     _save(fig, out)
 
 
@@ -147,7 +147,148 @@ def cost_sensitivity(sweep: Sequence[dict[str, float]], breakeven: float | None,
         ax.axvline(breakeven, color=VERMILION, linestyle="--", linewidth=0.8)
     ax.set_xlabel("static provisioned units (baseline)")
     ax.set_ylabel("cost reduction of full (%)")
-    ax.legend(frameon=False, fontsize=6)
+    ax.legend(frameon=False, fontsize=6.5)
+    _save(fig, out)
+
+
+def live_mock_comparison(rows: Sequence[dict[str, Any]], out: Path) -> None:
+    """Live vs. mock ``full``, one small panel per metric: a dumbbell from mock to live, annotated.
+
+    Linear (not log) axes per panel deliberately -- several metrics here are exactly 0 for one arm
+    (manual interventions, decision correct), which a shared log axis cannot represent.
+    """
+    fig, axes = plt.subplots(1, len(rows), figsize=(6.4, 2.0), squeeze=False)
+    for ax, r in zip(axes[0], rows, strict=True):
+        live, mock = r["median_treat"], r["median_control"]
+        ax.plot([0, 1], [mock, live], color=GREY, linewidth=1.0, zorder=1)
+        ax.scatter([0], [mock], color=ORANGE, s=26, zorder=2, label="mock")
+        ax.scatter([1], [live], color=BLUE, s=26, zorder=2, label="live")
+        for x, v in ((0, mock), (1, live)):
+            ax.annotate(
+                f"{v:.3g}",
+                (x, v),
+                textcoords="offset points",
+                xytext=(0, 5),
+                ha="center",
+                fontsize=6,
+            )
+        pad = max(abs(live), abs(mock), 1e-6) * 0.35
+        ax.set_ylim(min(live, mock) - pad, max(live, mock) + pad)
+        ax.set_xlim(-0.4, 1.4)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["mock", "live"], fontsize=6.5)
+        ax.set_title(_METRIC_LABEL.get(r["metric"], r["metric"]), fontsize=6.8)
+        ax.tick_params(axis="y", labelsize=6)
+    _save(fig, out)
+
+
+_METRIC_LABEL = {
+    "mttr_s": "MTTR (s)",
+    "cost_units": "cost (units)",
+    "manual_interventions": "manual interv.",
+    "decision_correct": "decision correct",
+    "freshness_s": "freshness (s)",
+}
+
+
+def architecture_diagram(out: Path) -> None:
+    """Static box-and-arrow summary of the three planes (\\S3): data -> agentic control -> policy ->
+    execution/audit, with the contract boundary and the simulated-human escalation path made
+    explicit.
+    """
+    fig, ax = plt.subplots(figsize=(6.4, 3.6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 6)
+    ax.axis("off")
+
+    def box(xy, w, h, text, colour, fontsize=6.3):
+        x, y = xy
+        rect = plt.Rectangle(
+            (x, y), w, h, facecolor=colour, edgecolor="black", linewidth=0.8, alpha=0.18, zorder=1
+        )
+        ax.add_patch(rect)
+        rect_edge = plt.Rectangle(
+            (x, y), w, h, facecolor="none", edgecolor=colour, linewidth=1.3, zorder=2
+        )
+        ax.add_patch(rect_edge)
+        ax.text(
+            x + w / 2,
+            y + h / 2,
+            text,
+            ha="center",
+            va="center",
+            fontsize=fontsize,
+            zorder=3,
+            wrap=True,
+        )
+
+    def arrow(p0, p1, label="", colour="black", style="-|>", ls="-"):
+        ax.annotate(
+            "",
+            xy=p1,
+            xytext=p0,
+            arrowprops={
+                "arrowstyle": style,
+                "color": colour,
+                "lw": 1.1,
+                "linestyle": ls,
+                "shrinkA": 2,
+                "shrinkB": 2,
+            },
+            zorder=2,
+        )
+        if label:
+            mx, my = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
+            ax.text(mx, my + 0.16, label, ha="center", va="bottom", fontsize=5.6, zorder=3)
+
+    # Data plane
+    data_text = "Data plane\nbatch (Airflow) +\nstreaming (Redpanda) +\ntelemetry (Postgres)"
+    box((0.2, 3.6), 1.9, 1.7, data_text, BLUE)
+    # Agentic control plane
+    control_text = (
+        "Agentic control\nmonitoring, optimization,\nschema, recovery\n(observe-reason-propose-act)"
+    )
+    box((2.6, 3.6), 2.1, 1.7, control_text, ORANGE)
+    box((2.75, 1.9), 1.8, 1.0, "LLM\nlive or mock,\ntemperature = 0", ORANGE, fontsize=6.0)
+    # Contract
+    box((5.15, 3.85), 1.35, 1.2, "Contract\nProposedAction\n(validated)", GREY, fontsize=6.0)
+    # Policy plane
+    policy_text = "Policy plane\nOPA gate,\n4 Rego packs\nallow / deny / escalate"
+    box((7.0, 3.6), 1.9, 1.7, policy_text, GREEN)
+    # Execution and audit
+    exec_text = "Execution + audit\nwrite-ahead intent row,\nthen outcome"
+    box((7.0, 1.6), 1.9, 1.3, exec_text, GREEN, fontsize=6.0)
+    # Simulated human
+    human_text = "Simulated human\nlog-normal escalation\ndelay"
+    box((5.15, 0.2), 1.9, 0.8, human_text, VERMILION, fontsize=6.0)
+
+    arrow((2.1, 4.45), (2.6, 4.45), "telemetry\nsnapshot")
+    arrow((3.65, 2.9), (3.65, 3.6), style="<|-|>")
+    arrow((4.7, 4.3), (5.15, 4.3), "propose")
+    arrow((6.5, 4.45), (7.0, 4.45), "policy\ndecision")
+    arrow((7.95, 3.6), (7.95, 2.9), "allow")
+    arrow((7.0, 1.6), (7.0, 1.0), "escalate")
+    arrow((5.15, 0.05), (0.2, 0.05), colour=VERMILION, ls=":")
+    arrow((0.9, 0.05), (0.9, 3.6), "resolves\nfault", colour=VERMILION, ls=":")
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, facecolor=c, edgecolor=c, alpha=0.5, label=n)
+        for n, c in (
+            ("data plane", BLUE),
+            ("agentic control", ORANGE),
+            ("policy + execution", GREEN),
+            ("contract", GREY),
+            ("simulated human", VERMILION),
+        )
+    ]
+    ax.legend(
+        handles=handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.1),
+        ncol=5,
+        frameon=False,
+        fontsize=6.0,
+    )
     _save(fig, out)
 
 

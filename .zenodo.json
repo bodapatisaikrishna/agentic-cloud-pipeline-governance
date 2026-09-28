@@ -1,0 +1,30 @@
+{
+  "title": "ACDE: Agentic Cloud Data Engineering -- a replication, live-model evaluation, and production-hardening study of policy-gated LLM pipeline governance",
+  "description": "Code, policies, evidence-campaign supervisor, adversarial corpus, analysis pipeline, committed per-run data (paper/data/) and manuscript source (paper/) for a replication and extension of arXiv:2512.23737 'Governing Cloud Data Pipelines with Agentic AI'. Includes a 560-run live-model evidence campaign (three arms: live agents, non-agent baselines, mock full), a generated adversarial corpus graded against an independent specification oracle, and closed-form sensitivity analyses.",
+  "creators": [
+    {
+      "name": "Bodapati, Sai Krishna",
+      "affiliation": "TODO before release"
+    }
+  ],
+  "license": "Apache-2.0",
+  "upload_type": "software",
+  "access_right": "open",
+  "keywords": [
+    "LLM agents",
+    "cloud data pipelines",
+    "policy-as-code",
+    "OPA",
+    "AIOps",
+    "replication study",
+    "adversarial evaluation"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "arXiv:2512.23737",
+      "relation": "isSupplementTo",
+      "resource_type": "publication-preprint"
+    }
+  ],
+  "notes": "DOI is minted by the author at GitHub release time via the Zenodo-GitHub integration; this file is the pre-release metadata template (D-104, WS4)."
+}

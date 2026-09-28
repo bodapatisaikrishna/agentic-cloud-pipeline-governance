@@ -6,7 +6,7 @@
 [![CI](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/tag/bodapatisaikrishna/agentic-cloud-pipeline-governance?label=release)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/tags)
-[![Unit tests](https://img.shields.io/badge/unit%20tests-739%20passing-brightgreen.svg)](tests/unit)
+[![Unit tests](https://img.shields.io/badge/unit%20tests-752%20passing-brightgreen.svg)](tests/unit)
 [![Policy containment](https://img.shields.io/badge/adversarial%20containment-1.0-brightgreen.svg)](docs/SECURITY.md)
 
 Four bounded AI agents (**monitoring**, **optimization**, **schema**, **recovery**) observe pipeline
@@ -89,7 +89,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv incl. the benchmark/chaos/analysis extras
 cp .env.example .env          # defaults work; MOCK_LLM=1 is the default everywhere
-make lint && make test-unit   # gate: ruff+mypy clean, 739 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 752 unit tests, coverage ≥ 80%
 make up && make seed          # full stack (postgres, opa, redpanda, airflow) + seeded data
 make experiment-quick         # 96-run matrix (8 configs × 4 scenarios × N=3)
 make report                   # → results/results.md + results/figures/*.png
@@ -166,7 +166,7 @@ and resumable.
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Threat model, design guarantees, operator responsibilities |
 | [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) | Paper section → implementation → measured result |
 | [`REPORT.md`](REPORT.md) | What reproduces from the paper, what doesn't, and why |
-| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (102 entries) |
+| [`DEVIATIONS.md`](DEVIATIONS.md) | Every design decision vs. the paper, with rationale (103 entries) |
 | [`DATA_LICENSES.md`](DATA_LICENSES.md) | Provenance & licensing of the TPC-DS / NYC TLC datasets |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history, v0.1 → v2.2.0 |
 
@@ -213,7 +213,7 @@ ProposedAction ──▶ gate.build_context() ──▶ OPA data.acde.policy.dec
 
 - Four Rego policies (`infra/opa/policies/`): `cost_budget`, `recovery_approval`,
   `schema_compat`, `rate_limit`, aggregated by `main.rego`. Run their tests with `make opa-test`
-  (20 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
+  (24 cases). OPA runs with `--watch`, so editing a policy hot-reloads it.
 - The gate **fails safe**: if OPA is unreachable it escalates rather than allowing.
 - The executor **retries then escalates**: an Airflow-REST side effect that fails is retried with
   bounded backoff and, if it still fails, degrades to a human escalation (see [Fault tolerance](#fault-tolerance)).
@@ -276,8 +276,12 @@ make experiment-paper   # 480 runs, 4 baselines x N=20 + 4 ablations x N=10 (lau
 Every run is keyed by `experiment_run = "{config}__{scenario}__r{replicate}"` and isolated; the
 runner **skips runs already in the manifest**, so a killed matrix resumes where it left off. The
 seed policy `sha256("{config}:{scenario}:{replicate}") % 2³²` gives each cell reproducible fault
-conditions. On the full 96-run matrix: **MTTR ↓100%, manual interventions ↓100%, cost ↓57.3%**
-(`full` vs `baseline`, all significant); see [`REPORT.md`](REPORT.md) for the full breakdown.
+conditions. On the mock, quick 96-run matrix: **MTTR ↓100%, manual interventions ↓100%, cost ↓56.6%**
+(`full` vs `baseline`, all significant); see [`REPORT.md`](REPORT.md) for the full breakdown. **The
+live paper campaign (560 runs, a real remote model at paper timings) tells a more mixed story —
+MTTR ↓38%, manual interventions ↑500%, and cheap non-LLM automation beats every agent config on
+MTTR** — see [`paper/`](paper/) and [`docs/PAPER_MAPPING.md`](docs/PAPER_MAPPING.md) for the live
+numbers; the mock matrix above is a fast sanity check, not the paper's headline result.
 
 ### Analysis & report
 
@@ -458,7 +462,7 @@ without evidence. See [`REPORT.md`](REPORT.md) (what reproduces / what doesn't) 
 | Production hardening | Systematic audit found a real production could not survive: migration framework (D-083, prior schema tooling silently no-op'd outside a dev checkout), write-ahead audit trail (D-084, an executed action could be lost entirely on a crash), tenant/environment schema boundary (D-085), hot-path indexes with real before/after benchmarks (D-086, one proposed index measured and proven dead before ever being committed), `/health` split + every credential converted to `SecretStr` (D-087), supervised control loop + `deploy/observability/` built for real and verified against live Prometheus/Grafana (D-088), Kubernetes/Helm chart verified against a real `kind` cluster with 2 real bugs caught (D-089), Pod-level `securityContext` hardening for the Helm chart (D-090) | ✅ verified (unreleased) |
 | Startup transformation | Real anomaly detection wired into production, was chaos-only (D-091, `agents/detection.py`'s tested 9-test detector had zero callers), `/docs`+`/openapi.json` authenticated (D-092, confirmed live-unauthenticated before the fix), RBAC — viewer/approver/admin (D-093), bulk audit export with keyset pagination (D-094), per-tenant cost attribution + `ACDEBudgetExceeded` alert (D-095), compliance/audit evidence report — MTTR now real thanks to D-091, availability an honest point-in-time check not a fabricated uptime % (D-096), multi-tenant SaaS layer — admin-provisioned tenant registry, per-request tenant isolation on the operator API, suspend/activate enforced live at auth time (D-097), operator API rate limiting — in-process per-actor/per-source limiter, throttles pre-auth key-guessing floods too, confirmed live with a real 429+Retry-After (D-098), database backup & restore — real `pg_dump`/`pg_restore`, a production-image gap (missing `postgresql-client`) found and fixed, verified live with a genuine restore-drill row-count match (D-099) | ✅ verified (unreleased) |
 | Feature focus | User-redirected from deployment/ops hardening to product capability: live decision-quality monitoring — scores real resolved incidents against an accepted-mitigation taxonomy, a live/chaos fault-type mismatch found and fixed before it could silently score every real decision "incorrect" (D-100); Slack rich formatting + PagerDuty integration — Block Kit severity-colored alerts and a real PagerDuty Events API dispatch, verified live over real HTTP against local stand-in listeners for both channels (D-101); richer operator dashboard — cost/compliance/decision-quality/tenant data surfaced in `/ui` for the first time, verified live against the JSON API for an exact numeric match (D-102); the recurring "unmocked db reference" bug hit four separate times finally closed at its actual mechanism — one autouse test guard, verified with Docker fully down and mutation-tested to catch the exact prior failure shape in 2.5s instead of a 30s CI-only surprise (D-103) | ✅ verified (unreleased) |
-| Journal-paper readiness (D-104) | Evidence campaign infrastructure for a journal paper: billing-accurate LLM accounting, run provenance, resumable campaign supervisor, independent-oracle adversarial corpus, sensitivity analyses, generated manuscript artifacts; pilot + live paper matrix pending go/no-go | 🚧 in progress |
+| Journal-paper readiness (D-104) | Evidence campaign infrastructure for a journal paper: billing-accurate LLM accounting, run provenance, resumable campaign supervisor, independent-oracle adversarial corpus, sensitivity analyses, generated manuscript artifacts. **Live paper campaign completed 2026-09-26: 560/560 runs (live-agents 240, baselines 240, mock-full 80), zero aborts.** Two incidents found and fixed live (a supervisor health-check hang, D-104m, and the git-sha provenance split it left behind, verified harmless and documented, D-104n). Results are more mixed than the mock quick-matrix in `REPORT.md`: `full` beats static orchestration on MTTR/cost but *increases* manual interventions, and cheap non-LLM automation (`rule_based`/`autoscale`) beats every agent config on MTTR — see `paper/` for the full manuscript draft | ✅ verified (unreleased) |
 
 ## Reproduction
 
@@ -471,7 +475,7 @@ git clone https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governanc
 cd agentic-cloud-pipeline-governance
 uv sync --extra research      # venv from the committed uv.lock, incl. research deps
 cp .env.example .env          # defaults work; add ANTHROPIC_API_KEY only for optional live runs
-make lint && make test-unit   # gate: ruff+mypy clean, 739 unit tests, coverage ≥ 80%
+make lint && make test-unit   # gate: ruff+mypy clean, 752 unit tests, coverage ≥ 80%
 
 make up                       # full stack: postgres, opa, redpanda, airflow
 make seed                     # seeded TPC-DS + open-gov data, then migrate the DB

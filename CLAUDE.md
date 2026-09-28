@@ -45,9 +45,13 @@ The full spec lives in the original project brief; this file condenses the rules
 
 ## Commands
 
-`make up|down|logs|clean` (stack) · `make lint|fmt|test-unit|test-integration` (quality)
-· future targets (`seed`, `chaos-*`, `agents`, `baseline`, `experiment-*`, `analyze`,
-`report`) are stubbed until their phase lands.
+`make up|up-core|down|logs|clean` (stack) · `make lint|fmt|test-unit|test-integration|opa-test`
+(quality) · `make seed|migrate|stream|telemetry` (data plane) · `make agents|orchestrator|soak`
+(control loop) · `make experiment-smoke|experiment-quick|experiment-paper` (baseline/agent
+experiment matrices) · `make campaign-pilot|campaign|campaign-status|campaign-stop` (live paper
+campaign, D-104) · `make adversarial-corpus|analyze|report|paper-repro-quick` (evaluation and
+manuscript artifacts). See `make help`-style comments in the Makefile itself for exact flags; none
+of these are stubs.
 
 ## Phase status
 

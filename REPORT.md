@@ -4,6 +4,17 @@ An honest account of what reproduces from arXiv:2512.23737, what doesn't, and wh
 authoritative numbers are regenerated into `results/results.md` by `make report`; this report is the
 narrative and the "what reproduces / what doesn't" summary.
 
+> **Superseded for headline claims.** Everything below is the **96-run mock-LLM quick matrix**
+> (N=3/cell, deterministic `MOCK_LLM=1`) — useful as a fast sanity check, but the mock agent resolves
+> near-instantly, which inflates every speed-derived claim. The **live paper campaign** (560 runs, a
+> real remote model, paper timings, D-104) completed 2026-09-26 and tells a more mixed story: `full`
+> still beats static orchestration on MTTR (↓38%, not the ↓100% below) and cost, but *increases*
+> manual interventions rather than reducing them, and cheap non-LLM automation (`rule_based`,
+> `autoscale`) beats every agent configuration on MTTR — the opposite of "full dominates every
+> baseline" claimed below. See `paper/` (manuscript draft, §Results) and `paper/generated/` (tables,
+> figures, `numbers.tex`) for the live numbers; this file is left as-is as the historical mock-only
+> record, not updated to match.
+
 ## TL;DR
 
 ACDE is a rigorous, seeded, open reproduction of the paper's policy-bounded agentic pipeline
@@ -70,11 +81,11 @@ cost reduction then appears, but its magnitude depends on the over-provisioning 
   unsafe proposal (over-budget scale, unapproved rollback, rate-limit flood, breaking-schema allow)
   was denied or escalated, and the contract layer rejects out-of-allowlist action types. This is the
   first stress-test of the paper's central safety thesis.
-- **Cross-LLM study (D-063).** Harness to test the paper's unproven model-agnostic claim across
-  providers/models; earlier live smokes already showed that model choice changes the *chosen action*
-  (GLM/Nemotron picked `quarantine_partition`, gpt-oss picked `apply_mapping` — both gate-valid) and
-  latency (Nemotron 9 s/cycle vs GLM-5.2 7 min), while the gate bounded all of them — early evidence
-  the "not system behavior" claim holds under bounding.
+- **Cross-LLM study (D-063).** `eval/cross_model.py` is a harness to test the paper's unproven
+  model-agnostic claim by running each scenario through multiple LLM backends and scoring decision
+  correctness, latency, and tokens. It is unit-tested (an injectable probe); the live sweep across
+  real providers is opt-in and has not yet been run and recorded as part of this project's verified
+  results (`DEVIATIONS.md` D-063).
 - **Bounded adaptation (D-064).** A concrete, clamped mechanism for the paper's §V adaptation claim,
   off by default to preserve determinism.
 

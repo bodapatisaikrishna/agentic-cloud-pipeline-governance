@@ -6,6 +6,37 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Journal-quality completion pass (D-104o)**: research-grounded gap-fill on the manuscript before
+  handoff to a writing pass — a new architecture figure (`fig_arch.pdf`, fixing a previously dangling
+  `\ref{fig:arch}`) and a new mock-vs-live comparison figure (`fig_live_mock.pdf`), both generated the
+  same way as the existing 5 figures; a new back-matter section (`09_statements.tex`: data/code
+  availability, CRediT author contributions, conflict of interest, funding, ethics and broader impact,
+  AI-assistance disclosure); an explicit Limitations heading; keywords; Cliff's δ interpretation
+  thresholds and an exploratory-vs-confirmatory statistics note; an ACM artifact-badge self-assessment
+  in `ARTIFACT.md`; and several page-overflow/bib-hygiene fixes. Manuscript still reproduces
+  byte-for-byte from `paper/data/` and compiles with zero undefined references/citations.
+- **Live paper campaign completed (D-104, 2026-09-26)**: 560/560 runs across three arms
+  (live-agents 240, non-agent baselines 240, mock-`full` 80), zero aborted runs, zero token-ceiling
+  breaches (975,570/1,300,000 tokens used). Manuscript draft (`paper/`) and every generated
+  table/figure/number (`paper/generated/`) are in the repo. Headline result: `full` beats static
+  orchestration on MTTR (↓38%) and cost (↓56%) but *increases* manual interventions (↑500%, the
+  opposite of the replicated paper's claim), and cheap non-LLM automation (`rule_based`, `autoscale`)
+  beats every agent configuration on MTTR. The same `full` configuration run under a deterministic
+  mock instead of the live model diverges by roughly three orders of magnitude on MTTR and decision
+  quality — see `paper/sections/05_results.tex` and `docs/PAPER_MAPPING.md`.
+- **Pilot found and fixed two live-only defects before the campaign (D-104k, D-104l)**: an 18-minute
+  pilot hang (cause not confirmed; fixed defensively with `call_with_deadline` wall-clock bounding on
+  every LLM/DB call, a per-tick `asyncio.wait_for` in the control loop, and a `faulthandler` stack-dump
+  watchdog), and a transient HTTP 503 that was cached and replayed for 29 cycles of a 300 s loop
+  (`propose()` no longer caches or budget-charges a `degraded_unavailable` result).
+- **Mid-campaign incident found and fixed live (D-104m, D-104n)**: the campaign's own supervisor hung
+  silently for 2+ hours after Docker Desktop crashed (host disk full) and took Postgres down with it —
+  `check_health()`'s DB call had no wall-clock bound. Fixed the same way as every LLM call
+  (`call_with_deadline`, 10 s). Manifest-based resumability meant killing and relaunching the stuck
+  supervisor lost zero completed runs. The fix's mid-campaign commit left a `git_sha` split across the
+  campaign's manifests; verified by diff to touch only the supervisor's own health check (never the
+  execution path) and allowed through as one documented provenance deviation rather than a silent
+  override.
 - **Journal-paper readiness (D-104)**: per-run LLM accounting that counts real API calls, cache
   hits, degraded and invalid outputs (`api_tokens`, `llm_calls`, `llm_cache_hits`, `llm_degraded`,
   `llm_invalid`, `llm_latency_s`); full run provenance in every manifest line and atomic per-run row

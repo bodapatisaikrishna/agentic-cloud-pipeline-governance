@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -128,3 +128,8 @@ analyze:  ## Phase 8: compute statistics from results/raw.csv
 
 report:  ## Phase 8: analyze + figures + results/results.md
 	MOCK_LLM=1 $(UV) python -m acde.analysis.report
+
+paper-repro-quick:  ## D-104/ARTIFACT.md: regenerate every paper table/figure/number from committed paper/data/, then the PDF (<15 min, no API cost)
+	$(UV) python -m acde.analysis.paper_artifacts --root paper/data --out paper/generated \
+	    --adversarial paper/data/adversarial.json --allow-unclean
+	$(MAKE) -C paper paper

@@ -2241,6 +2241,130 @@ replaying the outage. `degraded_replays` is removed (nothing left to count). Cov
 `tests/unit/test_llm_client.py::test_unavailable_is_not_cached_or_charged_so_the_next_tick_retries`;
 not yet re-validated against a live provider (the pilot that found it predates the fix).
 
+**D-104m — `check_health()`'s DB call hung the supervisor for 2+ hours during the live campaign.**
+Docker Desktop crashed mid-campaign (host disk full), taking Postgres down with it. One run failed
+fast (`schema_only__upstream_delay__r0`, exit 124), as designed — but the supervisor's own health-gate
+loop then froze silently instead of looping through its designed "wait up to 1h, then abort" behavior.
+Root cause: `check_health()` called `db.fetch_one("SELECT 1")` with no bound; when Postgres refuses
+connections, `psycopg_pool`'s checkout blocks indefinitely (confirmed by direct testing — it does not
+raise, it just never returns). Fix (`b37750d`): wrap the call in `call_with_deadline` (10s), the same
+wall-clock-bounding mechanism D-104k already applies to every LLM call. Covered by
+`test_check_health_bounds_a_hanging_db_call` (asserts the check returns `["postgres"]` in well under
+the injected 30s hang). Recovery itself was verified safe: manifest-based resumability (D-043) meant
+killing and relaunching the stuck supervisor lost zero completed runs (210/240 live-agent runs
+preserved, confirmed via git-tracked `results/paper-live/manifest.jsonl` + `raw.csv` before touching
+anything).
+
+**D-104n — Campaign `git_sha` provenance split by the D-104m incident; verified harmless, allowed
+through.** `paper_artifacts.py`'s strict provenance check (by design) refuses to merge arms whose
+`git_sha` differs, since a code change could alter measured behavior. It fired here: 210/240
+live-agents runs carry `git_sha=de8e962` (pre-incident), the other 30 plus all of baselines and
+mock-full carry `git_sha=b37750d` (the D-104m fix, applied when the supervisor was restarted).
+Verified via `git diff --stat de8e962 b37750d`: the only files touched are
+`src/acde/experiments/campaign.py` (the supervisor's own health-check function, `check_health()`) and
+its test — nothing in `runner.py`, the agents, contracts, policy gate, or any other code on the actual
+experiment execution path. `check_health()` is never called from within a run; it only gates whether
+the *supervisor* launches the next run. So the fix cannot have altered any measured run's behavior,
+and the campaign is treated as one homogeneous dataset (`paper_artifacts --allow-unclean`), with this
+entry as the documented justification rather than a silent override.
+
+**D-104o — Journal-quality completion pass: research-grounded gap list, closed.** Before handing the
+manuscript to a paper-writing pass, two research agents (i) re-audited the whole `paper/` tree
+read-only and (ii) researched what a high-quality journal submission needs beyond a working draft
+(IEEE/ACM figure guidelines, ACM SIGSOFT Empirical Standards, the NeurIPS reproducibility checklist,
+ACM artifact badging, COPE and CRediT, Elsevier/Springer generative-AI disclosure policy). Findings and
+fixes: (1) `\ref{fig:arch}` in `03_system.tex` was a dangling reference — no label, no figure, no
+backing image anywhere in the repo (the only architecture diagram was an unrendered Mermaid block in
+`README.md`). Fixed by adding `paper_figures.architecture_diagram()` (matplotlib box-and-arrow, same
+Okabe-Ito/vector-PDF/embedded-font standard as the other 5 figures, wired into `paper_artifacts.build()`
+so it regenerates with everything else) and a real `\begin{figure}` block with a self-contained caption.
+(2) Added a second new figure, `live_mock_comparison` (`fig_live_mock.pdf`) — a 5-panel dumbbell plot of
+`full` live-vs-mock per metric — because the mock-vs-live divergence is the paper's own stated central
+finding and previously had only a table, no visual. (3) Missing front/back-matter the research flagged
+as expected at reputable venues: a new `sections/09_statements.tex` (Data \& Code Availability, CRediT
+Author Contributions, Conflict of Interest, Funding, Ethics and Broader Impact — distinct from the
+existing system-autonomy discussion paragraph, explicitly covering the no-human-subjects/synthetic-data
+basis and the dual-use argument the adversarial and decision-quality results already make — and a
+Generative-AI/AI-assistance disclosure covering both the engineering and the drafting use of an AI
+coding assistant), an explicit `\subsection{Limitations and threats to validity}` heading (the content
+already existed in Discussion; only the heading was missing), keywords under the abstract, one sentence
+in Method giving Cliff's $\delta$'s standard interpretation thresholds, and one sentence flagging the
+statistical comparisons as exploratory rather than pre-registered. (4) Smaller fixes: `refs.bib`'s
+`opa` entry was missing a `year` field; `paper/build/` was untracked and not gitignored; three
+generated-table/prose spots overflowed the page margin by up to 81pt from unbreakable long tokens
+(`\texttt{telemetry.manual_interventions}`, a verbose sensitivity-table header, two long file paths in
+the claims-audit table) — fixed with `\allowbreak`s, a shortened generated header
+(`sensitivity_table()` in `paper_artifacts.py`), and no change to any quoted number. (5)
+`ARTIFACT.md` gained an ACM artifact-badge (Available/Functional/Reusable) self-assessment. A fresh
+`tectonic` compile after all of this has zero undefined references/citations and only cosmetic
+sub-3pt/underfull warnings remaining; `paper_artifacts --root paper/data` still reproduces
+`paper/generated/` byte-for-byte. An independent fresh-context verification agent (hostile-reviewer
+read plus its own re-derivation of the headline numbers directly from `paper/data/`) was run against
+the result. **Verdict: "trustworthy, with minor caveats"** — every headline number it independently
+recomputed from raw `paper/data/*.csv` matched the manuscript exactly (including the least flattering
+ones: manual interventions rising, `rule_based`/`autoscale` beating `full` on MTTR, the ~1000×
+mock-vs-live gap), all 10 `refs.bib` entries verified real (including fetching the actual arXiv
+abstract for the replicated paper, `kirubakaran2025governing`, and cross-checking its stated 45%/25%/
+70% headline claims against what this manuscript attributes to it), and no internal contradiction or
+overclaim found end to end. Two real, fixed findings: the claims-audit table
+(`A_claims_audit.tex`) cited a nonexistent module `eval.decision_quality` for the decision-quality
+claim — the real module is `experiments.decision_quality` (`src/acde/experiments/decision_quality.py`)
+— corrected; and `fig_arch.pdf`'s "PolicyDecision" edge label was inconsistently CamelCase against
+every other lowercase edge label — corrected to "policy decision". One reported finding was a false
+alarm from the reviewing process, not the manuscript: it inspected a stale `build/main.aux` left over
+from a build that predated these figures (`tectonic -X compile` deletes intermediates unless
+`--keep-intermediates` is passed) and read that as `\ref{fig:arch}`/`\ref{fig:live_mock}` failing to
+converge; a fresh `--keep-intermediates` build confirms both get correct `\newlabel` entries and the
+shipped PDF has always rendered them correctly (verified independently both by the agent's own
+`pdftotext | grep '??'` — zero hits — and again here after the two real fixes above).
+
 **Status.** Pre-flight instrumentation, supervisor, corpus, sensitivity and artifact generation are
-implemented and unit-tested (739 tests, 95 % coverage). The pilot and the campaign are pending the
-user's go/no-go; results, claims audit and manuscript follow the data.
+implemented and unit-tested (752 tests, 95 % coverage). **The full live paper campaign completed
+2026-09-26: 560/560 runs (live-agents 240, baselines 240, mock-full 80), zero aborts, 975,570/1,300,000
+tokens used.** The manuscript is fully drafted (abstract through conclusion, statements, and all three
+appendices), reproducible end to end from committed `paper/data/`, and compiles cleanly. Remaining
+before submission: author-supplied front matter (name/affiliation/ORCID, funding, submission date,
+Zenodo DOI), a venue-specific class file if one is chosen, and the author's own review of every claim.
+
+**D-104p — Manuscript rewritten from scratch via a phased, checkpointed research process
+(`paper2/`).** At the user's request, the manuscript prose drafted directly during D-104o was
+archived (`paper/_archive_v1/`, not deleted — it stayed materially accurate but was produced without
+an intermediate evidence trail) and rewritten from a new `paper2/` folder of phased research
+artifacts, each approved by the user at a checkpoint before the next phase began: `context.md`
+(project/base-paper context, reconstructed since the referenced file didn't exist in the source
+material the user supplied), `ANALYSIS.md` (a file:line-cited codebase inventory), `results_filled.md`
+(every metric traced to real data or marked `[NO DATA]`), `GAP_ANALYSIS.md` (a six-contribution
+implemented-vs-evaluated table, with the user confirming at a checkpoint that the cross-LLM harness
+and the trust core are framed as future/architectural work, not measured results), and
+`paper-outline.md` (approved before any prose was written). The user chose the mock-vs-live
+divergence as the manuscript's organizing thesis at this checkpoint, which the rewrite now states in
+the abstract, restates in the introduction, gives a prominent results subsection, and returns to in
+the discussion and conclusion — this was a genuine restructuring, not a rename, versus D-104o's draft.
+A humanizer pass then removed 51 em-dash constructions across every section (the one systematic
+AI-writing tell found); an independent fresh-context verification agent caught one real defect this
+introduced — a sign/verb double-negative in the abstract and results, where signed `\NRelpct...`
+percentage macros (negative = reduction) were paired with directional verbs like "reduces ... by",
+rendering as "reduces recovery time by -38%" — fixed by switching to neutral verbs ("changes ... by")
+everywhere a signed macro is the object of "by". The same verification pass re-derived six load-bearing
+numbers directly from `paper/data/*.csv`, independent of `numbers.tex`, and found zero discrepancies.
+`paper/data/`, `paper/generated/`, and the generator code were untouched throughout; regenerating from
+committed data still reproduces `paper/generated/` byte-for-byte, and `make lint`/`make test-unit`
+stayed green.
+
+**D-104q — Reformatted for IEEE (`IEEEtran`), superseding the earlier "generic `article` class,
+venue later" choice.** At the user's explicit request. Changed: `\documentclass[journal]{IEEEtran}`
+(was `article`), dropped the manual `geometry` package (IEEEtran sets its own two-column layout),
+`\bibliographystyle{IEEEtran}` (was `plainnat`; both already used `natbib` numeric mode, so the
+citation *style* was already IEEE-compatible — only the reference-list typesetting changed), the
+abstract's keyword line moved into `\begin{IEEEkeywords}`, and the author block into
+`\IEEEauthorblockN{}`/`\IEEEauthorblockA{}` (still `\AUTHOR{}` placeholders). Every generated table
+and the wider generated figures were widened from single-column (`table`/`figure`) to double-column
+spanning (`table*`/`figure*`) floats, and the claims-audit and design-deviation appendix tables
+(previously bare `center`/`tabular`, not floats) were converted into proper captioned `table*`
+floats to match — a single IEEE column (~3.5in) is roughly half the width these dense
+multi-column tables were sized for, and without spanning several overflowed the column by up to
+~2.7in. One `verbatim` command line in the reproduction-guide appendix was shortened for the same
+reason. No content, number, or citation changed; `paper/data/`, `paper/generated/`, and the
+generator code are untouched, and `paper/generated/` still reproduces byte-for-byte from committed
+data. Page count dropped from 22 (one column, `article`) to 15 (two columns, `IEEEtran`) with zero
+compile warnings above 1pt and zero undefined references/citations.

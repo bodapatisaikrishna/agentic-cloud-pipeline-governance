@@ -287,10 +287,10 @@ def sensitivity_table(report: dict[str, Any]) -> str:
     return booktabs(
         [
             "config",
-            "median MTTR (s)",
-            "break-even human median (s)",
+            "MTTR (s)",
+            "human break-even (s)",
             "cost reduction (\\%)",
-            "break-even static units",
+            "static break-even",
         ],
         rows,
         "lrrrr",
@@ -331,6 +331,9 @@ def _headline_numbers(
     for r in lvm:
         nums.add(fnum(r["median_treat"]), "LiveVsMock", r["metric"], "live")
         nums.add(fnum(r["median_control"]), "LiveVsMock", r["metric"], "mock")
+        if r["median_treat"] > 0 and r["median_control"] > 0:
+            ratio = r["median_treat"] / r["median_control"]
+            nums.add(f"{ratio:.0f}", "LiveVsMock", r["metric"], "ratio")
     hl = report["human_latency"]
     nums.add(fnum(hl["baseline_median_mttr_s"]), "baselineMttr")
     for cfg, v in hl["per_config"].items():
@@ -339,6 +342,30 @@ def _headline_numbers(
         nums.add(fnum(v["reduction_pct_at_recorded_params"]), "costReduction", cfg)
         if v["break_even_static_units"] is not None:
             nums.add(fnum(v["break_even_static_units"], 3), "breakEvenStatic", cfg)
+
+
+def _usage_numbers(nums: Numbers, df: pd.DataFrame, prov: dict[str, Any] | None) -> None:
+    """Live-arm LLM usage totals and the per-run budget caps, for the overhead paragraph."""
+    live = df[df["arm"] == "live"]
+
+    def group_thousands(n: float) -> str:
+        return f"{int(n):,}".replace(",", "{,}")
+
+    for arm, tag in (("live", "runsArmA"), ("static", "runsArmB"), ("mock", "runsArmC")):
+        n_runs = df[(df["arm"] == arm) & (df["metric"] == "mttr_s")]["run_id"].nunique()
+        nums.add(n_runs, tag)
+    tokens = live[live["metric"] == "api_tokens"]["value"]
+    calls = live[live["metric"] == "llm_calls"]["value"]
+    if len(tokens):
+        nums.add(len(tokens), "runsLive")
+        nums.add(group_thousands(tokens.sum()), "apiTokensTotal")
+        nums.add(group_thousands(tokens.max()), "apiTokensMaxRun")
+        nums.add(group_thousands(calls.sum()), "llmCallsTotal")
+        nums.add(int(calls.max()), "llmCallsMaxRun")
+    budget = (prov or {}).get("llm_budget")
+    if budget:
+        nums.add(int(budget["max_calls_per_run"]), "budgetCalls")
+        nums.add(group_thousands(budget["max_tokens_per_run"]), "budgetTokens")
 
 
 def build(
@@ -375,6 +402,12 @@ def build(
     nums.add(len(problems), "provenanceProblems")
     nums.add(int(params.human_median_s), "humanMedian")
     nums.add(params.human_sigma, "humanSigma")
+    _usage_numbers(nums, df, prov)
+    cost_scen = ps.per_scenario_medians(prim, "cost_units", configs)
+    for cfg in ("baseline", "full"):
+        if cfg in cost_scen.index:
+            for scenario, value in cost_scen.loc[cfg].items():
+                nums.add(fnum(value), "costScen", cfg, scenario)
     _headline_numbers(nums, prim, comps, lvm, report)
 
     files: dict[str, str] = {
@@ -411,6 +444,9 @@ def build(
         be = report["cost_by_config"].get("full", {}).get("break_even_static_units")
         figs.cost_sensitivity(report["cost_sweep_full_vs_baseline"], be, out_dir / "fig_cost.pdf")
     figs.scenario_heatmap(scen, out_dir / "fig_scenarios.pdf")
+    figs.architecture_diagram(out_dir / "fig_arch.pdf")
+    if lvm:
+        figs.live_mock_comparison(lvm, out_dir / "fig_live_mock.pdf")
 
     hashes = {
         p.name: hashlib.sha256(p.read_bytes()).hexdigest()

@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software or its evidence campaign, please cite it as below."
+title: "ACDE: Agentic Cloud Data Engineering -- a replication, live-model evaluation, and production-hardening study of policy-gated LLM pipeline governance"
+version: 2.2.0
+date-released: "2026-09-26"
+repository-code: "https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance"
+license: Apache-2.0
+type: software
+authors:
+  - family-names: Bodapati
+    given-names: "Sai Krishna"
+    email: saikrishnabodapati@gmail.com
+    # ORCID and institutional affiliation: TODO before release.
+references:
+  - type: misc
+    title: "Governing Cloud Data Pipelines with Agentic AI"
+    authors:
+      - name: "Kirubakaran et al."
+    year: 2025
+    notes: "The replicated work (arXiv:2512.23737)."
