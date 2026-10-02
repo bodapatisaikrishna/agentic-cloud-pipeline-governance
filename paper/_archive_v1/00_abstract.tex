@@ -1,0 +1,29 @@
+\begin{abstract}
+Kirubakaran et al.\ propose governing cloud data pipelines with four policy-gated LLM agents and
+report large reductions in recovery time, cost and manual intervention against static orchestration.
+We replicate and extend that evaluation with a live remote language model rather than a simulation,
+across a full matrix of eight configurations (three non-agent comparators, the full agent system, and
+four single-agent ablations) over four injected fault scenarios ($\NRunsTotal{}$ runs total, three
+independently resumable arms with per-run provenance). Against the static baseline, the full system
+significantly reduces recovery time by $\NRelpctMttrSFull{}$\% (\NMttrFullMedian{}\,s vs.\
+\NMttrBaselineMedian{}\,s median) and cost by $\NRelpctCostUnitsFull{}$\%, and executes the
+accepted mitigation in a rate equivalent to Cliff's $\delta=\NDeltaDecisionCorrectFull{}$ of runs ---
+but it also \emph{increases} manual interventions relative to the baseline, and two much cheaper,
+non-LLM comparators (a rule-based responder and threshold autoscaling) reduce recovery time by
+$\NRelpctMttrSRuleBased{}$\% and $\NRelpctMttrSAutoscale{}$\% respectively, beating every agent
+configuration on speed. Run identically under a deterministic mock instead of the live model, the
+same configuration's recovery time collapses to \NLiveVsMockMttrSMock{}\,s and its decision-correct
+rate to \NLiveVsMockDecisionCorrectMock{} --- the evaluation path changes the answer by roughly three
+orders of magnitude, which is the central methodological finding of this paper: governance claims
+about these systems hold only for the evaluation path they were measured on. We further contribute a
+generated adversarial corpus ($\NAdversarialCases{}$ cases) graded against an independently written
+specification oracle, finding perfect containment ($\geq\NAdversarialWilsonLo{}$, Wilson 95\%) only
+after fixing two contract-layer gaps the corpus itself found; closed-form sensitivity analyses for the
+two modelled assumptions (simulated human latency, cost-model provisioning) that the headline numbers
+depend on; and seven production-hardening lessons, each tied to a defect this system exhibited and
+fixed. The architecture is not ours; the evidence, the measurement discipline, and the defects found
+by holding the system to its own claims are.
+\end{abstract}
+
+\noindent\textbf{Keywords:} LLM agents; cloud data pipeline governance; policy-as-code; Open Policy
+Agent; AIOps; replication study; adversarial evaluation; mock-vs-live evaluation validity.

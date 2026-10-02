@@ -1,0 +1,23 @@
+\section{Conclusion}\label{sec:conclusion}
+
+We replicated a policy-gated multi-agent design for cloud pipeline governance with a live remote
+language model, credible non-agent baselines, an adversarial evaluation against an independent oracle,
+and closed-form sensitivity analyses, and we ran the same configuration under the deterministic mock
+the original evaluation style relies on. The full agent system does beat static orchestration on
+recovery time and cost, by margins smaller than and in one case directionally opposite to the
+replicated paper's claims; it beats no non-agent comparator on speed; and its live evaluation and its
+mock evaluation of the identical configuration disagree by roughly three orders of magnitude on
+recovery time and by an equally large margin on decision quality. That last fact is the paper's
+central claim: for this class of system, \emph{which} evaluation path produced a number is at least as
+important as the number itself, and a claim carried from a mock evaluation to a live deployment
+context is not a conservative extrapolation but a different experiment.
+
+The system's architecture is Kirubakaran et al.'s, not ours. Our contribution is the measurement
+discipline that makes claims about it falsifiable --- billing-accurate accounting, provenance that
+refuses to silently merge incompatible arms, an oracle independent of the code under test, and seven
+production defects found by holding the system to its own stated guarantees rather than to its test
+suite --- and the results that discipline produced, reported as measured rather than reconciled to the
+system's advantage. We take the practical implication to be narrow and specific rather than a verdict
+on LLM agents in operations generally: before a governance claim about a policy-gated agent system is
+acted on, ask what evaluated it, and treat a mock number and a live number as two different findings
+until both exist.
