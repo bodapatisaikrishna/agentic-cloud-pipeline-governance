@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrrrr}
+\toprule
+config & calls & cache hits & degraded & invalid & API tokens & latency (s) & degraded \% \\
+\midrule
+monitor\_only & 1.00 & 143 & 0 & 0 & 1{,}244 & 4.37 & 0\% \\
+recovery\_only & 2.00 & 262 & 0 & 0 & 2{,}737 & 10.5 & 0\% \\
+optimization\_only & 2.00 & 258 & 0 & 0 & 2{,}998 & 9.22 & 0\% \\
+schema\_only & 2.00 & 274 & 0 & 0 & 2{,}550 & 5.73 & 0\% \\
+full & 4.00 & 214 & 0 & 0 & 5{,}946 & 15.0 & 0\% \\
+\bottomrule
+\end{tabular}

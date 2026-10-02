@@ -1,0 +1,14 @@
+\begin{tabular}{llrrrrr}
+\toprule
+config & LLM & $n$ & MTTR (s) & cost & manual interv. & decision correct \\
+\midrule
+baseline & none & 80 & 378 [244] & 158 [113] & 1.00 [0] & 0 [0] \\
+rule\_based & none & 80 & 30.0 [15.9] & 158 [113] & 0 [0.250] & 0 [0] \\
+autoscale & none & 80 & 52.4 [359] & 82.5 [122] & 0.500 [1.00] & 0 [0] \\
+monitor\_only & live & 40 & 359 [210] & 1{,}223 [525] & 1.00 [1.00] & 0 [0] \\
+recovery\_only & live & 40 & 220 [75.0] & 1{,}223 [630] & 6.00 [1.00] & 0 [0] \\
+optimization\_only & live & 40 & 267 [360] & 76.5 [128] & 1.00 [1.00] & 0 [0.250] \\
+schema\_only & live & 40 & 315 [353] & 920 [122] & 1.00 [1.25] & 0 [0.250] \\
+full & live & 80 & 235 [143] & 69.8 [35.1] & 6.00 [8.00] & 0 [1.00] \\
+\bottomrule
+\end{tabular}

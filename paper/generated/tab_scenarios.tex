@@ -1,0 +1,14 @@
+\begin{tabular}{lrrrr}
+\toprule
+config & ingress\_burst & resource\_contention & schema\_drift & upstream\_delay \\
+\midrule
+baseline & 352 & 386 & 424 & 353 \\
+rule\_based & 30.0 & 30.0 & 433 & 30.0 \\
+autoscale & 20.0 & 20.0 & 363 & 393 \\
+monitor\_only & 366 & 412 & 320 & 275 \\
+recovery\_only & 223 & 183 & 224 & 248 \\
+optimization\_only & 10.5 & 267 & 502 & 281 \\
+schema\_only & 453 & 343 & 120 & 553 \\
+full & 148 & 318 & 214 & 237 \\
+\bottomrule
+\end{tabular}
