@@ -1,24 +1,24 @@
-\documentclass[11pt]{article}
-\usepackage[margin=1in]{geometry}
+\documentclass[journal]{IEEEtran}
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{microtype}
-\usepackage[numbers,sort&compress]{natbib}
 \usepackage[hidelinks]{hyperref}
 \usepackage{url}
 
 % Generated statistics (paper/generated/numbers.tex): the manuscript quotes no hand-typed result.
 \input{generated/numbers.tex}
 
-\newcommand{\acde}{\textsc{acde}}
 % Marks anything the author must supply or decide; the build fails if one survives to submission.
 \newcommand{\AUTHOR}[1]{\textbf{[\,#1\,]}}
 
-\title{Do Policy-Gated LLM Agents Govern Cloud Data Pipelines?\\
-  A Replication, a Live-Model Evaluation, and the Production Lessons}
-\author{\AUTHOR{authors, affiliations, ORCID, corresponding author}}
-\date{\AUTHOR{submission date}}
+\title{A Policy-Bounded Agentic Framework for Autonomous Governance of Cloud Data Pipelines}
+
+\author{\IEEEauthorblockN{B Sai Krishna, I Mahalakshmi, Sri Harini MP, and Vignes VM}}
+
+\markboth{}{}
 
 \begin{document}
 \maketitle
@@ -26,6 +26,7 @@
 \input{sections/00_abstract}
 \input{sections/01_intro}
 \input{sections/02_related}
+\input{sections/03_problem}
 \input{sections/03_system}
 \input{sections/04_method}
 \input{sections/05_results}
@@ -33,11 +34,7 @@
 \input{sections/07_discussion}
 \input{sections/08_conclusion}
 
-\bibliographystyle{plainnat}
+\bibliographystyle{IEEEtran}
 \bibliography{refs}
 
-\appendix
-\input{sections/A_claims_audit}
-\input{sections/B_deviations}
-\input{sections/C_reproduction}
 \end{document}

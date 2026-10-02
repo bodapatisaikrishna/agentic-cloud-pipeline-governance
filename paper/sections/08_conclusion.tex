@@ -1,0 +1,22 @@
+\section{CONCLUSION AND FUTURE WORK}\label{sec:conclusion}
+
+We built and evaluated a policy-gated multi-agent design for cloud pipeline governance against a
+live remote language model, explicit non-agent baselines, an adversarial evaluation against an
+independent oracle, and closed-form sensitivity analyses. The design only partly holds up. Against
+static orchestration it improves recovery time and cost by smaller margins than the original report
+claimed, it increases manual interventions, and two idealized non-LLM comparators recover faster
+still. The most consequential result, though, concerns the evaluation itself: run through the same
+code path, the identical configuration reaches very different conclusions under a deterministic mock
+than under a live model, by roughly three orders of magnitude on recovery time and by a comparably
+large margin on decision quality. For this class of system, \emph{which} evaluation path produced a
+number matters at least as much as the number itself. The practical takeaway is narrow: this is not a
+verdict on LLM agents in operations generally, but a reason to ask what evaluated a given governance
+claim, and to treat a mock number and a live number as separate findings until both exist.
+
+Future work splits into two parts. One is the evidence this campaign did not collect: a live
+cross-model sweep to test model-agnosticism, an exercise of the trust core's mode transitions and
+kill-switch latency under load, and replacing the two modelled baselines with deployed controllers
+and real production traces (Section~\ref{sec:discussion}). The other is design work: replacing the
+static agent-priority bid with an explicit negotiation protocol, switching on the
+bounded-adaptation mechanism currently left off to preserve determinism, and extending the evaluation
+to multi-cloud deployments and formal verification of the policy layer.

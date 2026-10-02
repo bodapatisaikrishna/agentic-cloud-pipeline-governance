@@ -1,52 +1,92 @@
-\section{Introduction}\label{sec:intro}
+\section{INTRODUCTION}\label{sec:intro}
 
-Data pipelines fail in ways that are cheap to describe and expensive to fix: an upstream schema
-changes type, a source stalls, a co-tenant starves compute, ingress bursts past capacity. The
-standard remedy is an on-call human, whose response time dominates recovery time. Kirubakaran et
-al.~\cite{kirubakaran2025governing} propose replacing part of that loop with four bounded LLM agents
-(monitoring, optimisation, schema, recovery) whose only output is a structured action proposal,
-gated by a policy engine before anything executes, and report reductions of up to 45\% in recovery
-time, about 25\% in cost, and over 70\% in manual interventions against static orchestration.
+Data pipeline failures are easy to describe and costly to fix: an upstream schema changes type, a
+source stalls, a co-tenant starves compute, or ingress bursts past capacity. An empirical study of
+real pipelines catalogs 41 distinct factors behind such quality and reliability
+failures~\cite{foidl2024datapipeline}. The usual remedy is an on-call human, and that response time
+dominates recovery time. Large language model (LLM) agents could cut that loop short, and systems
+that apply them to cloud incidents are already running in production~\cite{chen2024rcacopilot,wang2023rcagent,luo2025opsagent}.
+Most of those systems only recommend a diagnosis. Once an agent is allowed to \emph{act} on
+production infrastructure, a governance question follows: what bounds what it can do?
 
-This paper asks whether that claim survives an evaluation in which the agents are a real, remote
-language model rather than a simulation, in which the baselines include cheap automation rather than
-only a slow human, and in which the safety guarantee is attacked rather than asserted. It is a
-replication and extension of \cite{kirubakaran2025governing}, together with the engineering record
-of taking the resulting system from a research artefact to something an operator could run.
-
-\paragraph{Thesis.}
-Governance claims hold only if the evaluation path is the production path. Every headline number in
-the replicated paper's family of results depends on choices about \emph{how} the system is exercised
---- a mock or a live model, a modelled or a measured human, an assumed or a measured provisioning gap
---- and each of those choices, made for tractability, silently changes what is being measured. We
-make that dependence measurable rather than arguing it away.
-
-\paragraph{Contributions.}
+Kirubakaran et~al.~\cite{kirubakaran2025governing} answer with four bounded agents, covering
+monitoring, optimization, schema, and recovery, each producing only a structured action proposal
+that a policy engine gates before anything executes. They report reductions of up to 45\% in
+recovery time, about 25\% in cost, and over 70\% in manual interventions against static
+orchestration. Four gaps separate that claim from the evidence for it.
 \begin{enumerate}
-  \item \textbf{A live-model replication} on a full matrix of eight configurations (three
-    non-agent comparison points, the full system, and four single-agent ablations) over four fault
-    scenarios, with per-run provenance and billing-accurate LLM accounting (\S\ref{sec:method}).
-  \item \textbf{A measured mock-versus-live divergence}: the same configuration under a
-    deterministic mock and under a live model, compared directly (\S\ref{sec:results}).
-  \item \textbf{Credible baselines and decision quality}: rule-based and autoscaling comparators,
-    and a correct-mitigation metric in addition to speed.
-  \item \textbf{An adversarial evaluation with an independent specification oracle}, reporting
-    containment, over-blocking and exact agreement with Wilson intervals, and the defects it found
-    (\S\ref{sec:results}, \S\ref{sec:lessons}).
-  \item \textbf{Closed-form sensitivity analyses} for the two modelled assumptions the headline
-    numbers rest on --- the simulated human's latency and the cost model's provisioning gap.
-  \item \textbf{Production-hardening lessons}, each tied to a defect measured in this system and to
-    the design record (\S\ref{sec:lessons}).
+  \item \emph{Evaluation path.} The original study names several model families as backends but gives too little implementation detail to pin down the exact model-in-the-loop condition behind its headline figures, even though work on the sim-to-real gap finds that simulated evaluation environments can inflate agent performance~\cite{liu2026simtoreal,zhu2026realusersim,gupta2026reliabilitybench}.
+  \item \emph{Baselines.} The only comparator is static orchestration: fixed allocations, predefined retries, human-initiated remediation, and autoscaling disabled, despite mature non-LLM automation already running at production scale~\cite{rzadca2020autopilot}.
+  \item \emph{Adversarial testing.} The safety case rests on the policy gate, yet a stated bound is not the same as a tested one. Agent-security benchmarks report high attack success against weak
+    defenses~\cite{debenedetti2024agentdojo,zhang2024asb}, and the policy language itself has been
+    criticized as too weak for agentic governance~\cite{joshi2026deontic}.
+  \item \emph{Statistics and generality.} No confidence intervals, effect sizes, or run counts are reported. GPT-, Claude-, and Gemini-family models are described as interchangeable backends whose differences touched only verbosity and latency, yet no cross-model results back that claim, and agent behavior has elsewhere been shown to vary across models and providers~\cite{sanna2025crossllm,zhang2026towardagentic}.
+\end{enumerate}
+We build the system and put five questions to it.
+\begin{enumerate}
+  \item[\textbf{RQ1:}] With a real model in the loop, does the full agent system outperform static
+    orchestration on recovery time, cost, and manual interventions?
+  \item[\textbf{RQ2:}] Does it outperform cheap, non-LLM automation, or only a slow human?
+  \item[\textbf{RQ3:}] Does it act correctly, not merely quickly?
+  \item[\textbf{RQ4:}] Do the answers to RQ1--RQ3 change once the model is swapped for a
+    deterministic mock?
+  \item[\textbf{RQ5:}] Does the policy gate contain adversarial proposals, judged against an oracle
+    independent of the policy code?
 \end{enumerate}
 
-\paragraph{What is not novel.}
-The architecture --- three planes, four bounded agents, a policy gate, an observe--reason--propose
-loop --- is that of \cite{kirubakaran2025governing}; we implement it, we did not invent it. We claim no
-new agent design, no new policy language, and no new statistical method. The contribution is the
-evidence, the measurement discipline, and the defects found by holding the system to its own claims.
+\paragraph{Central finding}
+RQ4 proves decisive. Running the identical \texttt{full} configuration first under a deterministic
+mock and then under a real, remote model produces results that disagree by roughly three orders of
+magnitude on recovery time, and on whether the executed mitigation was even correct
+(Section~\ref{sec:results}). The mock run is not wrong in any ordinary sense; it faithfully measures
+a faster, more forgiving experiment. The trouble is that a governance claim drawn from that
+experiment does not carry over to the one an operator actually faces. Every other number in this
+paper is conditional on that divergence: an evaluation built on the mock's near-zero latency, or a
+cost model that assumes away the provisioning gap it rests on, would report gains a live deployment
+simply does not deliver.
 
-\paragraph{Roadmap.}
-Section~\ref{sec:related} places the work; \S\ref{sec:system} describes the system as implemented;
-\S\ref{sec:method} the experimental design; \S\ref{sec:results} the results;
-\S\ref{sec:lessons} the hardening lessons; \S\ref{sec:discussion} limitations and threats to
-validity.
+\paragraph{Contributions}
+A contribution counts here only if this campaign both implements and measures it. Four qualify.
+\begin{enumerate}
+  \item \textbf{A live-model evaluation} spanning eight configurations, namely three non-agent
+    comparators, the full system, and four single-agent ablations, across four injected fault
+    scenarios. The campaign totals \NRunsTotal{} runs, with per-run provenance and billing-accurate
+    LLM accounting (Section~\ref{sec:method}).
+  \item \textbf{Explicit non-LLM baselines and a decision-quality metric.} A rule-based responder and
+    threshold autoscaling, each modelled with a fixed remediation latency and run through the same
+    campaign, show whether the agent system beats cheap automation and not just static orchestration;
+    a correct-mitigation metric shows whether it acts correctly, not merely quickly
+    (Section~\ref{sec:results}).
+  \item \textbf{An adversarial evaluation against an independent oracle.} A generated corpus is
+    graded by a specification written separately from the policy code under test, so the resulting
+    containment rate cannot be circular (Sections~\ref{sec:results} and~\ref{sec:lessons}).
+  \item \textbf{A disclosed, testable cost model} that turns the base paper's loosely specified cost
+    metric into a reproducible one, together with closed-form sensitivity analyses for the two
+    assumptions the headline numbers depend on: the simulated human's latency and the cost model's
+    provisioning gap.
+\end{enumerate}
+Two further contributions are implemented but this campaign never exercised them, so we present them
+as architecture rather than results. A cross-model harness could test the base paper's model-agnostic
+claim, but its live sweep has not yet run against real providers. A production trust core, with
+graduated autonomy, a durable kill switch, and a per-target blast-radius cap, exists too, but every
+run in the campaign used one fixed mode, leaving no mode-transition or kill-switch-latency
+measurement to report. Section~\ref{sec:system} describes both, and Section~\ref{sec:discussion}
+returns to them as the concrete gaps future work would close. Finally, a set of
+\textbf{production-hardening lessons} (Section~\ref{sec:lessons}) records defects this system
+actually exhibited.
+
+\paragraph{What is not novel}
+The architecture itself, its three planes, four bounded agents, policy gate, and
+observe--reason--propose loop, belongs to Kirubakaran et~al.; we implemented it rather than invented
+it. We claim no new agent design, policy language, or statistical method. What is ours is the
+evidence, the measurement discipline that produced it, and the defects uncovered by holding the
+system to its own stated guarantees rather than to a test suite built around the same assumptions the
+system makes.
+
+\paragraph{Organization}
+Section~\ref{sec:related} surveys related work, Section~\ref{sec:problem} formalizes the problem and
+the metrics, and Section~\ref{sec:system} describes the system as built. Section~\ref{sec:method}
+lays out the experimental design, and Section~\ref{sec:results} presents the results around the
+mock-versus-live divergence. Section~\ref{sec:lessons} gives the hardening lessons,
+Section~\ref{sec:discussion} covers limitations and threats to validity, and
+Section~\ref{sec:conclusion} concludes.

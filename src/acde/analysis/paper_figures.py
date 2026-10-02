@@ -96,7 +96,7 @@ def effect_forest(rows: Sequence[dict[str, Any]], metrics: Sequence[str], out: P
         ax.set_xlim(-1.12, 1.12)
         ax.set_yticks(range(len(sel)))
         ax.set_yticklabels([r["config"] for r in sel], fontsize=6.5)
-        ax.set_title(metric.replace("_", " "), fontsize=7.5)
+        ax.set_title(_METRIC_LABEL.get(metric, metric.replace("_", " ")), fontsize=7.5)
         ax.set_xlabel("Cliff's $\\delta$ vs baseline")
     _save(fig, out)
 
@@ -144,7 +144,13 @@ def cost_sensitivity(sweep: Sequence[dict[str, float]], breakeven: float | None,
         )
     ax.axhline(0, color="black", linewidth=0.6)
     if breakeven is not None:
-        ax.axvline(breakeven, color=VERMILION, linestyle="--", linewidth=0.8)
+        ax.axvline(
+            breakeven,
+            color="black",
+            linestyle=":",
+            linewidth=0.9,
+            label=f"break-even ({breakeven:.2g})",
+        )
     ax.set_xlabel("static provisioned units (baseline)")
     ax.set_ylabel("cost reduction of full (%)")
     ax.legend(frameon=False, fontsize=6.5)

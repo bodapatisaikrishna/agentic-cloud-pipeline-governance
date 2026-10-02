@@ -1,0 +1,26 @@
+\begin{abstract}
+A recent proposal governs cloud data pipelines with four policy-gated LLM agents and reports
+substantial gains over static orchestration. The original study does not give enough implementation
+detail to pin down the exact model-in-the-loop evaluation condition behind those gains. We build the
+system and test it with a real, remote language model, in a \NRunsTotal{}-run campaign that crosses
+four injected fault scenarios with eight configurations (three non-agent comparators, the full
+system, and four single-agent ablations) and splits into live-agent, non-agent, and mock-model arms.
+Under a live model, the full system changes mean time to recovery (MTTR) by \NRelpctMttrSFull{}\% and
+cost by \NRelpctCostUnitsFull{}\% relative to static orchestration, yet it \emph{increases} manual
+interventions by \NRelpctManualInterventionsFull{}\%. Two idealized non-LLM baselines, each given a
+fixed modelled remediation latency, recover faster still, changing MTTR by
+\NRelpctMttrSRuleBased{}\% and \NRelpctMttrSAutoscale{}\%. Running the same \texttt{full}
+configuration under a deterministic mock, instead of the live model, drops recovery time to
+\NLiveVsMockMttrSMock{}\,s, about three orders of magnitude below the live figure, so a mock
+evaluation and a live evaluation of one system point to different conclusions. Grading a generated
+adversarial corpus of $\NAdversarialCases{}$ cases against an oracle independent of the policy code
+gives containment $\geq\NAdversarialWilsonLo{}$, but only after fixing two contract-layer gaps the
+corpus itself exposed. The evidence is bounded: a single host, synthetic data with injected faults, a
+simulated on-call engineer, one live model family, and baselines that are modelled rather than
+deployed.
+\end{abstract}
+
+\begin{IEEEkeywords}
+LLM agents, cloud data pipeline governance, policy-as-code, Open Policy Agent, AIOps,
+evaluation methodology, adversarial evaluation, mock-vs-live evaluation validity
+\end{IEEEkeywords}

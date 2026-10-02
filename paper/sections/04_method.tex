@@ -1,75 +1,122 @@
-\section{Experimental design}\label{sec:method}
+\section{EXPERIMENTAL DESIGN}\label{sec:method}
 
-\paragraph{Testbed.}
-A single node running the stack in containers (PostgreSQL, Redpanda, Airflow, OPA). We pin the policy
-engine to a specific release; \S\ref{sec:results} explains why that pin is load-bearing. Runs are
-executed strictly sequentially: the resource-contention scenario is real CPU stress, so concurrent
-runs would make host load part of the measurement.
+\paragraph{Testbed}
+A single node runs the full stack in containers: PostgreSQL, Redpanda, Airflow, and OPA.
+Table~\ref{tab:testbed} lists the hardware, software versions, and fixed parameters. The policy
+engine is pinned to a specific release, and Section~\ref{sec:results} shows why that pin matters.
+Runs execute strictly sequentially, since the resource-contention scenario applies real CPU stress
+and concurrent runs would fold host load into the measurement.
 
-\paragraph{Scenarios and configurations.}
-Four injected faults: schema drift (a column is retyped), upstream delay, resource contention, and an
-ingress burst. Eight configurations: \texttt{baseline} (static orchestration plus the simulated
-human), \texttt{rule\_based} (deterministic automation), \texttt{autoscale} (threshold autoscaling),
-\texttt{full} (all four agents) and four ablations enabling monitoring plus exactly one other agent
-(\texttt{recovery\_only}, \texttt{optimization\_only}, \texttt{schema\_only}) or monitoring alone
-(\texttt{monitor\_only}). The three non-agent configurations make no model call.
+\begin{table*}[t]
+\centering
+\caption{Experimental testbed and fixed design parameters.}
+\label{tab:testbed}
+\small
+\begin{tabular}{@{}lp{0.74\linewidth}@{}}
+\toprule
+Item & Setting \\
+\midrule
+Host & One Apple M2 machine (arm64), 8 cores, 8\,GB memory, macOS 15.7.2; runs are strictly sequential \\
+Software & Docker 29.6.1; PostgreSQL 16.6; Redpanda v24.2.18; Apache Airflow 2.10.5 (Python 3.11); OPA 0.68.0 \\
+Batch data & Downscaled TPC-DS-derived synthetic fact table, 20{,}000 rows \\
+Live model & Reasoning agents: \texttt{nvidia/nemotron-3-ultra-550b-a55b}; monitoring: \texttt{nvidia/nemotron-3-super-120b-a12b}; hosted OpenAI-compatible endpoint, temperature 0 \\
+LLM budget & \NBudgetCalls{} calls and \NBudgetTokens{} tokens per run \\
+Timing & 120\,s warm-up, 300\,s control loop, 5\,s settle; control tick 15\,s \\
+Human model & Log-normal delay, median \NHumanMedian{}\,s, $\sigma=\NHumanSigma{}$ \\
+Cost model & Static allocation 8 units, right-sized 3 units, horizon 300\,s; 0.05 per compute unit-second, 0.01 per GB-hour \\
+Baseline latencies & \texttt{rule\_based} resolves covered faults 30\,s after detection; \texttt{autoscale} 20\,s after detection \\
+Policy limits & Rate limit of 5 actions per 10 minutes; default cost budget of 100 units per run \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
-\paragraph{Matrix and arms.}
-The matrix is $\NnBaseline{}$ replicates per (configuration, scenario) for the baselines and
-\texttt{full}, and fewer for ablations; see Table~\ref{tab:main} for the realised $n$. Because only
-agent configurations call a model, the campaign is split into three independently resumable
-\emph{arms} with separate result directories, so live and mock conditions can never be silently
-pooled: (A) live-model agent configurations, (B) the non-agent configurations, run with the model
-disabled (their results are identical live or mock), and (C) \texttt{full} under the deterministic
-mock, the direct counterpart of arm A's \texttt{full}. Each run has a 120\,s warm-up, a 300\,s control
-loop after fault injection, and a 5\,s settle.
+\paragraph{Scenarios and configurations}
+Four injected faults cross eight configurations. The faults, schema drift (a column's type changes),
+upstream delay, resource contention, and an ingress burst, pair with \texttt{baseline} (static
+orchestration plus the simulated human), \texttt{rule\_based} (deterministic automation),
+\texttt{autoscale} (threshold autoscaling), \texttt{full} (all four agents), and four ablations.
+Three ablations add exactly one agent on top of monitoring, namely \texttt{recovery\_only},
+\texttt{optimization\_only}, and \texttt{schema\_only}, while the fourth, \texttt{monitor\_only},
+runs monitoring on its own. None of the three non-agent configurations ever calls a model.
 
-\paragraph{Live model and accounting.}
-The live arm uses a remote language model at temperature zero through an OpenAI-compatible endpoint;
-the reasoning agents share one model and monitoring uses a smaller, faster one (model identifiers are
-recorded per run in the manifest and listed in Appendix~\ref{app:repro}). A per-run budget caps model
-calls and tokens. Two properties of the accounting matter for validity. First, a snapshot-identical
-proposal is served from an in-run cache, so summing per-action token columns counts one real call
-once per replay; we therefore count real calls, cache hits, degraded proposals (budget exhausted,
-provider unavailable, or a replayed earlier degradation), invalid outputs, tokens and latency at the
-moment a call is or is not made. Second, a transient provider failure is cached against that
-snapshot, so one rate-limit episode can keep degrading later identical snapshots; the degraded count
-exposes it so that it cannot masquerade as model quality.
+\paragraph{Non-agent baselines}
+The three non-agent configurations model behavior rather than run a deployed controller. In
+\texttt{baseline}, every fault escalates to the simulated on-call. In \texttt{rule\_based}, a fault
+inside the rule set, upstream delay, resource contention, or ingress burst, resolves 30\,s after
+detection, while schema drift, which demands reasoning, escalates to the human. In
+\texttt{autoscale}, the reactive scaler resolves resource contention and ingress bursts 20\,s after
+detection, and every data fault escalates. Their recovery times therefore encode two assumed
+remediation latencies rather than measuring an actual rule engine or autoscaler. They are idealized
+comparators: speed depends on those latencies, while any fault type outside their coverage still
+falls to the human, which bounds what they can achieve.
 
-\paragraph{Metrics.}
-Mean time to recovery (MTTR, from injection to resolution); operational cost under a disclosed
-model (measured compute-unit-seconds plus a provisioning term: a static over-provisioned allocation
-for configurations that do not right-size, a smaller one for those that do); manual interventions;
-data freshness; and \emph{decision correctness}: whether the executed mitigation is in the accepted
-set for the injected fault.
+\paragraph{Matrix and arms}
+Each (configuration, scenario) cell carries $\NNBaseline{}$ replicates for the baselines and
+\texttt{full}, fewer for the ablations; Table~\ref{tab:main} gives the realized $n$ per cell. Because
+only agent configurations call a model, the campaign splits into three independently resumable arms
+with separate result directories, guaranteeing that live and mock conditions can never be silently
+pooled. Arm A holds the live-model agent configurations; arm B holds the non-agent configurations
+with the model disabled, whose results are identical live or mock by construction; arm C runs
+\texttt{full} under a deterministic mock as the direct counterpart to arm A's \texttt{full}. The
+three arms contain \NRunsArmA{}, \NRunsArmB{}, and \NRunsArmC{} runs, \NRunsTotal{} in total, and
+every run has a 120\,s warm-up, a 300\,s control loop after fault injection, and a 5\,s settle.
 
-\paragraph{Seeds and provenance.}
-Every run's seed is $\mathrm{sha256}(\texttt{config:scenario:replicate}) \bmod 2^{32}$. Because the
-configuration name is hashed in, runs matched on (scenario, replicate) share no fault or
-human-latency randomness: the matching is nominal. We therefore treat the samples as independent and
-use the rank-sum test as the primary test, retaining the signed-rank test on the matched index only
-for continuity with earlier work. Each manifest line records the profile, model mode and identifiers
-(never credentials), timings, human-latency and provisioning parameters, budgets, the code revision
-and whether experiment code was uncommitted; analysis refuses to merge runs whose provenance
-differs.
+\paragraph{Live model and accounting}
+The live arm calls a remote language model at temperature zero through an OpenAI-compatible
+endpoint, with the reasoning agents sharing one model and monitoring using a smaller, faster one.
+Model identifiers are recorded per run in the run manifest, and a per-run budget caps model calls
+and tokens.
 
-\paragraph{Statistics.}
-Medians with interquartile ranges; bootstrap 95\% intervals for medians and differences of medians;
-Cliff's $\delta$ with a bootstrap interval, never a bare point estimate; Mann--Whitney $U$ with a
-Holm correction across the whole family of comparisons; Wilson intervals for proportions.
+Two properties of the accounting matter for validity. First, a snapshot-identical proposal comes
+from an in-run cache, so summing per-action token columns would count one real call several times
+over; we instead count real calls, cache hits, degraded proposals, invalid outputs, tokens, and
+latency only at the moment a call is or is not actually made, and a proposal counts as degraded
+whenever the budget is exhausted, the provider is unavailable, or an earlier degradation is
+replayed. Second, a transient provider failure is cached against the snapshot that triggered it, so
+a single rate-limit episode can keep degrading every later identical snapshot unless the degraded
+count is tracked separately, exactly what happened during the project's own pilot
+(Section~\ref{sec:lessons}) and why the accounting takes this form.
 
-\paragraph{Adversarial evaluation.}
-A generated corpus probes the policy layer: an exhaustive grid over every legal (agent, action) pair
-and the decision-relevant context values including boundary values ($4/5/6$ recent actions, cost
-equal to and infinitesimally above budget); attacker-controlled parameter extremes priced by the real
-gate; hostile strings in free-text fields; illegal proposals sent directly to the policy engine,
-bypassing the contract; and a seeded fuzz. Expected verdicts come from an independently written
-Python statement of the \emph{documented} policy semantics that shares no code with the Rego. The
-independence is of implementation, not of authorship. The threat model is that the agent controls
-only its proposal; the policy context is system-built.
+\paragraph{Metrics}
+We report the five metrics defined in Section~\ref{sec:problem}: mean time to recovery (MTTR,
+Eq.~\ref{eq:mttr}), operational cost under a disclosed model (Eq.~\ref{eq:cost}), manual
+interventions, data freshness, and \emph{decision correctness} (Eq.~\ref{eq:decision}). Manual
+interventions are a count of rows in the telemetry table every configuration writes to, and
+freshness is a lag in seconds read from the same telemetry.
 
-\paragraph{Sensitivity.}
-Sampled human latency is $\mathrm{median}\cdot e^{\sigma Z}$ with $Z$ fixed by the seed, a scale
-family, so any all-human outcome scales exactly linearly in the median; we verify this against the
-sampler and use it to give the closed-form human median at which each configuration stops beating the
-baseline. For the cost model we sweep the provisioning parameters and give the break-even.
+\paragraph{Seeds and provenance}
+Every run's seed is $\mathrm{sha256}(\texttt{config:scenario:replicate}) \bmod 2^{32}$. Hashing the
+configuration name in means runs matched on (scenario, replicate) share no fault or human-latency
+randomness across configurations, so the matching is nominal rather than paired; we treat the
+samples as independent and use the rank-sum test as primary, keeping the signed-rank test on the
+matched index only for continuity with earlier analysis. Each manifest line records the profile, the
+model mode and identifiers (never credentials), timings, the human-latency and provisioning
+parameters, budgets, the code revision, and whether the experiment code was uncommitted. Analysis
+refuses to merge runs whose provenance differs unless given an explicit, documented override.
+
+\paragraph{Statistics}
+We report medians with interquartile ranges, plus bootstrap 95\% intervals for medians and for
+differences between them. Cliff's $\delta$ always comes with its own bootstrap interval, read
+against the conventional thresholds: $|\delta|<0.147$ negligible, $0.147$--$0.33$ small,
+$0.33$--$0.474$ medium, and $\geq 0.474$ large~\cite{cliff1993}. Mann--Whitney $U$ tests carry a
+Holm correction across the full family of comparisons, and proportions carry Wilson intervals. Every
+comparison in Section~\ref{sec:results} is exploratory: the campaign was designed and run before any
+single comparison was drafted, not as a pre-registered confirmatory study.
+
+\paragraph{Adversarial evaluation}
+A generated corpus probes the policy layer directly, with an exhaustive grid over every legal
+(agent, action) pair and the decision-relevant context values, including boundary cases such as 4,
+5, and 6 recent actions and a cost equal to or infinitesimally above budget; attacker-controlled
+parameter extremes priced by the real gate; hostile strings in free-text fields; illegal proposals
+sent straight to the policy engine, bypassing the contract; and a seeded fuzz. Expected verdicts
+come from an independently written Python statement of the \emph{documented} policy semantics,
+sharing no code with the Rego under test; the independence is one of implementation, not authorship.
+The threat model gives the agent control only over its own proposal, leaving the surrounding policy
+context system-built and out of reach.
+
+\paragraph{Sensitivity}
+Sampled human latency follows $\mathrm{median}\cdot e^{\sigma Z}$ with $Z$ fixed by the seed, a
+scale family under which any all-human outcome scales exactly linearly in the assumed median; we
+confirm the linearity directly against the sampler and use it to derive, in closed form, the human
+median at which each configuration stops beating the baseline. For the cost model, we sweep the
+provisioning parameters and report where the break-even falls.

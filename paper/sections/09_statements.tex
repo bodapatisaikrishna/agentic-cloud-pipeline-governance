@@ -1,0 +1,62 @@
+\section*{Data and Code Availability}
+\addcontentsline{toc}{section}{Data and Code Availability}
+
+The code, policies, campaign supervisor, adversarial-corpus generator, analysis pipeline, and manuscript source are released in one public repository under an open-source license, together with the checksummed per-run data behind every number in this paper. A single command regenerates every table, figure, and quoted number from that data in under 15 minutes at no API cost, and the repository documents the full hardware and software environment and the expected runtime of every reproduction path. An archived release with a persistent identifier will be minted at submission: \AUTHOR{repository URL and Zenodo DOI}.
+
+\section*{Author Contributions}
+\addcontentsline{toc}{section}{Author Contributions}
+
+\AUTHOR{CRediT statement: conceptualization, methodology, software, validation, formal analysis,
+investigation, data curation, writing -- original draft, writing -- review \& editing, visualization,
+supervision, project administration -- to be completed by the author(s) of record against the CRediT
+taxonomy (\url{https://credit.niso.org/}) before submission.}
+
+\section*{Conflict of Interest}
+\addcontentsline{toc}{section}{Conflict of Interest}
+
+\AUTHOR{The author(s) declare no known competing financial or personal interests that could have
+appeared to influence the work reported here -- to be confirmed before submission.}
+
+\section*{Funding}
+\addcontentsline{toc}{section}{Funding}
+
+\AUTHOR{This work received no external funding; API usage for the live evidence campaign was paid for
+directly by the author(s) -- to be confirmed and itemized (provider, approximate spend) before
+submission.}
+
+\section*{Ethics and Broader Impact}
+\addcontentsline{toc}{section}{Ethics and Broader Impact}
+
+This study involves no human subjects, no personal data, and no data collected from or about real
+people: all pipeline data is synthetic or seeded from public schemas, and the ``incidents''
+evaluated are injected faults on a research testbed, not real production traffic. No IRB review
+applies.
+
+The broader-impact question this paper can address is narrower than agentic AI in general: what
+happens when an LLM agent is allowed to act on infrastructure, gated by policy rather than trusted
+outright. Two results bear directly on it. First, the adversarial evaluation
+(Section~\ref{sec:results}) found that the policy gate was not safe by default. Two contract-layer
+gaps (Section~\ref{sec:lessons}, L6) had to be found and fixed before containment held at the
+reported rate, so a stated safety guarantee is not evidence until it has been tested against an
+oracle independent of the code under test. Second, the live decision-quality and
+manual-intervention results (Sections~\ref{sec:results} and~\ref{sec:limitations}) argue against
+deploying this class of system fully autonomously against real infrastructure, at the model and
+settings evaluated here. That finding supports the graduated trust ladder (shadow, approval, and
+autonomous modes, with a kill switch; Section~\ref{sec:discussion}) as the safer default. We are not
+aware of a dual-use path specific to this work beyond the general dual-use character of published
+agentic-automation research, which the containment and trust-ladder results are meant to inform.
+
+\section*{Generative-AI and AI-Assistance Disclosure}
+\addcontentsline{toc}{section}{Generative-AI and AI-Assistance Disclosure}
+
+An AI coding assistant (Claude, Anthropic) was used substantively throughout this project's
+engineering. It implemented the system under test, the experiment runner and campaign supervisor,
+the analysis and figure-generation pipeline, the adversarial-corpus generator, and the generated
+tables, figures, and numeric macros of this manuscript (Section~\ref{sec:method}). It was also used
+as a drafting and editing aid for the manuscript's prose, following a phased, checkpointed process in
+which each intermediate research artifact (codebase inventory, filled results, gap analysis, and
+outline) was produced and reviewed before drafting began. No generative-AI system is an author of
+this work. Authorship, the experimental design, the decision to run the live campaign, verification
+of every generated claim against the underlying data, and
+responsibility for the paper's content and conclusions rest with the human author(s) of record.
+Wherever the source description left a design decision unspecified, the choice is documented with its alternatives and rationale in the released repository, so a reader can audit which choices were made and why.

@@ -1,23 +1,32 @@
-% Every entry below was checked against its primary source (Crossref / arXiv / publisher index)
-% on 2026-09-21. Do not add an entry that has not been verified the same way.
+% Every entry below was checked against its primary source (Crossref / arXiv / publisher index).
+% Do not add an entry that has not been verified the same way.
+% Trimmed 2026-09-27 to the 30 most load-bearing references (from an 87-entry pool built during a
+% five-agent literature-review expansion); see paper2/references.md for the full pool and the
+% selection rationale, and paper/_archive_v1/ for nothing (this trim only touched refs.bib and
+% 02_related.tex, not prose sections).
+
 @misc{kirubakaran2025governing,
   title         = {Governing Cloud Data Pipelines with Agentic {AI}},
-  author        = {Kirubakaran, Aswathnarayan Muthukrishnan and Parthasarathy, Adithya and Saksena, Nitin and Bodala, Ram Sekhar and Deshpande, Akshay and Malempati, Suhas and Carimireddy, Shiva and Mazumder, Abhirup},
+  author        = {Kirubakaran, Aswathnarayan Muthukrishnan and others},
   year          = {2025},
   eprint        = {2512.23737},
+  doi           = {10.48550/arXiv.2512.23737},
   archiveprefix = {arXiv},
+  howpublished  = {arXiv:2512.23737},
   note          = {Submitted 24 December 2025}
 }
 @misc{yao2022react,
   title         = {{ReAct}: Synergizing Reasoning and Acting in Language Models},
-  author        = {Yao, Shunyu and Zhao, Jeffrey and Yu, Dian and Du, Nan and Shafran, Izhak and Narasimhan, Karthik and Cao, Yuan},
+  author        = {Yao, Shunyu and others},
   year          = {2022},
   eprint        = {2210.03629},
-  archiveprefix = {arXiv}
+  doi           = {10.48550/arXiv.2210.03629},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2210.03629}
 }
 @inproceedings{chen2024rcacopilot,
   title     = {Automatic Root Cause Analysis via Large Language Models for Cloud Incidents},
-  author    = {Chen, Yinfang and Xie, Huaibing and Ma, Minghua and Kang, Yu and Gao, Xin and Shi, Liu and Cao, Yunjie and Gao, Xuedong and Fan, Hao and Wen, Ming and Zeng, Jun and Ghosh, Supriyo and Zhang, Xuchao and Zhang, Chaoyun and Lin, Qingwei and Rajmohan, Saravan and Zhang, Dongmei and Xu, Tianyin},
+  author    = {Chen, Yinfang and others},
   booktitle = {Proceedings of the Nineteenth European Conference on Computer Systems (EuroSys)},
   pages     = {674--688},
   year      = {2024},
@@ -25,7 +34,7 @@
 }
 @article{basiri2016chaos,
   title   = {Chaos Engineering},
-  author  = {Basiri, Ali and Behnam, Niosha and de Rooij, Ruud and Hochstein, Lorin and Kosewski, Luke and Reynolds, Justin and Rosenthal, Casey},
+  author  = {Basiri, Ali and others},
   journal = {IEEE Software},
   volume  = {33},
   number  = {3},
@@ -36,8 +45,9 @@
 @misc{opa,
   title        = {{Open Policy Agent}: policy-based control for cloud native environments},
   author       = {{Cloud Native Computing Foundation}},
+  year         = {2016},
   howpublished = {\url{https://www.openpolicyagent.org}},
-  note         = {Graduated CNCF project; policy language Rego. Accessed 2026-09-21}
+  note         = {Project started 2016; graduated CNCF project; policy language Rego. Accessed 2026-09-21}
 }
 @article{wilcoxon1945,
   title   = {Individual Comparisons by Ranking Methods},
@@ -96,4 +106,194 @@
   pages   = {209--212},
   year    = {1927},
   doi     = {10.1080/01621459.1927.10502953}
+}
+
+% -- The mock-versus-live / sim-to-real evaluation gap (this paper's central thesis) -----------------
+@misc{liu2026simtoreal,
+  title         = {The Sim-to-Real Gap of Foundation Model Agents: A Unified {MDP} Perspective},
+  author        = {Liu, Xiaoou and Chen, Tiejin and Li, Weibo and Hu, Xiyang and Wei, Hua},
+  year          = {2026},
+  eprint        = {2606.07017},
+  doi           = {10.48550/arXiv.2606.07017},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2606.07017},
+  note          = {{KDD} 2026 Blue Sky Ideas Track}
+}
+@misc{zhu2026realusersim,
+  title         = {{RealUserSim}: Bridging the Reality Gap in Agent Benchmarking via Grounded User Simulation},
+  author        = {Zhu, Ming and others},
+  year          = {2026},
+  eprint        = {2605.20204},
+  doi           = {10.48550/arXiv.2605.20204},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2605.20204}
+}
+@misc{gupta2026reliabilitybench,
+  title         = {{ReliabilityBench}: Evaluating {LLM} Agent Reliability Under Production-Like Stress Conditions},
+  author        = {Gupta, Aayush},
+  year          = {2026},
+  eprint        = {2601.06112},
+  doi           = {10.48550/arXiv.2601.06112},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2601.06112}
+}
+@misc{xu2024agentcompany,
+  title         = {{TheAgentCompany}: Benchmarking {LLM} Agents on Consequential Real World Tasks},
+  author        = {Xu, Frank F. and others},
+  year          = {2024},
+  eprint        = {2412.14161},
+  doi           = {10.48550/arXiv.2412.14161},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2412.14161}
+}
+
+% -- Benchmark validity ---------------------------------------------------------------------------
+@misc{rystrom2026agentbenchmarks,
+  title         = {Agent Benchmarks Fail Public Sector Requirements},
+  author        = {Rystr{\o}m, Jonathan and Schmitz, Chris and Korgul, Karolina and Batzner, Jan and Russell, Chris},
+  year          = {2026},
+  eprint        = {2601.20617},
+  doi           = {10.48550/arXiv.2601.20617},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2601.20617}
+}
+@article{foidl2024datapipeline,
+  title   = {Data Pipeline Quality: Influencing Factors, Root Causes of Data-Related Issues, and Processing Problem Areas for Developers},
+  author  = {Foidl, Harald and Golendukhina, Valentina and Ramler, Rudolf and Felderer, Michael},
+  journal = {Journal of Systems and Software},
+  volume  = {207},
+  pages   = {111855},
+  year    = {2024},
+  doi     = {10.1016/j.jss.2023.111855}
+}
+
+% -- Graduated autonomy and kill switches (trust core, D-065) -------------------------------------
+@misc{hadfieldmenell2016offswitch,
+  title         = {The Off-Switch Game},
+  author        = {Hadfield-Menell, Dylan and Dragan, Anca and Abbeel, Pieter and Russell, Stuart},
+  year          = {2016},
+  eprint        = {1611.08219},
+  doi           = {10.48550/arXiv.1611.08219},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:1611.08219}
+}
+@misc{zheng2026separating,
+  title         = {Separating Capability from Permission: A Governance Framework for Agentic {AI} Autonomy Levels},
+  author        = {Zheng, Haining and Dong, Qian and Depena, Rodolfo K. and Bhatia, Jonathan D. and Xiao, Feng and Xu, Peng},
+  year          = {2026},
+  eprint        = {2607.23438},
+  doi           = {10.48550/arXiv.2607.23438},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2607.23438}
+}
+
+% -- Policy as code and runtime governance (the OPA gate) ------------------------------------------
+@misc{joshi2026deontic,
+  title         = {Deontic Policies for Runtime Governance of Agentic {AI} Systems},
+  author        = {Joshi, Anupam and Finin, Tim and Joshi, Karuna Pande and Kagal, Lalana},
+  year          = {2026},
+  eprint        = {2606.19464},
+  doi           = {10.48550/arXiv.2606.19464},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2606.19464}
+}
+@misc{zhang2026actgov,
+  title         = {{ActGov}: Governing {LLM} Agent Actions via Policy-Constrained Validation},
+  author        = {Zhang, Kaiyuan and Peng, Yuke and Jiang, Ke and Zhang, Yinqian},
+  year          = {2026},
+  eprint        = {2609.24446},
+  doi           = {10.48550/arXiv.2609.24446},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2609.24446}
+}
+
+% -- Adversarial evaluation and red-teaming (D-062/D-104) ------------------------------------------
+@misc{debenedetti2024agentdojo,
+  title         = {{AgentDojo}: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for {LLM} Agents},
+  author        = {Debenedetti, Edoardo and Zhang, Jie and Balunovi{\'c}, Mislav and Beurer-Kellner, Luca and Fischer, Marc and Tram{\`e}r, Florian},
+  year          = {2024},
+  eprint        = {2406.13352},
+  doi           = {10.48550/arXiv.2406.13352},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2406.13352},
+  note          = {{NeurIPS} 2024 Datasets and Benchmarks Track}
+}
+@misc{zhang2024asb,
+  title         = {Agent Security Bench ({ASB}): Formalizing and Benchmarking Attacks and Defenses in {LLM}-based Agents},
+  author        = {Zhang, Hanrong and others},
+  year          = {2024},
+  eprint        = {2410.02644},
+  doi           = {10.48550/arXiv.2410.02644},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2410.02644},
+  note          = {{ICLR} 2025}
+}
+
+% -- LLM agents for cloud operations / AIOps (the domain the base paper and this replication sit in) --
+@misc{wang2023rcagent,
+  title         = {{RCAgent}: Cloud Root Cause Analysis by Autonomous Agents with Tool-Augmented Large Language Models},
+  author        = {Wang, Zefan and others},
+  year          = {2023},
+  eprint        = {2310.16340},
+  doi           = {10.48550/arXiv.2310.16340},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2310.16340},
+  note          = {Deployed in Alibaba Cloud's Flink diagnosis workflow}
+}
+@misc{luo2025opsagent,
+  title         = {{OpsAgent}: An Evolving Multi-agent System for Incident Management in Microservices},
+  author        = {Luo, Yu and others},
+  year          = {2025},
+  eprint        = {2510.24145},
+  doi           = {10.48550/arXiv.2510.24145},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2510.24145},
+  note          = {Evaluated on OpenRCA; deployed in production at Lenovo}
+}
+@inproceedings{rzadca2020autopilot,
+  title         = {Autopilot: Workload Autoscaling at {Google}},
+  author        = {Rzadca, Krzysztof and others},
+  booktitle     = {Proceedings of the 15th European Conference on Computer Systems (EuroSys)},
+  year          = {2020},
+  doi           = {10.1145/3342195.3387524}
+}
+
+% -- Decision-quality and correctness metrics (D-059) ----------------------------------------------
+@misc{chen2025aiopslab,
+  title         = {{AIOpsLab}: A Holistic Framework to Evaluate {AI} Agents for Enabling Autonomous Clouds},
+  author        = {Chen, Yinfang and others},
+  year          = {2025},
+  eprint        = {2501.06706},
+  doi           = {10.48550/arXiv.2501.06706},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2501.06706}
+}
+@misc{barnes2026opensec,
+  title         = {{OpenSec}: Measuring Incident Response Agent Calibration Under Adversarial Evidence},
+  author        = {Barnes, Jarrod},
+  year          = {2026},
+  eprint        = {2601.21083},
+  doi           = {10.48550/arXiv.2601.21083},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2601.21083}
+}
+
+% -- Model-agnosticism and cross-model generalization (D-063) ---------------------------------------
+@misc{zhang2026towardagentic,
+  title         = {Toward Agentic Governance: What Shapes {LLM}-Agent Intervention in Public Forums?},
+  author        = {Zhang, Luyang and Chu, Yi-Yun and Krishnan, Ramayya},
+  year          = {2026},
+  eprint        = {2606.00603},
+  doi           = {10.48550/arXiv.2606.00603},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2606.00603}
+}
+@misc{sanna2025crossllm,
+  title         = {Cross-{LLM} Generalization of Behavioral Backdoor Detection in {AI} Agent Supply Chains},
+  author        = {Sanna, Arun Chowdary},
+  year          = {2025},
+  eprint        = {2511.19874},
+  doi           = {10.48550/arXiv.2511.19874},
+  archiveprefix = {arXiv},
+  howpublished  = {arXiv:2511.19874}
 }

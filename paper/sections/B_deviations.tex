@@ -4,8 +4,12 @@ Every decision that the source paper left under-specified, and every defect foun
 recorded in a numbered log in the repository (\texttt{DEVIATIONS.md}) giving the decision, the
 alternatives considered and the rationale. The entries this paper leans on:
 
-\begin{center}
-\begin{tabular}{@{}lp{0.78\linewidth}@{}}
+\begin{table*}[t]
+\centering
+\caption{Design-deviation entries this paper leans on (full text: \texttt{DEVIATIONS.md}).}
+\label{tab:deviations}
+\small
+\begin{tabular}{@{}lp{0.85\linewidth}@{}}
 \toprule
 Entry & Subject \\
 \midrule
@@ -17,6 +21,7 @@ D-091 & Production anomaly detection was never wired in \\
 D-100 & Live decision-quality monitoring; taxonomy mismatch \\
 D-103 & Single choke point for unit-test hermeticity \\
 D-104 & This work: arms, accounting, provenance, supervisor, adversarial oracle and findings, statistics, sensitivity, dead-model pilot finding \\
+D-104m/n & Live-campaign supervisor health-check hang (2+ h, root-caused and fixed) and the resulting \texttt{git\_sha} provenance split it left across the campaign, verified by diff to touch only the supervisor's health check and allowed through as one documented deviation \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table*}

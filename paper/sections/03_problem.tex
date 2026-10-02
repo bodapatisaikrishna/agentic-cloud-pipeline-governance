@@ -1,0 +1,95 @@
+\section{PROBLEM FORMULATION}\label{sec:problem}
+
+\paragraph{Setting}
+A pipeline emits a telemetry snapshot $s_k$ at every control tick $k$, with tick period
+$\tau = 15$\,s. A fault $f$ is injected at time $t_f$, detected at $t_d \ge t_f$, and resolved at
+$t_r \ge t_d$, either through an executed mitigation or an escalation the on-call engineer handles. A
+\emph{configuration} $\pi$ is a responder mapping snapshots to actions. For an agent configuration,
+each enabled agent $g$ proposes an action
+$a = (g, \text{type}, \text{target}, \text{params}, \text{justification}, \text{confidence})$ drawn
+from the typed action space $\mathcal{A}$ of the contract (Section~\ref{sec:system}). A policy gate
+$G$ decides each proposal from a context $c = (m, B, n, \kappa, v)$ that the system itself builds,
+beyond the agent's influence: the action's projected marginal cost $m$, the remaining budget $B$,
+the number $n$ of actions taken in the last ten minutes, the schema-compatibility class $\kappa$,
+and a flag $v$ marking whether a prior version exists. The gate returns one of \textsc{allow},
+\textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
+
+\paragraph{Gate semantics}
+The gate checks the rate limit before any agent-specific policy and defaults toward the human on
+failure:
+\begin{equation}
+  G(a,c) = \textsc{deny} \quad \text{if } n \ge n_{\max}, \qquad n_{\max}=5,
+  \label{eq:rate}
+\end{equation}
+and any proposal that matches no policy pack, or that cannot be evaluated because the policy engine
+is unreachable, is escalated rather than allowed. An optimization action that scales resources
+clears the cost policy only if
+\begin{equation}
+  m \le 0 \quad \text{or} \quad m \le B,
+  \label{eq:budget}
+\end{equation}
+so a scale-down, carrying non-positive marginal cost, always clears. Rollback is permitted only when
+$v$ holds, and a schema change is permitted only when $\kappa$ is backward-compatible.
+Section~\ref{sec:system} describes all four policy packs.
+
+\paragraph{Metrics}
+Each run injects a single fault. Its recovery time, cost, and decision correctness are
+\begin{align}
+  \mathrm{MTTR}(r) &= t_r - t_f, \label{eq:mttr}\\
+  C(r) &= C_{\mathrm{meas}}(r) + \rho_c\, u_\pi\, T_h, \label{eq:cost}\\
+  D(r) &= \mathbf{1}\bigl[\text{executed mitigation} \in \mathcal{A}^{*}(f)\bigr], \label{eq:decision}
+\end{align}
+where $C_{\mathrm{meas}}$ is the metered compute and storage cost, with compute-unit-seconds priced
+at $\rho_c = 0.05$ per unit-second and storage at 0.01 per GB-hour; $u_\pi$ is the allocation
+configuration $\pi$ holds over the horizon $T_h = 300$\,s; and $\mathcal{A}^{*}(f)$ is the accepted
+mitigation set for the injected fault. The three configurations that right-size,
+\texttt{autoscale}, \texttt{optimization\_only}, and \texttt{full}, hold $u_\pi = 3$ units, and the
+rest hold a static $u_\pi = 8$. Non-agent configurations never execute an agent mitigation, so
+$D(r)=0$ for them by construction. Our MTTR includes detection lag, since $t_f$ here is the
+injection time, whereas the base paper measures recovery from detection to resumption. Manual
+interventions and data freshness are direct counts and lags read from telemetry.
+
+\paragraph{The evaluation-validity question}
+Let $\tilde{x}_{\mathrm{live}}$ and $\tilde{x}_{\mathrm{mock}}$ denote the median of metric $x$ for
+the same configuration under a real language model and under a deterministic mock, respectively. We
+define the divergence ratio
+\begin{equation}
+  R_x = \frac{\tilde{x}_{\mathrm{live}}}{\tilde{x}_{\mathrm{mock}}}.
+  \label{eq:ratio}
+\end{equation}
+Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only when $R_x$ sits close
+to one. Section~\ref{sec:livemock} measures $R_x$ for every metric, and RQ4 of
+Section~\ref{sec:intro} asks how far it strays from one.
+
+\paragraph{Threat model}
+The adversary controls only its own proposal $a$. The context $c$, the policy engine, and the
+executor are trusted, system-built components. The safety property under test is containment: no
+proposal that the documented policy semantics classifies as unsafe may be allowed.
+
+\begin{algorithm}[t]
+\caption{One control tick.}
+\label{alg:tick}
+\begin{algorithmic}[1]
+\STATE record a heartbeat
+\IF{the kill switch is engaged} \RETURN \ENDIF
+\STATE run the monitoring agent: detect faults and stamp $t_d$
+\IF{an unresolved fault exists}
+  \STATE $P \leftarrow \emptyset$
+  \FOR{each enabled reactive agent $g \in \{\text{schema}, \text{recovery}, \text{optimization}\}$}
+    \STATE $a \leftarrow$ observe and reason (invalid output becomes \texttt{no\_action})
+    \STATE add $a$ to $P$ unless it is \texttt{no\_action}
+  \ENDFOR
+  \STATE for each contested target, keep the proposal with the highest (agent priority, confidence)
+  \FOR{each winning proposal $a$}
+    \STATE skip if the target lock is held or the blast-radius cap is reached
+    \STATE evaluate $d \leftarrow G(a,c)$, then commit an intent row
+    \STATE execute $a$ if $d$ allows it, or hand it to the on-call if $d$ escalates
+    \STATE update the audit row with the outcome
+  \ENDFOR
+\ENDIF
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm~\ref{alg:tick} summarizes the control loop Section~\ref{sec:system} describes in prose.
+Agent priority orders recovery above schema above optimization, and the non-agent configurations
+skip the loop entirely, resolving faults directly instead (Section~\ref{sec:method}).

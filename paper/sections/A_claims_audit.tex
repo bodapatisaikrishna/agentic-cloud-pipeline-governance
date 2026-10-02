@@ -1,0 +1,58 @@
+\section{Claims audit}\label{app:claims}
+
+Every quantitative claim in \S\ref{sec:results} traces to a committed artifact and the script that
+produced it from raw telemetry, both under version control; running \texttt{make paper-repro-quick}
+(Appendix~\ref{app:repro}) regenerates every number in this table from the committed data with
+identical file hashes. The research artifacts behind each phase of this manuscript's own drafting
+process (codebase inventory, filled results, gap analysis) are likewise committed, at
+\texttt{paper2/}.
+
+\begin{table*}[t]
+\centering
+\caption{Claims audit: every quantitative claim in \S\ref{sec:results}, its evidence artifact, and
+  the script that generated it.}
+\label{tab:claims}
+\small
+\begin{tabular}{@{}p{0.38\linewidth}p{0.27\linewidth}p{0.27\linewidth}@{}}
+\toprule
+Claim & Evidence artifact & Generating code \\
+\midrule
+\texttt{full} vs.\ \texttt{baseline}: MTTR $\NRelpctMttrSFull{}$\%, cost $\NRelpctCostUnitsFull{}$\%,
+  both $p_{\mathrm{Holm}}<0.05$ &
+  Tables~\ref{tab:main}, \ref{tab:effects} &
+  \texttt{analysis.paper\_stats}, \texttt{paper\_artifacts} \\
+\texttt{full} increases manual interventions vs.\ \texttt{baseline} ($\NRelpctManualInterventionsFull{}$\%) &
+  Table~\ref{tab:effects} &
+  \texttt{analysis.paper\_stats} \\
+\texttt{rule\_based}/\texttt{autoscale} beat every agent config on MTTR &
+  Table~\ref{tab:main} &
+  \texttt{analysis.paper\_stats} \\
+Decision-correct rate: \texttt{full} $\NDeltaDecisionCorrectFull{}$; only \texttt{full},
+  \texttt{optimization\_only}, \texttt{schema\_only} significant &
+  Table~\ref{tab:effects} &
+  \texttt{experiments.\allowbreak decision\_quality}, \texttt{analysis.paper\_stats} \\
+Mock vs.\ live divergence: MTTR \NLiveVsMockMttrSLive{}\,s vs.\ \NLiveVsMockMttrSMock{}\,s;
+  decision-correct \NLiveVsMockDecisionCorrectLive{} vs.\ \NLiveVsMockDecisionCorrectMock{} &
+  Table~\ref{tab:live_mock}, Figure~\ref{fig:live_mock} &
+  \texttt{analysis.\allowbreak paper\_stats} (arms A, C), \texttt{paper\_\allowbreak figures} \\
+Adversarial containment $\geq\NAdversarialWilsonLo{}$ (Wilson 95\%), zero over-block, zero fail-open &
+  Table~\ref{tab:adversarial}, \texttt{results/\allowbreak adversarial.json} &
+  \texttt{eval.adversarial\_corpus} \\
+Sensitivity break-evens (human latency, static provisioning) &
+  Table~\ref{tab:sensitivity}, Figs.~\ref{fig:human_sensitivity}--\ref{fig:cost} &
+  \texttt{analysis.sensitivity} \\
+Zero degraded/invalid live LLM calls in the final campaign &
+  Table~\ref{tab:llm} &
+  \texttt{llm.client.LLMStats}, harvested by \texttt{experiments.runner} \\
+\NRunsTotal{}/\NRunsTotal{} runs completed, zero aborts, one documented provenance deviation (D-104m/n) &
+  \texttt{results/\allowbreak campaign\_status.json}, \texttt{DEVIATIONS.md} &
+  \texttt{experiments.campaign} \\
+Cross-model sweep and trust-core evaluation not run; framed as future work, not measured &
+  \texttt{paper2/\allowbreak GAP\_ANALYSIS.md}, \texttt{paper2/\allowbreak results\_filled.md} &
+  n/a: absence verified by exhaustive repository search \\
+L1--L7 production-hardening lessons (\S\ref{sec:lessons}) &
+  \texttt{DEVIATIONS.md} (entries cited per lesson) &
+  Regression tests named in each entry \\
+\bottomrule
+\end{tabular}
+\end{table*}
