@@ -15,15 +15,15 @@ and a flag $v$ marking whether a prior version exists. The gate returns one of \
 \textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
 
 \paragraph{Gate semantics}
-The gate checks the rate limit before any agent-specific policy and defaults toward the human on
-failure:
+The gate checks the rate limit of Eq.~\eqref{eq:rate} before any agent-specific policy and defaults
+toward the human on failure:
 \begin{equation}
   G(a,c) = \textsc{deny} \quad \text{if } n \ge n_{\max}, \qquad n_{\max}=5,
   \label{eq:rate}
 \end{equation}
 and any proposal that matches no policy pack, or that cannot be evaluated because the policy engine
 is unreachable, is escalated rather than allowed. An optimization action that scales resources
-clears the cost policy only if
+clears the cost policy only if the condition in Eq.~\eqref{eq:budget} holds:
 \begin{equation}
   m \le 0 \quad \text{or} \quad m \le B,
   \label{eq:budget}
@@ -33,7 +33,8 @@ $v$ holds, and a schema change is permitted only when $\kappa$ is backward-compa
 Section~\ref{sec:system} describes all four policy packs.
 
 \paragraph{Metrics}
-Each run injects a single fault. Its recovery time, cost, and decision correctness are
+Each run injects a single fault. Its recovery time, cost, and decision correctness are given by Eqs.~\eqref{eq:mttr},
+\eqref{eq:cost}, and~\eqref{eq:decision}:
 \begin{align}
   \mathrm{MTTR}(r) &= t_r - t_f, \label{eq:mttr}\\
   C(r) &= C_{\mathrm{meas}}(r) + \rho_c\, u_\pi\, T_h, \label{eq:cost}\\
@@ -45,20 +46,20 @@ configuration $\pi$ holds over the horizon $T_h = 300$\,s; and $\mathcal{A}^{*}(
 mitigation set for the injected fault. The three configurations that right-size,
 \texttt{autoscale}, \texttt{optimization\_only}, and \texttt{full}, hold $u_\pi = 3$ units, and the
 rest hold a static $u_\pi = 8$. Non-agent configurations never execute an agent mitigation, so
-$D(r)=0$ for them by construction. Our MTTR includes detection lag, since $t_f$ here is the
+$D(r)$ in Eq.~\eqref{eq:decision} is $0$ for them by construction. Our MTTR in Eq.~\eqref{eq:mttr} includes detection lag, since $t_f$ here is the
 injection time, whereas the base paper measures recovery from detection to resumption. Manual
 interventions and data freshness are direct counts and lags read from telemetry.
 
 \paragraph{The evaluation-validity question}
 Let $\tilde{x}_{\mathrm{live}}$ and $\tilde{x}_{\mathrm{mock}}$ denote the median of metric $x$ for
 the same configuration under a real language model and under a deterministic mock, respectively. We
-define the divergence ratio
+define the divergence ratio as
 \begin{equation}
   R_x = \frac{\tilde{x}_{\mathrm{live}}}{\tilde{x}_{\mathrm{mock}}}.
   \label{eq:ratio}
 \end{equation}
-Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only when $R_x$ sits close
-to one. Section~\ref{sec:livemock} measures $R_x$ for every metric, and RQ4 of
+Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only when $R_x$ of
+Eq.~\eqref{eq:ratio} sits close to one. Section~\ref{sec:livemock} measures $R_x$ for every metric, and RQ4 of
 Section~\ref{sec:intro} asks how far it strays from one.
 
 \paragraph{Threat model}

@@ -3,8 +3,8 @@ A recent proposal governs cloud data pipelines with four policy-gated LLM agents
 substantial gains over static orchestration. The original study does not give enough implementation
 detail to pin down the exact model-in-the-loop evaluation condition behind those gains. We build the
 system and test it with a real, remote language model, in a \NRunsTotal{}-run campaign that crosses
-four injected fault scenarios with eight configurations (three non-agent comparators, the full
-system, and four single-agent ablations) and splits into live-agent, non-agent, and mock-model arms.
+four injected fault scenarios with eight configurations: three non-agent comparators, the full
+system, and four single-agent ablations. The runs split into live-agent, non-agent, and mock-model arms.
 Under a live model, the full system changes mean time to recovery (MTTR) by \NRelpctMttrSFull{}\% and
 cost by \NRelpctCostUnitsFull{}\% relative to static orchestration, yet it \emph{increases} manual
 interventions by \NRelpctManualInterventionsFull{}\%. Two idealized non-LLM baselines, each given a

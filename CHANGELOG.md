@@ -6,6 +6,17 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Manuscript revision (D-104r; also records the D-104p rewrite and D-104q IEEE reformat, which had
+  no entry here)**: IEEEtran manuscript restructured around the mock-versus-live finding, with a new
+  Problem-formulation section (equations and Algorithm 1), five research questions answered in the
+  Results, a testbed table, and the seven-layer architecture as Figure 1. Two earlier claims were
+  corrected after reading the code and the base paper: the `rule_based`/`autoscale` baselines are
+  modelled with fixed 30 s/20 s latencies (now disclosed as idealized comparators, with two added
+  threats to validity), and several statements about the base paper's baseline, cost metric and
+  model-agnosticism now match its text. The pooled cost saving is reported alongside its scenario
+  dependence. Bibliography grown to 87 verified entries, then trimmed to 30, with DOIs on 28.
+  Appendix and statements sections removed from the PDF (source files kept). Figure 3 panel titles
+  and Figure 7's break-even line fixed; new usage/ratio/per-scenario macros in the generator.
 - **Journal-quality completion pass (D-104o)**: research-grounded gap-fill on the manuscript before
   handoff to a writing pass — a new architecture figure (`fig_arch.pdf`, fixing a previously dangling
   `\ref{fig:arch}`) and a new mock-vs-live comparison figure (`fig_live_mock.pdf`), both generated the

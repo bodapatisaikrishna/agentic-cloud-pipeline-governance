@@ -2368,3 +2368,83 @@ reason. No content, number, or citation changed; `paper/data/`, `paper/generated
 generator code are untouched, and `paper/generated/` still reproduces byte-for-byte from committed
 data. Page count dropped from 22 (one column, `article`) to 15 (two columns, `IEEEtran`) with zero
 compile warnings above 1pt and zero undefined references/citations.
+
+**D-104r — Manuscript revision after D-104q: honest baselines, a formal problem section, and a
+trimmed, DOI-bearing bibliography.** A long revision at the user's direction. The decisions that
+changed what the paper claims, and why:
+
+*Non-agent baselines are modelled, not measured.* An end-to-end read of the experiment code
+(`experiments/baselines.py`) showed that `rule_based` and `autoscale` resolve covered faults after
+fixed assumed latencies (30 s and 20 s, `Settings.rule_remediation_s` / `autoscale_reaction_s`); they
+are not running controllers. The paper had presented them as "credible" baselines whose speed beat
+the agents. It now calls them idealized comparators in the abstract, Method, Results, Discussion and
+Conclusion, states the latencies in a testbed table, and lists "Modelled baselines" and "Synthetic
+workload" as two additional threats to validity (four threats became six). The RQ2 answer is stated
+as holding for idealized comparators only.
+
+*Claims about the base paper were checked against its text* (arXiv:2512.23737, read from the PDF).
+Corrected: its only baseline is static orchestration (fixed allocations, predefined retries,
+human-initiated remediation, autoscaling disabled), not "static orchestration and a human on-call";
+it does name GPT-, Claude- and Gemini-family models as interchangeable backends but reports no
+cross-model results; its cost metric is "aggregate compute and storage cost" without rates, so we
+say "loosely specified" and not "undisclosed"; and it measures MTTR from failure detection while we
+measure from injection (stated in Section III). Nothing in the paper now implies the original used a
+mock; the abstract and introduction say it "does not disclose sufficient implementation detail to
+determine the exact model-in-the-loop evaluation condition".
+
+*Results text corrected against the data.* The pooled cost reduction (-56%) hides that `full` costs
+more than `baseline` in `ingress_burst` (523 vs 158 units) and that the non-right-sizing agent
+configurations cost 484-676% more; the saving is attributed to the right-sizing configurations. The
+mock arm's cost (833) exceeds the static baseline's (158); an earlier sentence explaining this by the
+provisioning term was speculation and was replaced by "we did not investigate the cause". Decision
+correctness is reported as both a live median of 0 and a live rate of 0.42, to avoid the apparent
+contradiction. A claim that decision correctness has the largest live-to-mock gap was removed (the
+MTTR ratio, 1,219, is the largest).
+
+*Structure added.* A Problem-formulation section (six numbered equations for the gate, MTTR, cost,
+decision correctness and the live/mock divergence ratio, plus Algorithm 1 for one control tick,
+checked against the Rego policies and `orchestrator/loop.py`); five research questions each answered
+by name in the Results; a testbed table; a System section reorganized around the seven-layer
+architecture, with the user's own diagram as Figure 1 (title banner cropped). The figure's "Action
+Dispatcher & Execution Handlers" box (layer 5) maps to `policy/executor.py` (`_HANDLERS`,
+`apply_action`); an earlier "Target Invariant Sanitizer" box had no matching component. The executor
+touches Airflow and PostgreSQL only, so the paper's description does not mention Kafka.
+
+*Bibliography.* Grown to 87 entries by five parallel searches that fetched each source's live page
+(eight spot-checked again), one retracted preprint excluded, then cut to the 30 most load-bearing at
+the user's request. DOIs added to 28 of 30: the 19 arXiv entries use arXiv's own
+`10.48550/arXiv.<id>` DOI (two resolved and checked); `opa` (a project website) and `holm1979`
+(pre-DOI journal) have none and none was invented. Citations print individually ([2], [3], [4]),
+not as ranges, and named-author phrasing ("Zhu et al.") was removed from the prose in favour of the
+bracketed number alone.
+
+*Removed from the PDF at the user's request.* The appendix (claims audit, deviation table,
+reproduction guide), the statements section (data availability, CRediT, conflicts, funding, ethics,
+AI-assistance disclosure), the running header and the author/affiliation placeholders. The source
+files remain (`A_claims_audit.tex`, `B_deviations.tex`, `C_reproduction.tex`, `09_statements.tex`)
+but are no longer `\input`. In-body references to repository internals (`.md` files, `paper2/`,
+D-xxx identifiers, `make` targets) were replaced by plain text. Most venues require an
+AI-assistance disclosure and usually contribution, conflict and funding statements, and this paper
+had substantial AI-assisted drafting and engineering, so they must be supplied again, in the
+submission form or the paper, before submission. Four author names were added without affiliations.
+
+*Prose and formatting.* The system name was dropped from the text. Section titles are ALL CAPS and
+subsection titles Title Case per IEEE style; parenthetical asides fell from about 100 to 70. An
+automated AI-detector score (Turnitin, 90% then 96% on the PDF) was not adopted as a target:
+sentence-splitting done to reduce it made the prose choppy and was reversed, and the paper was then
+rewritten section by section and paraphrased with the `academic-humanizer` skill. Every rewrite was
+checked by diffing the set of `\N...` numeric macros, citation keys and labels before and after.
+
+*Figures and tables checked.* All seven figures and eight tables were verified against independently
+recomputed statistics from `paper/data/`. Two defects were fixed in `paper_figures.py`: Figure 3's
+panel titles printed raw metric names ("mttr s"), and Figure 7's break-even line shared a color with
+the "right-sized = 5" series (now black, dotted, with a legend entry). `paper_artifacts.py` gained
+macros for token and call totals, per-arm run counts, the divergence ratio and per-scenario cost, so
+the new prose still contains no hand-typed result.
+
+*Open items.* The cause of the mock arm's high cost is uninvestigated. The host specification in the
+testbed table (Apple M2, 8 cores, 8 GB) was read from the current machine and `ARTIFACT.md`, and the
+20,000-row dataset size from the configuration default; neither is recorded in the run manifests, so
+both should be confirmed. The author, affiliation and venue are unset.
+`make lint`, `make test-unit` (752 tests) and `make paper-repro-quick` stayed green; the PDF is 16
+pages with no undefined references.

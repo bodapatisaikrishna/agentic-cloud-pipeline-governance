@@ -21,7 +21,7 @@ partitions, while a streaming consumer reads from a Redpanda topic. All telemetr
 resource usage, task runs, agent actions, failure events, and manual interventions alike, lands in a
 PostgreSQL \texttt{telemetry} schema, and every experimental metric in this paper is reconstructed
 from that schema rather than logged separately. The same layer tracks data freshness and failure
-events and keeps the cost ledger that backs the cost model of Section~\ref{sec:problem}.
+events and keeps the cost ledger that backs the cost model of Eq.~\ref{eq:cost}.
 
 \paragraph{Layers 3 and 6: agents and orchestration}
 Four agents share a single loop: \emph{observe} a telemetry snapshot, \emph{reason} with a live or
@@ -45,7 +45,7 @@ turn degrading to \texttt{no\_action}. Agents never emit or execute code.
 \paragraph{Layer 4: policy gate}
 Every proposal carries a system-built context: projected marginal cost, remaining budget, the count
 of actions taken in the last ten minutes, schema compatibility, and whether a prior version exists.
-Four Rego policy packs evaluate it, namely a rate limit, a cost budget, a recovery-approval policy
+Four Rego policy packs evaluate it, namely a rate limit (Eq.~\ref{eq:rate}), a cost budget (Eq.~\ref{eq:budget}), a recovery-approval policy
 that permits rollback only when a prior version exists, and a schema-compatibility policy. The
 resulting decision is allow, deny, escalate, or allow-and-notify, and an unreachable policy engine
 makes the gate escalate rather than allow by default.

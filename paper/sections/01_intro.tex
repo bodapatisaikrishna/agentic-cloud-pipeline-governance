@@ -20,7 +20,7 @@ orchestration. Four gaps separate that claim from the evidence for it.
   \item \emph{Adversarial testing.} The safety case rests on the policy gate, yet a stated bound is not the same as a tested one. Agent-security benchmarks report high attack success against weak
     defenses~\cite{debenedetti2024agentdojo,zhang2024asb}, and the policy language itself has been
     criticized as too weak for agentic governance~\cite{joshi2026deontic}.
-  \item \emph{Statistics and generality.} No confidence intervals, effect sizes, or run counts are reported. GPT-, Claude-, and Gemini-family models are described as interchangeable backends whose differences touched only verbosity and latency, yet no cross-model results back that claim, and agent behavior has elsewhere been shown to vary across models and providers~\cite{sanna2025crossllm,zhang2026towardagentic}.
+  \item \emph{Statistics and generality.} No confidence intervals, effect sizes, or run counts are reported. The GPT, Claude, and Gemini model families are described as interchangeable backends whose differences touched only verbosity and latency, yet no cross-model results back that claim, and agent behavior has elsewhere been shown to vary across models and providers~\cite{sanna2025crossllm,zhang2026towardagentic}.
 \end{enumerate}
 We build the system and put five questions to it.
 \begin{enumerate}
@@ -63,7 +63,7 @@ A contribution counts here only if this campaign both implements and measures it
   \item \textbf{A disclosed, testable cost model} that turns the base paper's loosely specified cost
     metric into a reproducible one, together with closed-form sensitivity analyses for the two
     assumptions the headline numbers depend on: the simulated human's latency and the cost model's
-    provisioning gap.
+    provisioning gap (Eq.~\ref{eq:cost}).
 \end{enumerate}
 Two further contributions are implemented but this campaign never exercised them, so we present them
 as architecture rather than results. A cross-model harness could test the base paper's model-agnostic
