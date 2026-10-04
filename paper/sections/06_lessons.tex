@@ -6,7 +6,7 @@ headline numbers: the path exercised was not the path production takes. Each les
 through an audit or an experiment rather than a failing test, was measured before it was fixed, and
 is documented in the accompanying artifact.
 
-\paragraph{L1: the shared resource nobody declared concurrency-unsafe}
+\subsection{L1: The Shared Resource Nobody Declared Concurrency-Unsafe}
 The base design asserts that execution is deterministic and auditable. Versioned partition creation,
 though, read the current maximum version and then dropped, created, and registered a table across
 separate statements with no lock between them, so two concurrent callers targeting the same
@@ -16,7 +16,7 @@ had triggered the same DAG as an unrelated test. The fix serializes the read-mod
 database advisory lock. \emph{Lesson:} once an agent can trigger real work, every shared resource it
 touches becomes a concurrency surface that a single-actor test never exercises.
 
-\paragraph{L2: an action could be lost from the audit trail}
+\subsection{L2: An Action Could Be Lost From the Audit Trail}
 The audit row was originally written \emph{after} execution, so a crash, an out-of-memory kill, or a
 database blip in that window could leave an action that genuinely happened with no record of it, and
 because the control loop swallows per-tick exceptions, the failure stayed silent. For a system whose
@@ -25,7 +25,7 @@ trail falsifies that claim outright. The intent row, carrying the policy verdict
 now committed \emph{before} execution and updated afterward with the outcome. \emph{Lesson:} record
 the intent before the action, not after.
 
-\paragraph{L3: the detector that had no callers}
+\subsection{L3: The Detector That Had No Callers}
 The table that both recovery-time statistics and decision scoring depend on was written only by the
 fault injector. The monitoring agent updated an existing row's detection time but never created a new
 one, leaving a complete, unit-tested, deterministic anomaly detector with no caller at all. In a
@@ -35,7 +35,7 @@ gap turned up while planning a later feature, by reading the code rather than th
 test. \emph{Lesson:} a component can pass every test it owns and still be disconnected, so trace the
 data path from production input all the way to the reported metric.
 
-\paragraph{L4: two taxonomies that never met}
+\subsection{L4: Two Taxonomies That Never Met}
 Decision correctness is scored against an accepted-mitigation set (Eq.~\ref{eq:decision}) keyed by the \emph{injected
 scenario}'s name, while live incidents carry different fault-type names altogether. Applying that set
 to live incidents would have marked every real incident ``incorrect by construction.'' A mapping from
@@ -43,7 +43,7 @@ live fault types onto the same accepted-mitigation set was added before the metr
 outside the experiment harness. \emph{Lesson:} a metric defined in the experiment's own vocabulary
 cannot move into production without an explicit mapping.
 
-\paragraph{L5: hermeticity by enumeration does not scale}
+\subsection{L5: Hermeticity by Enumeration Does Not Scale}
 One class of unit-test failure kept recurring: a test that forgot to mock one module's database
 handle turned a millisecond test into a thirty-second pool timeout. We patched it instance by
 instance four separate times before addressing the underlying mechanism. Every such call now runs
@@ -51,7 +51,7 @@ through a single connection-pool accessor patched to fail fast under test. Mutat
 by removing one load-bearing mock failed six tests within seconds, each naming the exact cause.
 \emph{Lesson:} once the same bug surfaces a fourth time, fix the mechanism, not the instance.
 
-\paragraph{L6: what the adversarial corpus found}
+\subsection{L6: What the Adversarial Corpus Found}
 Grading a generated corpus against an independent oracle surfaced three things (numbers in
 Section~\ref{sec:results}). First, the cost policy priced a scaling target against the budget but
 said nothing about its floor: zero workers, which halts ingestion entirely, was budget-legal, and so
@@ -71,7 +71,7 @@ graded case. The containment claim is therefore a measured property with a confi
 an assertion repeated from the code under test. \emph{Lesson:} a safety property a policy's own
 authors assert is not evidence until an independent oracle has tried to break it.
 
-\paragraph{L7: the pilot found a dead model}
+\subsection{L7: The Pilot Found a Dead Model}
 Before the live campaign, an eight-run pilot at the real paper timings measured cost and wall time.
 Within minutes it found that the provider had retired the small model configured for the monitoring
 agent (HTTP 410, end of life). Since monitoring is the detector in every non-baseline configuration,

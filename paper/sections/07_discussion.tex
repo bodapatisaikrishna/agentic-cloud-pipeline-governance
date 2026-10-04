@@ -1,6 +1,6 @@
 \section{DISCUSSION}\label{sec:discussion}
 
-\paragraph{Implications for evaluating governed agents}
+\subsection{Implications for Evaluating Governed Agents}
 The mock-versus-live divergence (Section~\ref{sec:livemock}) is itself a claim about how systems like
 this one should be evaluated, and four practices follow from the results and lessons of
 Section~\ref{sec:lessons}. First, state whether the model in the loop was real or mocked, and give
@@ -12,7 +12,7 @@ independent oracle here caught two contract-layer gaps the system's own tests ha
 a short, paid pilot at the real settings before committing to a long campaign; ours caught a retired
 model on its very first call.
 
-\paragraph{Deployment implications}
+\subsection{Deployment Implications}
 The decision-quality figure most relevant to deployment is $\NDeltaDecisionCorrectFull{}$, not the
 headline MTTR number: at these settings \texttt{full} executes an accepted mitigation in under half
 its runs. Taken together with the rise in manual interventions, this campaign offers no support for
@@ -23,7 +23,7 @@ argues against treating the research benchmark's default of full autonomy as a d
 recommendation. For now, the trust core is an architectural response to a question our own
 measurements raise; we have not yet measured whether it actually works.
 
-\paragraph{The manual-intervention mechanism is measured, not explained}
+\subsection{The Manual-Intervention Mechanism Is Measured, Not Explained}
 Section~\ref{sec:results} reports that \texttt{full} and \texttt{recovery\_only} increase manual
 interventions relative to \texttt{baseline}, contrary to the base paper's claim. We confirmed the
 measurement itself: the metric is a direct count of rows in the
@@ -37,7 +37,7 @@ system's favor.
 
 \subsection{Limitations and Threats to Validity}\label{sec:limitations}
 
-\paragraph{Threats to validity}
+\subsubsection{Threats to Validity}
 Six threats apply directly. \emph{Simulated human.} Every comparison against \texttt{baseline}
 inherits the log-normal on-call model; Section~\ref{sec:sensitivity} reports its break-even rather
 than defending the model itself. \emph{Modelled baselines.} \texttt{rule\_based} and
@@ -57,7 +57,7 @@ configurations share fault or human-latency randomness at a matched (scenario, r
 therefore used the unpaired rank-sum test as primary, and the retained signed-rank statistic should
 not be treated as evidence from a genuinely paired design.
 
-\paragraph{Scope of the testbed}
+\subsubsection{Scope of the Testbed}
 The testbed is one machine. The resource-contention scenario applies real CPU stress, which is also
 why runs cannot be parallelized and why the campaign's size is bounded. The policy engine is pinned
 to one release, and lesson L6 (Section~\ref{sec:lessons}) shows that a newer release from the same
@@ -67,7 +67,7 @@ types were injected, while a real pipeline's incident taxonomy runs larger, and 
 (Section~\ref{sec:lessons}) shows that mapping an injected fault type onto a real incident type is
 not free.
 
-\paragraph{Evidence gaps}
+\subsubsection{Evidence Gaps}
 Two contributions described in Section~\ref{sec:system} are implemented but not evaluated, and a
 third gap sits inside a contribution that otherwise is evaluated. \emph{Cross-model generalization.}
 The harness that could test the base paper's model-agnostic claim is unit-tested, but its live sweep
@@ -85,7 +85,7 @@ transition under load and logs the timing; extend the metrics harvest to persist
 component breakdown. None of the three is a design flaw. Each is simply evidence this campaign did
 not collect.
 
-\paragraph{What would change our conclusion}
+\subsubsection{What Would Change Our Conclusion}
 A cross-model repetition of Section~\ref{sec:livemock} that reproduced the same order-of-magnitude
 mock-versus-live gap with a different provider would strengthen the central claim considerably. One
 that did not would suggest the gap is specific to this model pairing rather than a property of mock

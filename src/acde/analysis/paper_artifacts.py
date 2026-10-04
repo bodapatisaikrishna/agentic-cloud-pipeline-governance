@@ -64,6 +64,11 @@ def tex(text: object) -> str:
     return out
 
 
+def true_minus(text: str) -> str:
+    """Typeset a leading hyphen-minus as a real minus sign (no line break after it)."""
+    return r"\ensuremath{-}" + text[1:] if text.startswith("-") else text
+
+
 def fnum(x: float | None, sig: int = 3) -> str:
     """Compact fixed-significance number; ``--`` for missing."""
     if x is None or (isinstance(x, float) and x != x):
@@ -72,8 +77,8 @@ def fnum(x: float | None, sig: int = 3) -> str:
         return "0"
     mag = abs(x)
     if mag >= 1000:
-        return f"{x:,.0f}".replace(",", "{,}")
-    return f"{x:.{max(sig - 1 - int(f'{mag:e}'.split('e')[1]), 0)}f}"
+        return true_minus(f"{x:,.0f}".replace(",", "{,}"))
+    return true_minus(f"{x:.{max(sig - 1 - int(f'{mag:e}'.split('e')[1]), 0)}f}")
 
 
 def fp(p: float | None) -> str:
@@ -142,7 +147,8 @@ def main_table(prim: pd.DataFrame, configs: Sequence[str]) -> str:
 
 def _delta_cell(r: dict[str, Any]) -> str:
     lo, hi = r["cliffs_delta_ci"]
-    return f"{r['cliffs_delta']:.2f} {fci(lo, hi, sig=2)}"
+    point = true_minus(f"{r['cliffs_delta']:.2f}")
+    return f"{point} {fci(lo, hi, sig=2)}"
 
 
 def effects_table(rows: Sequence[dict[str, Any]]) -> str:
@@ -321,13 +327,13 @@ def _headline_numbers(
     for r in comps:
         tag = (r["metric"], r["config"])
         nums.add(fnum(r["median_diff"]), "diff", *tag)
-        nums.add(f"{r['cliffs_delta']:.2f}", "delta", *tag)
+        nums.add(true_minus(f"{r['cliffs_delta']:.2f}"), "delta", *tag)
         lo, hi = r["cliffs_delta_ci"]
-        nums.add(f"{lo:.2f}", "deltaLo", *tag)
-        nums.add(f"{hi:.2f}", "deltaHi", *tag)
+        nums.add(true_minus(f"{lo:.2f}"), "deltaLo", *tag)
+        nums.add(true_minus(f"{hi:.2f}"), "deltaHi", *tag)
         nums.add(fp(r["p_holm"]), "pHolm", *tag)
         if r["relative_change_pct"] is not None:
-            nums.add(f"{r['relative_change_pct']:.0f}", "relpct", *tag)
+            nums.add(true_minus(f"{r['relative_change_pct']:.0f}"), "relpct", *tag)
     for r in lvm:
         nums.add(fnum(r["median_treat"]), "LiveVsMock", r["metric"], "live")
         nums.add(fnum(r["median_control"]), "LiveVsMock", r["metric"], "mock")

@@ -34,8 +34,7 @@ We build the system and put five questions to it.
     independent of the policy code?
 \end{enumerate}
 
-\paragraph{Central finding}
-RQ4 proves decisive. Running the identical \texttt{full} configuration first under a deterministic
+Of the five, RQ4 matters most. Running the identical \texttt{full} configuration first under a deterministic
 mock and then under a real, remote model produces results that disagree by roughly three orders of
 magnitude on recovery time, and on whether the executed mitigation was even correct
 (Section~\ref{sec:results}). The mock run is not wrong in any ordinary sense; it faithfully measures
@@ -45,7 +44,6 @@ paper is conditional on that divergence: an evaluation built on the mock's near-
 cost model that assumes away the provisioning gap it rests on, would report gains a live deployment
 simply does not deliver.
 
-\paragraph{Contributions}
 A contribution counts here only if this campaign both implements and measures it. Four qualify.
 \begin{enumerate}
   \item \textbf{A live-model evaluation} spanning eight configurations, namely three non-agent
@@ -65,7 +63,7 @@ A contribution counts here only if this campaign both implements and measures it
     assumptions the headline numbers depend on: the simulated human's latency and the cost model's
     provisioning gap (Eq.~\ref{eq:cost}).
 \end{enumerate}
-Two further contributions are implemented but this campaign never exercised them, so we present them
+Two further contributions are implemented but were never exercised by this campaign, so we present them
 as architecture rather than results. A cross-model harness could test the base paper's model-agnostic
 claim, but its live sweep has not yet run against real providers. A production trust core, with
 graduated autonomy, a durable kill switch, and a per-target blast-radius cap, exists too, but every
@@ -75,7 +73,6 @@ returns to them as the concrete gaps future work would close. Finally, a set of
 \textbf{production-hardening lessons} (Section~\ref{sec:lessons}) records defects this system
 actually exhibited.
 
-\paragraph{What is not novel}
 The architecture itself, its three planes, four bounded agents, policy gate, and
 observe--reason--propose loop, belongs to Kirubakaran et~al.; we implemented it rather than invented
 it. We claim no new agent design, policy language, or statistical method. What is ours is the
@@ -83,7 +80,6 @@ evidence, the measurement discipline that produced it, and the defects uncovered
 system to its own stated guarantees rather than to a test suite built around the same assumptions the
 system makes.
 
-\paragraph{Organization}
 Section~\ref{sec:related} surveys related work, Section~\ref{sec:problem} formalizes the problem and
 the metrics, and Section~\ref{sec:system} describes the system as built. Section~\ref{sec:method}
 lays out the experimental design, and Section~\ref{sec:results} presents the results around the

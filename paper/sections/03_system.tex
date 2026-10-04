@@ -15,7 +15,7 @@ rest of this section follows the layers in order.
 \label{fig:arch}
 \end{figure*}
 
-\paragraph{Layers 1 and 2: data plane and telemetry}
+\subsection{Layers 1 and 2: Data Plane and Telemetry}
 A batch pipeline in Apache Airflow ingests a TPC-DS-derived dataset into versioned warehouse
 partitions, while a streaming consumer reads from a Redpanda topic. All telemetry, pipeline metrics,
 resource usage, task runs, agent actions, failure events, and manual interventions alike, lands in a
@@ -23,7 +23,7 @@ PostgreSQL \texttt{telemetry} schema, and every experimental metric in this pape
 from that schema rather than logged separately. The same layer tracks data freshness and failure
 events and keeps the cost ledger that backs the cost model of Eq.~\ref{eq:cost}.
 
-\paragraph{Layers 3 and 6: agents and orchestration}
+\subsection{Layers 3 and 6: Agents and Orchestration}
 Four agents share a single loop: \emph{observe} a telemetry snapshot, \emph{reason} with a live or
 mock language model, \emph{propose}, and \emph{act}. Monitoring is the detector, enabled in every
 non-baseline configuration so recovery time stays measurable in every ablation. Optimization scales
@@ -34,7 +34,7 @@ than lock ordering, since an earlier design that leaned on lock ordering for thi
 not to provide it; a per-target advisory lock still guards against a second process acting on the
 same target.
 
-\paragraph{The contract between layers 3 and 4}
+\subsection{The Contract Between Layers 3 and 4}
 An agent's only output is a \texttt{ProposedAction} carrying six fields: agent, action type, target,
 parameters, justification, and confidence. A typed schema validates it, rejecting any action type
 outside the agent's allowlist and any scaling target that is not an integer of at least one. That
@@ -42,7 +42,7 @@ second check exists because the adversarial corpus (Section~\ref{sec:results}) f
 Invalid output is rejected, logged, and counted as \texttt{agent\_output\_invalid}, with the agent's
 turn degrading to \texttt{no\_action}. Agents never emit or execute code.
 
-\paragraph{Layer 4: policy gate}
+\subsection{Layer 4: Policy Gate}
 Every proposal carries a system-built context: projected marginal cost, remaining budget, the count
 of actions taken in the last ten minutes, schema compatibility, and whether a prior version exists.
 Four Rego policy packs evaluate it, namely a rate limit (Eq.~\ref{eq:rate}), a cost budget (Eq.~\ref{eq:budget}), a recovery-approval policy
@@ -50,7 +50,7 @@ that permits rollback only when a prior version exists, and a schema-compatibili
 resulting decision is allow, deny, escalate, or allow-and-notify, and an unreachable policy engine
 makes the gate escalate rather than allow by default.
 
-\paragraph{Layer 5: execution and audit}
+\subsection{Layer 5: Execution and Audit}
 An intent row is written and committed \emph{before} the executor runs and is updated with the
 outcome afterward, so a crash mid-action leaves a durable \texttt{executing} row rather than no row
 at all; this write-ahead ordering is a later fix, not part of the original design. An action
@@ -58,28 +58,28 @@ dispatcher then routes each allowed action type to a handler that carries out it
 Airflow by triggering DAG runs, clearing tasks, and patching pool slots, or on PostgreSQL by
 rollback, quarantine, schema mapping, and desired-state updates.
 
-\paragraph{Simulated human}
+\subsection{Simulated Human}
 Escalations resolve after a seeded log-normal delay (median \NHumanMedian{}\,s,
 $\sigma=\NHumanSigma{}$) standing in for the on-call engineer. This is a modeling choice rather than
 a measurement, and Section~\ref{sec:sensitivity} quantifies how much the headline results lean on
 it.
 
-\paragraph{Cross-model harness, implemented but not evaluated}
+\subsection{Cross-Model Harness, Implemented but Not Evaluated}
 A cross-model harness pushes a scenario through a configurable set of LLM backends and scores
 decision correctness, latency, and tokens per model, a direct test of the base paper's
 model-agnostic claim. The harness is unit-tested, but this campaign never ran or recorded the sweep
 across real provider models, so no result from it appears here.
 
-\paragraph{Layers 5 and 6: trust core, implemented but not evaluated}
+\subsection{Layers 5 and 6: Trust Core, Implemented but Not Evaluated}
 Beyond the base paper's design, the system adds a graduated-autonomy layer with three modes.
 \texttt{shadow} mode logs proposals without touching the pipeline; \texttt{approval} mode queues
 allowed actions for a human decision; \texttt{autonomous} mode executes them outright. A durable kill
 switch, checked once per control-loop tick, and a per-target hourly blast-radius cap bound the agents
 independently of policy. Every mechanism is implemented and unit-tested, yet the campaign ran every
-configuration in one fixed mode throughout, so this paragraph describes capability, not something we
+configuration in one fixed mode throughout, so this subsection describes capability, not something we
 measured.
 
-\paragraph{Layer 7: enterprise governance, implemented but not evaluated}
+\subsection{Layer 7: Enterprise Governance, Implemented but Not Evaluated}
 An operator API gives read access to proposals, the audit trail, and costs, and exports the full
 audit log through a keyset cursor. Role-based access control, spanning viewer, approver, and admin
 roles, together with a tenant registry, binds each actor to a tenant and lets an operator suspend

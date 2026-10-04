@@ -1,6 +1,6 @@
 \section{PROBLEM FORMULATION}\label{sec:problem}
 
-\paragraph{Setting}
+\subsection{Setting}
 A pipeline emits a telemetry snapshot $s_k$ at every control tick $k$, with tick period
 $\tau = 15$\,s. A fault $f$ is injected at time $t_f$, detected at $t_d \ge t_f$, and resolved at
 $t_r \ge t_d$, either through an executed mitigation or an escalation the on-call engineer handles. A
@@ -14,7 +14,7 @@ the number $n$ of actions taken in the last ten minutes, the schema-compatibilit
 and a flag $v$ marking whether a prior version exists. The gate returns one of \textsc{allow},
 \textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
 
-\paragraph{Gate semantics}
+\subsection{Gate Semantics}
 The gate checks the rate limit of Eq.~\eqref{eq:rate} before any agent-specific policy and defaults
 toward the human on failure:
 \begin{equation}
@@ -32,7 +32,7 @@ so a scale-down, carrying non-positive marginal cost, always clears. Rollback is
 $v$ holds, and a schema change is permitted only when $\kappa$ is backward-compatible.
 Section~\ref{sec:system} describes all four policy packs.
 
-\paragraph{Metrics}
+\subsection{Metrics}
 Each run injects a single fault. Its recovery time, cost, and decision correctness are given by Eqs.~\eqref{eq:mttr},
 \eqref{eq:cost}, and~\eqref{eq:decision}:
 \begin{align}
@@ -50,7 +50,7 @@ $D(r)$ in Eq.~\eqref{eq:decision} is $0$ for them by construction. Our MTTR in E
 injection time, whereas the base paper measures recovery from detection to resumption. Manual
 interventions and data freshness are direct counts and lags read from telemetry.
 
-\paragraph{The evaluation-validity question}
+\subsection{The Evaluation-Validity Question}
 Let $\tilde{x}_{\mathrm{live}}$ and $\tilde{x}_{\mathrm{mock}}$ denote the median of metric $x$ for
 the same configuration under a real language model and under a deterministic mock, respectively. We
 define the divergence ratio as
@@ -62,7 +62,7 @@ Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only 
 Eq.~\eqref{eq:ratio} sits close to one. Section~\ref{sec:livemock} measures $R_x$ for every metric, and RQ4 of
 Section~\ref{sec:intro} asks how far it strays from one.
 
-\paragraph{Threat model}
+\subsection{Threat Model}
 The adversary controls only its own proposal $a$. The context $c$, the policy engine, and the
 executor are trusted, system-built components. The safety property under test is containment: no
 proposal that the documented policy semantics classifies as unsafe may be allowed.
