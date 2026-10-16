@@ -6,7 +6,8 @@ system and test it with a real, remote language model, in a \NRunsTotal{}-run ca
 four injected fault scenarios with eight configurations: three non-agent comparators, the full
 system, and four single-agent ablations. The runs split into live-agent, non-agent, and mock-model arms.
 Under a live model, the full system changes mean time to recovery (MTTR) by \NRelpctMttrSFull{}\% and
-cost by \NRelpctCostUnitsFull{}\% relative to static orchestration, yet it \emph{increases} manual
+cost by \NRelpctCostUnitsFull{}\% relative to static orchestration, most of the latter from an
+assumed provisioning gap, yet it \emph{increases} manual
 interventions by \NRelpctManualInterventionsFull{}\%. Two idealized non-LLM baselines, each given a
 fixed modelled remediation latency, recover faster still, changing MTTR by
 \NRelpctMttrSRuleBased{}\% and \NRelpctMttrSAutoscale{}\%. Running the same \texttt{full}

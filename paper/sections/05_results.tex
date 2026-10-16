@@ -57,14 +57,20 @@ $p_{\mathrm{Holm}}\NPHolmCostUnitsFull{}$). Both effects reach significance, but
 smaller than the mock evaluation of the identical configuration produces
 (Section~\ref{sec:livemock}). Cost is the one headline claim that reaches or exceeds the base
 paper's reported 25\% reduction, with the caveat, quantified in Section~\ref{sec:sensitivity}, that
-it depends on the assumed provisioning gap. The pooled figure also conceals two features of the cost
+it depends on the assumed provisioning gap; most of the reduction comes from the provisioning term
+of Eq.~\eqref{eq:cost}, which is an assumption, rather than from metered compute. The pooled figure also conceals two features of the cost
 data. First, the saving is scenario-dependent: \texttt{full}'s median cost sits below
 \texttt{baseline}'s in three scenarios but above it in \texttt{ingress\_burst}
 (\NCostScenFullIngressBurst{} against \NCostScenBaselineIngressBurst{} units). Second, agent
 configurations that skip right-sizing cost far more than \texttt{baseline} in the pooled data:
 \texttt{monitor\_only} and \texttt{recovery\_only} by \NRelpctCostUnitsMonitorOnly{}\% and
-\NRelpctCostUnitsRecoveryOnly{}\%, and \texttt{schema\_only} by \NRelpctCostUnitsSchemaOnly{}\%. We
-did not investigate why. The saving is therefore better attributed to the right-sizing
+\NRelpctCostUnitsRecoveryOnly{}\%, and \texttt{schema\_only} by \NRelpctCostUnitsSchemaOnly{}\%. The
+excess lies entirely in the metered compute term of Eq.~\eqref{eq:cost}, since these
+configurations hold the same static allocation as \texttt{baseline}, and it is largely an artifact of
+how that term is measured (Section~\ref{sec:limitations}): resources are sampled once before
+injection and once after the settle, so an agent configuration meters compute over its full 300\,s
+loop, while a non-agent configuration, whose response completes without waiting, meters only a few
+seconds. The saving is therefore better attributed to the right-sizing
 configurations, chiefly the optimization agent, than to agent control in general.
 
 Manual interventions move in the opposite direction. The median climbs from
@@ -175,8 +181,15 @@ live correct-mitigation rate is \NDeltaDecisionCorrectFull{}; manual interventio
 \NLiveVsMockManualInterventionsLive{} to \NLiveVsMockManualInterventionsMock{}; and freshness falls
 from \NLiveVsMockFreshnessSLive{}\,s to \NLiveVsMockFreshnessSMock{}\,s. Cost moves the other way:
 live is cheaper than mock (\NLiveVsMockCostUnitsLive{} vs.\ \NLiveVsMockCostUnitsMock{} units), and
-the mock's cost even exceeds \texttt{baseline}'s. We did not track down the cause, so this particular
-comparison should be read with that caveat attached.
+the mock's cost even exceeds \texttt{baseline}'s. Most of this gap comes from the harness rather than the
+model. The Airflow pool size and the streaming-worker target are global settings that the campaign
+did not reset between runs, so each run inherits what the previous agent action left behind. The
+mock arm ran last, after \texttt{schema\_only}, and in the schema-drift and upstream-delay
+scenarios, where the mock's rule-based optimization agent takes no action, mock \texttt{full}
+meters exactly the same compute as live \texttt{schema\_only}. The live \texttt{full} arm ran
+first, from a different starting state, and its optimization agent acted in every scenario. The cost
+comparison between the two arms is therefore not a clean measurement of the model's effect, and we
+do not treat it as one.
 
 This answers RQ4. The mock evaluation is not a noisier or scaled-down stand-in for the live one; on
 recovery time and decision quality it is a categorically different and far more flattering

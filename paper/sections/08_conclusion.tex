@@ -3,7 +3,8 @@
 We built and evaluated a policy-gated multi-agent design for cloud pipeline governance against a
 live remote language model, explicit non-agent baselines, an adversarial evaluation against an
 independent oracle, and closed-form sensitivity analyses. The design only partly holds up. Against
-static orchestration it improves recovery time and cost by smaller margins than the original report
+static orchestration it improves recovery time, and cost under an assumed provisioning gap, by smaller margins than the
+original report
 claimed, it increases manual interventions, and two idealized non-LLM comparators recover faster
 still. The most consequential result, though, concerns the evaluation itself: run through the same
 code path, the identical configuration reaches very different conclusions under a deterministic mock

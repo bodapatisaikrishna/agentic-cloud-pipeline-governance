@@ -2448,3 +2448,67 @@ testbed table (Apple M2, 8 cores, 8 GB) was read from the current machine and `A
 both should be confirmed. The author, affiliation and venue are unset.
 `make lint`, `make test-unit` (752 tests) and `make paper-repro-quick` stayed green; the PDF is 16
 pages with no undefined references.
+
+## D-104s — Pre-submission audit: MTTR definition, cost-measurement confounds, references, figure
+
+**MTTR definition corrected.** The code (`experiments/runner.py`) measures MTTR as
+`resolved_ts − detected_ts`. The manuscript's Eq. 3 said `t_r − t_f`, and D-104r claimed we measure
+from injection, unlike the base paper. Both statements were wrong. Eq. 3 now reads `t_r − t_d`, the
+same definition the base paper uses. A related asymmetry is now disclosed as a threat to validity:
+- Non-agent configurations stamp `detected_ts = injected_ts` through a fixed monitor
+  (`baseline.py`, `baselines.py`).
+- Agent configurations start the clock only when the monitoring agent flags the fault.
+- The agents' MTTR therefore omits a detection interval that the non-agent figures include.
+
+**Cost metric confounds found (not fixable without re-running).** The audit of the unexplained
+mock-arm cost found two harness properties that make the metered term of Eq. 4 a poor like-for-like
+measure:
+
+1. *Unequal integration windows.* `run_one` samples resources twice: after warm-up and after the
+   settle. The metered compute is integrated between those two samples.
+   - Non-agent responses (`resolve_via_human`, `resolve_via_rules`, `resolve_via_autoscale`) back-fill
+     their timestamps and return immediately. Their window is therefore about 10 s: median wall time
+     130 s, 6 ledger rows.
+   - Agent configurations run the real 300 s loop: median wall time 432 s, 126 ledger rows.
+2. *State carried across runs.* `_reset_run` clears the run-scoped telemetry tables. It does not reset:
+   - the Airflow pool size, which `adjust_pool_slots` patches;
+   - `control.desired_state['streaming.workers']`.
+
+   Each run therefore inherits the last agent action. The arms ran in this order: live `full` →
+   ablations → baselines → mock `full`. Mock `full` meters exactly the same compute as live
+   `schema_only` in schema_drift and upstream_delay (787.5 units), where the mock's rule-based
+   optimization agent takes no action.
+
+**Effect on the paper.** Most of `full`'s cost reduction comes from the assumed provisioning term
+(D-061: 120 vs 45 units over the horizon), which was already disclosed with a break-even. The
+following parts of the paper now say so explicitly:
+- the abstract;
+- Results VI-A;
+- the live-vs-mock paragraph, whose earlier attribution to the mock's optimization rules alone was
+  replaced;
+- a new "Cost measurement" threat in the Discussion;
+- the Conclusion.
+
+MTTR, manual interventions, decision correctness and the adversarial results do not depend on either
+confound.
+
+**Remedy (for any re-run).** Two changes are needed:
+- Reset the Airflow pool and `control.desired_state` in `_reset_run`.
+- Sample resources on a fixed cadence over a fixed window that is identical for every configuration.
+
+Neither change was made here, because neither can be verified without the stack, and this machine
+has about 4 GB of free disk.
+
+**Other changes.**
+- *Testbed facts verified.* The campaign ran on this machine: Apple M2, 8 cores, 8 GB, macOS 15.7.2,
+  Docker 29.6.1, and the compose pins. `TPCDS_SCALE_ROWS=20000` in `.env`.
+- *References.* Five arXiv entries were replaced by their peer-reviewed versions: ReAct (ICLR 2023),
+  the Off-Switch Game (IJCAI 2017, Crossref-verified DOI), AgentDojo (NeurIPS 2024 D&B), ASB
+  (ICLR 2025), and RCAgent (CIKM 2024, Crossref-verified DOI). Fourteen references remain arXiv-only.
+- *Back matter added.* `sections/09_backmatter.tex` holds the data/code availability statement and an
+  AI-use acknowledgment. Conflict of interest, funding, affiliations and the venue still need the
+  authors' input.
+- *Figure 1 redrawn.* `scripts/draw_architecture.py` produces `paper/figures/system_architecture.pdf`.
+  It is a vector, grayscale drawing that follows the real control loop, with dashed boxes for
+  components that are implemented but not exercised. It replaces the PNG the supervisor rejected as
+  looking machine-generated.

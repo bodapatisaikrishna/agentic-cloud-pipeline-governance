@@ -6,6 +6,13 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Pre-submission audit (D-104s)**:
+  - MTTR equation corrected to detection→resolution, matching the code.
+  - Two cost-measurement confounds disclosed in the paper: unequal integration windows, and Airflow
+    pool / worker state not reset between runs.
+  - Five references upgraded to their peer-reviewed versions.
+  - Data/code availability and AI-use acknowledgment added.
+  - Figure 1 redrawn as a vector diagram (`scripts/draw_architecture.py`).
 - **Manuscript revision (D-104r; also records the D-104p rewrite and D-104q IEEE reformat, which had
   no entry here)**: IEEEtran manuscript restructured around the mock-versus-live finding, with a new
   Problem-formulation section (equations and Algorithm 1), five research questions answered in the

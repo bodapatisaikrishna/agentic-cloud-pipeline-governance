@@ -38,7 +38,7 @@ system's favor.
 \subsection{Limitations and Threats to Validity}\label{sec:limitations}
 
 \subsubsection{Threats to Validity}
-Six threats apply directly. \emph{Simulated human.} Every comparison against \texttt{baseline}
+Eight threats apply directly. \emph{Simulated human.} Every comparison against \texttt{baseline}
 inherits the log-normal on-call model; Section~\ref{sec:sensitivity} reports its break-even rather
 than defending the model itself. \emph{Modelled baselines.} \texttt{rule\_based} and
 \texttt{autoscale} resolve covered faults after fixed, assumed latencies (Section~\ref{sec:method}),
@@ -55,7 +55,17 @@ confidence intervals relative to the headline comparisons. \emph{Nominal seed ma
 per-run seed is a function of the configuration name (Section~\ref{sec:method}), no two
 configurations share fault or human-latency randomness at a matched (scenario, replicate) index. We
 therefore used the unpaired rank-sum test as primary, and the retained signed-rank statistic should
-not be treated as evidence from a genuinely paired design.
+not be treated as evidence from a genuinely paired design. \emph{Detection-clock asymmetry.} Non-agent
+configurations detect at injection by construction, while agent configurations start their MTTR
+clock only once the monitoring agent flags the fault (Section~\ref{sec:problem}); the agents'
+reported recovery times therefore omit a detection interval that the non-agent figures include,
+which favors the agents in every MTTR comparison. \emph{Cost measurement.} The metered term of
+Eq.~\eqref{eq:cost} integrates two resource samples per run, which spans the 300\,s control loop for
+agent configurations but only a few seconds for non-agent ones, and the Airflow pool size and
+streaming-worker target carry over from one run to the next because the campaign never reset them.
+Cost comparisons therefore rest mainly on the provisioning term, an assumption whose break-even
+Section~\ref{sec:sensitivity} reports, and the metered part should not be read as a like-for-like
+measurement.
 
 \subsubsection{Scope of the Testbed}
 The testbed is one machine. The resource-contention scenario applies real CPU stress, which is also
