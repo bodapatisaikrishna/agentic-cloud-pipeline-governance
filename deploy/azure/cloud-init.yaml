@@ -1,0 +1,41 @@
+#cloud-config
+# Runs once on first boot of the Azure VM: installs Docker, fetches the code from GitHub, creates
+# .env.prod with freshly generated secrets, and starts the stack. Nothing secret is stored in git.
+package_update: true
+packages: [git, ca-certificates, curl, openssl]
+write_files:
+  - path: /opt/acde-bootstrap.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      exec > >(tee -a /var/log/acde-bootstrap.log) 2>&1
+      DOMAIN="__ACDE_DOMAIN__"
+      REPO="https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance.git"
+      # 1 GB RAM VMs need swap to build the images and run Postgres + OPA + two Python processes.
+      if ! swapon --show | grep -q swapfile; then
+        fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+      curl -fsSL https://get.docker.com | sh
+      systemctl enable --now docker
+      [ -d /opt/acde ] || git clone --depth 1 "$REPO" /opt/acde
+      cd /opt/acde
+      if [ ! -f .env.prod ]; then
+        PGPASS=$(openssl rand -hex 24)
+        OPKEY=$(openssl rand -hex 24)
+        cp .env.prod.example .env.prod
+        sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PGPASS}|" .env.prod
+        sed -i "s|^API_KEYS=.*|API_KEYS=admin:${OPKEY}|" .env.prod
+        sed -i "s|^CONNECTOR_KIND=.*|CONNECTOR_KIND=noop|" .env.prod
+        sed -i "s|^MOCK_LLM=.*|MOCK_LLM=1|" .env.prod
+        sed -i "s|^ACDE_MODE=.*|ACDE_MODE=shadow|" .env.prod
+        chmod 600 .env.prod
+        echo "ACDE_DOMAIN=${DOMAIN}" > .env
+        echo "POSTGRES_PASSWORD=${PGPASS}" >> .env
+      fi
+      docker compose --env-file .env.prod --env-file .env \
+        -f deploy/docker-compose.prod.yml -f deploy/azure/docker-compose.azure.yml up -d --build
+      echo "ACDE deployed: https://${DOMAIN}  (admin key is in /opt/acde/.env.prod, API_KEYS)"
+runcmd:
+  - [bash, /opt/acde-bootstrap.sh]

@@ -1,0 +1,28 @@
+# Azure overlay: adds HTTPS (Caddy, automatic Let's Encrypt certificate) in front of acde-server.
+# Used together with the production file:
+#   docker compose -f deploy/docker-compose.prod.yml -f deploy/azure/docker-compose.azure.yml up -d --build
+services:
+  # Same OPA 0.68.0 (the pinned version -- newer releases changed float-budget semantics, see paper
+  # lesson L6), but the static build, which is published for Arm64 as well as x64. The default
+  # openpolicyagent/opa:0.68.0 tag is x64-only. -debug keeps the busybox wget the healthcheck uses.
+  opa:
+    image: openpolicyagent/opa:0.68.0-static-debug
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACDE_DOMAIN: ${ACDE_DOMAIN:?set ACDE_DOMAIN to the VM's DNS name}
+    volumes:
+      - ./azure/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      acde-server: {condition: service_healthy}
+
+volumes:
+  caddy_data:
+  caddy_config:

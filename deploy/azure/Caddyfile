@@ -1,0 +1,4 @@
+{$ACDE_DOMAIN} {
+	encode gzip
+	reverse_proxy acde-server:8099
+}
