@@ -197,3 +197,19 @@ cp .env.example .env
 
 > Read CONTEXT.md and CLAUDE.md, then run `make lint && make test-unit && make paper-repro-quick`
 > and confirm the PDF has no `??`. Then continue the paper work.
+
+## Cloud deployment (Azure, added 2026-10-17)
+
+- **Live instance:** https://acde-edf7a2.southeastasia.cloudapp.azure.com (dashboard at `/ui`, API
+  with header `x-api-key`). Resource group `rg-acde`, VM `acde-vm` (`Standard_B2pls_v2`, Arm64,
+  southeastasia), shadow mode, mock LLM, `noop` connector. Billing: about $0.04/h while running.
+- **Admin key** (never committed): `az vm run-command invoke -g rg-acde -n acde-vm --command-id
+  RunShellScript --scripts 'grep ^API_KEYS= /opt/acde/.env.prod'`. SSH is open only to the IP used
+  at deploy time; use `az vm run-command` instead.
+- **Stop compute billing:** `az vm deallocate -g rg-acde -n acde-vm` (restart with `az vm start`).
+  **Delete everything:** `az group delete -n rg-acde`.
+- **Redeploy / update:** `az vm run-command invoke ... --scripts 'cd /opt/acde && git pull -q &&
+  docker compose --env-file .env.prod --env-file .env -f deploy/docker-compose.prod.yml -f
+  deploy/azure/docker-compose.azure.yml up -d --build'`.
+- Azure for Students only allows southeastasia, uaenorth, malaysiawest, eastasia and austriaeast,
+  and blocks the Intel B-series in southeastasia (hence Arm). Details: DEVIATIONS D-104t.

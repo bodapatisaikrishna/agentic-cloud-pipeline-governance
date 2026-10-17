@@ -2512,3 +2512,33 @@ has about 4 GB of free disk.
   It is a vector, grayscale drawing that follows the real control loop, with dashed boxes for
   components that are implemented but not exercised. It replaces the PNG the supervisor rejected as
   looking machine-generated.
+
+## D-104t — Azure single-VM deployment (first cloud deployment)
+
+**Decision.** Deploy the production compose stack (Postgres, OPA, API, control loop) plus Caddy for
+HTTPS to one Azure VM (`Standard_B2pls_v2`, Arm64, southeastasia), with the `noop` connector,
+`MOCK_LLM=1` and `ACDE_MODE=shadow`. Resources: resource group `rg-acde`, VM `acde-vm`; the script
+is `deploy/azure/deploy.sh` and the first boot is `deploy/azure/cloud-init.yaml`.
+
+**Why this shape.**
+- *Region and size.* Azure for Students allows only five regions, and in southeastasia the Intel
+  B-series are `NotAvailableForSubscription`. The Arm Bpsv2 sizes are open and cheapest.
+- *OPA image.* The default `openpolicyagent/opa:0.68.0` tag is x64-only. The deployment uses
+  `0.68.0-static-debug`, the same pinned version (a newer release changed float-budget semantics;
+  paper lesson L6) with an Arm64 build.
+- *OPA healthcheck.* That image ships no busybox, so the prod file's `wget` check can never pass.
+  The Azure overlay disables it and makes the API and loop wait for `service_started`. Safety is
+  unchanged: the gate escalates to a human whenever OPA is unreachable, and `/health/ready` probes
+  OPA over HTTP (currently `HTTP 200`).
+- *Connector.* There is no company Airflow to attach to, so `CONNECTOR_KIND=noop` (observe and
+  propose only). The API, dashboard, gate, audit trail and shadow mode all work.
+
+**Verified live.** HTTPS with a valid certificate; HTTP redirects to HTTPS; every protected
+endpoint returns 401 without a key and 200 with it; the dashboard asks for a login; `/health/ready`
+reports all seven checks `ok` (database, migrations at 005, OPA, connector, LLM, mode, notifications).
+
+**Not covered.** Nothing was run on the deployed stack beyond health checks (no campaign, no live
+LLM); the experiment harness still needs the full compose stack with Airflow and Redpanda.
+Secrets are generated on the VM at first boot and never committed. SSH is limited to the deployer's
+IP and could not be reached from the laptop behind its VPN, so the VM is administered through
+`az vm run-command`.

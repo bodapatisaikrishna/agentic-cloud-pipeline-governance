@@ -6,6 +6,10 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Azure deployment (D-104t)**: single-VM Azure deployment (`deploy/azure/`: `deploy.sh`,
+  cloud-init, Caddy HTTPS overlay, `.dockerignore`) on an Arm64 `Standard_B2pls_v2` in southeastasia,
+  with shadow mode, mock LLM and the `noop` connector. OPA uses the Arm-capable
+  `0.68.0-static-debug` tag (same pinned version), with its wget healthcheck disabled.
 - **Pre-submission audit (D-104s)**:
   - MTTR equation corrected to detection→resolution, matching the code.
   - Two cost-measurement confounds disclosed in the paper: unequal integration windows, and Airflow
