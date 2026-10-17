@@ -7,6 +7,19 @@ services:
   # openpolicyagent/opa:0.68.0 tag is x64-only. -debug keeps the busybox wget the healthcheck uses.
   opa:
     image: openpolicyagent/opa:0.68.0-static-debug
+    # This Arm-capable image has no wget/busybox, so the prod file's wget healthcheck cannot run.
+    # The API and loop only wait for OPA to start; if OPA is ever unreachable the gate escalates
+    # to a human (fail-safe), which the policy tests and the adversarial corpus cover.
+    healthcheck:
+      disable: true
+
+  acde-server:
+    depends_on:
+      opa: {condition: service_started}
+
+  acde-loop:
+    depends_on:
+      opa: {condition: service_started}
 
   caddy:
     image: caddy:2.8
