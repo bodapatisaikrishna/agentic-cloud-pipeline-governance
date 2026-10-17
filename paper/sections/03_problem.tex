@@ -1,72 +1,74 @@
 \section{PROBLEM FORMULATION}\label{sec:problem}
 
 \subsection{Setting}
-A pipeline emits a telemetry snapshot $s_k$ at every control tick $k$, with tick period
-$\tau = 15$\,s. A fault $f$ is injected at time $t_f$, detected at $t_d \ge t_f$, and resolved at
-$t_r \ge t_d$, either through an executed mitigation or an escalation the on-call engineer handles. A
-\emph{configuration} $\pi$ is a responder mapping snapshots to actions. For an agent configuration,
-each enabled agent $g$ proposes an action
-$a = (g, \text{type}, \text{target}, \text{params}, \text{justification}, \text{confidence})$ drawn
-from the typed action space $\mathcal{A}$ of the contract (Section~\ref{sec:system}). A policy gate
-$G$ decides each proposal from a context $c = (m, B, n, \kappa, v)$ that the system itself builds,
-beyond the agent's influence: the action's projected marginal cost $m$, the remaining budget $B$,
-the number $n$ of actions taken in the last ten minutes, the schema-compatibility class $\kappa$,
-and a flag $v$ marking whether a prior version exists. The gate returns one of \textsc{allow},
-\textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
+A pipeline emits a telemetry snapshot $s_k$ at each control tick $k$. The tick period $\tau$ is 15\,s
+by default and was set to 2\,s in the evaluation campaign. A fault $f$ is injected at time $t_f$,
+detected at $t_d \ge t_f$, and resolved at $t_r \ge t_d$, either by an executed mitigation or by an
+escalation that the on-call engineer handles. A \emph{configuration} $\pi$ is a responder that maps
+snapshots to actions. In an agent configuration, each enabled agent $g$ proposes an action
+$a = (g, \text{type}, \text{target}, \text{params}, \text{justification}, \text{confidence})$ from the
+typed action space $\mathcal{A}$ of the contract (Section~\ref{sec:system}). A policy gate $G$
+decides each proposal from a context $c = (m, B, n, \kappa, v)$ that the system builds outside the
+agent's influence. Here $m$ is the action's projected marginal cost, $B$ the remaining budget, $n$ the
+number of actions the proposing agent has recorded in the last ten minutes, $\kappa$ the
+schema-compatibility class, and $v$ a flag indicating whether a prior version exists. The gate
+returns \textsc{allow}, \textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
 
 \subsection{Gate Semantics}
-The gate checks the rate limit of Eq.~\eqref{eq:rate} before any agent-specific policy and defaults
-toward the human on failure:
+The gate applies the rate limit of Eq.~\eqref{eq:rate} before any agent-specific policy and fails
+toward the human:
 \begin{equation}
-  G(a,c) = \textsc{deny} \quad \text{if } n \ge n_{\max}, \qquad n_{\max}=5,
+  G(a,c) = \textsc{deny} \quad \text{if } n \ge n_{\max}, \qquad n_{\max}=5.
   \label{eq:rate}
 \end{equation}
-and any proposal that matches no policy pack, or that cannot be evaluated because the policy engine
-is unreachable, is escalated rather than allowed. An optimization action that scales resources
-clears the cost policy only if the condition in Eq.~\eqref{eq:budget} holds:
+A proposal that matches no policy pack, or that cannot be evaluated because the policy engine is
+unreachable, is escalated rather than allowed. An optimization action that scales resources passes
+the cost policy only if the condition in Eq.~\eqref{eq:budget} holds:
 \begin{equation}
-  m \le 0 \quad \text{or} \quad m \le B,
+  m \le 0 \quad \text{or} \quad m \le B.
   \label{eq:budget}
 \end{equation}
-so a scale-down, carrying non-positive marginal cost, always clears. Rollback is permitted only when
-$v$ holds, and a schema change is permitted only when $\kappa$ is backward-compatible.
+A scale-down, whose marginal cost is non-positive, therefore always passes. Rollback is permitted only
+when $v$ holds, and a schema change is permitted only when $\kappa$ is backward-compatible.
 Section~\ref{sec:system} describes all four policy packs.
 
 \subsection{Metrics}
-Each run injects a single fault. Its recovery time, cost, and decision correctness are given by Eqs.~\eqref{eq:mttr},
-\eqref{eq:cost}, and~\eqref{eq:decision}:
+Each run injects a single fault. Its recovery time, cost, and decision correctness are defined by
+Eqs.~\eqref{eq:mttr}, \eqref{eq:cost}, and~\eqref{eq:decision}:
 \begin{align}
   \mathrm{MTTR}(r) &= t_r - t_d, \label{eq:mttr}\\
   C(r) &= C_{\mathrm{meas}}(r) + \rho_c\, u_\pi\, T_h, \label{eq:cost}\\
-  D(r) &= \mathbf{1}\bigl[\text{executed mitigation} \in \mathcal{A}^{*}(f)\bigr], \label{eq:decision}
+  D(r) &= \mathbf{1}\bigl[\text{executed mitigation} \in \mathcal{A}^{*}(f)\bigr]. \label{eq:decision}
 \end{align}
-where $C_{\mathrm{meas}}$ is the metered compute and storage cost, with compute-unit-seconds priced
-at $\rho_c = 0.05$ per unit-second and storage at 0.01 per GB-hour; $u_\pi$ is the allocation
-configuration $\pi$ holds over the horizon $T_h = 300$\,s; and $\mathcal{A}^{*}(f)$ is the accepted
-mitigation set for the injected fault. The three configurations that right-size,
-\texttt{autoscale}, \texttt{optimization\_only}, and \texttt{full}, hold $u_\pi = 3$ units, and the
-rest hold a static $u_\pi = 8$. Non-agent configurations never execute an agent mitigation, so
-$D(r)$ in Eq.~\eqref{eq:decision} is $0$ for them by construction. Like the base paper, Eq.~\eqref{eq:mttr} measures recovery from detection. In the non-agent
-configurations a fixed monitor stamps detection at injection, $t_d = t_f$, so their MTTR also
-covers the detection interval, whereas an agent configuration's clock starts only when the
-monitoring agent flags the fault, which can be up to one tick plus one model call later. Manual
+Here $C_{\mathrm{meas}}$ is the metered compute and storage cost, with compute priced at
+$\rho_c = 0.05$ per unit-second and storage at 0.01 per GB-hour; $u_\pi$ is the allocation that
+configuration $\pi$ holds over the horizon $T_h = 300$\,s; and $\mathcal{A}^{*}(f)$ is the set of
+accepted mitigations for the injected fault. The three configurations that right-size their
+allocation, \texttt{autoscale}, \texttt{optimization\_only}, and \texttt{full}, hold $u_\pi = 3$
+units, and the others hold a static $u_\pi = 8$. Non-agent configurations never execute an agent
+mitigation, so $D(r)$ in Eq.~\eqref{eq:decision} is $0$ for them by construction.
+
+Like the base paper, Eq.~\eqref{eq:mttr} measures recovery from detection. In the non-agent
+configurations a fixed monitor stamps detection at injection, $t_d = t_f$, so their MTTR also covers
+the detection interval. In an agent configuration the clock starts only when the monitoring agent
+flags the fault, which can be up to one tick plus one model call after injection. Manual
 interventions and data freshness are direct counts and lags read from telemetry.
 
 \subsection{The Evaluation-Validity Question}
-Let $\tilde{x}_{\mathrm{live}}$ and $\tilde{x}_{\mathrm{mock}}$ denote the median of metric $x$ for
-the same configuration under a real language model and under a deterministic mock, respectively. We
+Let $\tilde{x}_{\mathrm{live}}$ and $\tilde{x}_{\mathrm{mock}}$ denote the median of metric $x$ for the
+same configuration under a real language model and under a deterministic mock, respectively. We
 define the divergence ratio as
 \begin{equation}
   R_x = \frac{\tilde{x}_{\mathrm{live}}}{\tilde{x}_{\mathrm{mock}}}.
   \label{eq:ratio}
 \end{equation}
-Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only when $R_x$ of
-Eq.~\eqref{eq:ratio} sits close to one. Section~\ref{sec:livemock} measures $R_x$ for every metric, and RQ4 of
-Section~\ref{sec:intro} asks how far it strays from one.
+Reporting $\tilde{x}_{\mathrm{mock}}$ as the system's performance is valid only when $R_x$ in
+Eq.~\eqref{eq:ratio} is close to one. Section~\ref{sec:livemock} measures $R_x$ for each metric, which
+answers RQ4 of Section~\ref{sec:intro}.
 
 \subsection{Threat Model}
-The adversary controls only its own proposal $a$. The context $c$, the policy engine, and the
-executor are trusted, system-built components. The safety property under test is containment: no
+The adversary controls only its own proposal $a$. The context $c$, the policy engine, and the executor
+are trusted components built by the system. The safety property under test is containment: no
 proposal that the documented policy semantics classifies as unsafe may be allowed.
 
 \begin{algorithm}[t]
@@ -93,6 +95,6 @@ proposal that the documented policy semantics classifies as unsafe may be allowe
 \end{algorithmic}
 \end{algorithm}
 
-Algorithm~\ref{alg:tick} summarizes the control loop Section~\ref{sec:system} describes in prose.
-Agent priority orders recovery above schema above optimization, and the non-agent configurations
-skip the loop entirely, resolving faults directly instead (Section~\ref{sec:method}).
+Algorithm~\ref{alg:tick} summarizes the control loop that Section~\ref{sec:system} describes in
+prose. Agent priority ranks recovery above schema and schema above optimization. The non-agent
+configurations skip the loop and resolve faults directly (Section~\ref{sec:method}).

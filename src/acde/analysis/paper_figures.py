@@ -76,7 +76,7 @@ def mttr_distribution(df: pd.DataFrame, configs: Sequence[str], out: Path) -> No
     ax.set_ylabel("MTTR (s, log scale)")
     handles = [
         plt.Line2D([], [], marker="o", ls="", color=col, label=name)
-        for name, col in (("no LLM", GREY), ("live LLM", BLUE), ("mock LLM", ORANGE))
+        for name, col in (("No LLM", GREY), ("Live LLM", BLUE), ("Mock LLM", ORANGE))
     ]
     ax.legend(handles=handles, frameon=False, fontsize=6.5, loc="upper right")
     _save(fig, out)
@@ -97,7 +97,7 @@ def effect_forest(rows: Sequence[dict[str, Any]], metrics: Sequence[str], out: P
         ax.set_yticks(range(len(sel)))
         ax.set_yticklabels([r["config"] for r in sel], fontsize=6.5)
         ax.set_title(_METRIC_LABEL.get(metric, metric.replace("_", " ")), fontsize=7.5)
-        ax.set_xlabel("Cliff's $\\delta$ vs baseline")
+        ax.set_xlabel("Cliff's $\\delta$ vs. baseline")
     _save(fig, out)
 
 
@@ -114,7 +114,7 @@ def human_sensitivity(
     ax.axvline(360, color="black", linestyle=":", linewidth=0.8)
     ax.set_xscale("log")
     ax.set_ylim(-0.02, 1.02)
-    ax.set_xlabel("assumed human median latency (s)")
+    ax.set_xlabel("Assumed human median latency (s)")
     ax.set_ylabel("P(automation faster)")
     ax.legend(frameon=False, fontsize=6.5, loc="lower right")
     _save(fig, out)
@@ -139,7 +139,7 @@ def cost_sensitivity(sweep: Sequence[dict[str, float]], breakeven: float | None,
             marker="o",
             markersize=3,
             color=colour,
-            label=f"right-sized = {r_units:g}",
+            label=f"Right-sized = {r_units:g}",
             linewidth=1.1,
         )
     ax.axhline(0, color="black", linewidth=0.6)
@@ -149,10 +149,10 @@ def cost_sensitivity(sweep: Sequence[dict[str, float]], breakeven: float | None,
             color="black",
             linestyle=":",
             linewidth=0.9,
-            label=f"break-even ({breakeven:.2g})",
+            label=f"Break-even ({breakeven:.2g})",
         )
-    ax.set_xlabel("static provisioned units (baseline)")
-    ax.set_ylabel("cost reduction of full (%)")
+    ax.set_xlabel("Static provisioned units (baseline)")
+    ax.set_ylabel("Cost reduction of full (%)")
     ax.legend(frameon=False, fontsize=6.5)
     _save(fig, out)
 
@@ -167,8 +167,8 @@ def live_mock_comparison(rows: Sequence[dict[str, Any]], out: Path) -> None:
     for ax, r in zip(axes[0], rows, strict=True):
         live, mock = r["median_treat"], r["median_control"]
         ax.plot([0, 1], [mock, live], color=GREY, linewidth=1.0, zorder=1)
-        ax.scatter([0], [mock], color=ORANGE, s=26, zorder=2, label="mock")
-        ax.scatter([1], [live], color=BLUE, s=26, zorder=2, label="live")
+        ax.scatter([0], [mock], color=ORANGE, s=26, zorder=2, label="Mock")
+        ax.scatter([1], [live], color=BLUE, s=26, zorder=2, label="Live")
         for x, v in ((0, mock), (1, live)):
             ax.annotate(
                 f"{v:.3g}",
@@ -182,7 +182,7 @@ def live_mock_comparison(rows: Sequence[dict[str, Any]], out: Path) -> None:
         ax.set_ylim(min(live, mock) - pad, max(live, mock) + pad)
         ax.set_xlim(-0.4, 1.4)
         ax.set_xticks([0, 1])
-        ax.set_xticklabels(["mock", "live"], fontsize=6.5)
+        ax.set_xticklabels(["Mock", "Live"], fontsize=6.5)
         ax.set_title(_METRIC_LABEL.get(r["metric"], r["metric"]), fontsize=6.8)
         ax.tick_params(axis="y", labelsize=6)
     _save(fig, out)
@@ -190,10 +190,10 @@ def live_mock_comparison(rows: Sequence[dict[str, Any]], out: Path) -> None:
 
 _METRIC_LABEL = {
     "mttr_s": "MTTR (s)",
-    "cost_units": "cost (units)",
-    "manual_interventions": "manual interv.",
-    "decision_correct": "decision correct",
-    "freshness_s": "freshness (s)",
+    "cost_units": "Cost (units)",
+    "manual_interventions": "Manual interv.",
+    "decision_correct": "Decision correct",
+    "freshness_s": "Freshness (s)",
 }
 
 
@@ -304,7 +304,8 @@ def scenario_heatmap(table: pd.DataFrame, out: Path) -> None:
     data = np.log10(table.clip(lower=0.01).to_numpy(dtype=float))
     im = ax.imshow(data, cmap="viridis", aspect="auto")
     ax.set_xticks(range(table.shape[1]))
-    ax.set_xticklabels([str(c).replace("_", "\n") for c in table.columns], fontsize=6.5)
+    labels = [str(c).replace("_", "\n").capitalize() for c in table.columns]
+    ax.set_xticklabels(labels, fontsize=6.5)
     ax.set_yticks(range(table.shape[0]))
     ax.set_yticklabels(list(table.index), fontsize=6.5)
     for i in range(table.shape[0]):
@@ -312,5 +313,5 @@ def scenario_heatmap(table: pd.DataFrame, out: Path) -> None:
             ax.text(
                 j, i, f"{table.iloc[i, j]:.0f}", ha="center", va="center", fontsize=6, color="white"
             )
-    fig.colorbar(im, ax=ax, label="log$_{10}$ median MTTR (s)")
+    fig.colorbar(im, ax=ax, label="Median MTTR (s), log$_{10}$")
     _save(fig, out)

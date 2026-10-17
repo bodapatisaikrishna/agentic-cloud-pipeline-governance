@@ -177,7 +177,7 @@ class TestBuild:
         adv.write_text(json.dumps(result))
         pa.build(campaign, tmp_path / "gen", adv, adv, n_resamples=50)
         table = (tmp_path / "gen" / "tab_adversarial.tex").read_text()
-        assert "boundary\\_grid" in table and "overall" in table
+        assert "boundary\\_grid" in table and "Overall" in table
         nums = (tmp_path / "gen" / "numbers.tex").read_text()
         assert r"\NAdversarialFailOpen}{0}" in nums and "NAdversarialBeforeCases" in nums
 

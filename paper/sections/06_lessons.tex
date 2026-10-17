@@ -1,83 +1,83 @@
 \section{PRODUCTION-HARDENING LESSONS}\label{sec:lessons}
 
-The central finding of Section~\ref{sec:intro} has a second, less statistical face. This system had
-several defects invisible to its own test suite for the same reason the mock evaluation flatters its
-headline numbers: the path exercised was not the path production takes. Each lesson below surfaced
-through an audit or an experiment rather than a failing test, was measured before it was fixed, and
+The central finding of Section~\ref{sec:livemock} has a less statistical counterpart. The system had
+several defects that its own test suite could not see, for the same reason that the mock evaluation
+flatters the headline numbers: the path the tests exercised was not the path production takes. Each
+lesson below was found through an audit or an experiment rather than through a failing test, and each
 is documented in the accompanying artifact.
 
 \subsection{L1: The Shared Resource Nobody Declared Concurrency-Unsafe}
-The base design asserts that execution is deterministic and auditable. Versioned partition creation,
-though, read the current maximum version and then dropped, created, and registered a table across
-separate statements with no lock between them, so two concurrent callers targeting the same
-partition could compute the same next version and race. The defect showed up as an intermittent
-continuous-integration failure and was root-caused rather than retried away: a recovery-agent replay
-had triggered the same DAG as an unrelated test. The fix serializes the read-modify-write behind a
+The base design states that execution is deterministic and auditable. Versioned partition creation,
+however, read the current maximum version and then dropped, created, and registered a table in
+separate statements without a lock, so two concurrent callers targeting the same partition could
+compute the same next version and race. The defect appeared as an intermittent continuous-integration
+failure, and we traced it to its root instead of retrying it away: a recovery-agent replay had
+triggered the same DAG as an unrelated test. The fix serializes the read-modify-write behind a
 database advisory lock. \emph{Lesson:} once an agent can trigger real work, every shared resource it
 touches becomes a concurrency surface that a single-actor test never exercises.
 
 \subsection{L2: An Action Could Be Lost From the Audit Trail}
-The audit row was originally written \emph{after} execution, so a crash, an out-of-memory kill, or a
-database blip in that window could leave an action that genuinely happened with no record of it, and
-because the control loop swallows per-tick exceptions, the failure stayed silent. For a system whose
-central claim is that every action is policy-gated and auditable, an executed action with no audit
-trail falsifies that claim outright. The intent row, carrying the policy verdict already known, is
-now committed \emph{before} execution and updated afterward with the outcome. \emph{Lesson:} record
-the intent before the action, not after.
+The audit row was originally written \emph{after} execution. A crash, an out-of-memory kill, or a
+database outage in that window could therefore leave an action that genuinely happened with no
+record, and because the control loop suppresses per-tick exceptions, the failure was silent. For a
+system whose central claim is that every action is policy-gated and auditable, an executed action
+without an audit record contradicts that claim directly. The intent row, which already carries the
+policy verdict, is now committed \emph{before} execution and updated with the outcome afterward.
+\emph{Lesson:} record the intent before the action, not after it.
 
 \subsection{L3: The Detector That Had No Callers}
-The table that both recovery-time statistics and decision scoring depend on was written only by the
-fault injector. The monitoring agent updated an existing row's detection time but never created a new
-one, leaving a complete, unit-tested, deterministic anomaly detector with no caller at all. In a
-deployment without the injector, a genuinely detected incident would have reached the audit table but
-never become an incident, so production could not have reproduced the experiment's own metrics. The
-gap turned up while planning a later feature, by reading the code rather than through a failing
-test. \emph{Lesson:} a component can pass every test it owns and still be disconnected, so trace the
-data path from production input all the way to the reported metric.
+The table on which both the recovery-time statistics and decision scoring depend was written only by
+the fault injector. The monitoring agent updated the detection time of an existing row but never
+created a new row, which left a complete, unit-tested, deterministic anomaly detector with no caller.
+In a deployment without the injector, a genuinely detected incident would have reached the audit
+table but never become an incident record, so production could not have reproduced the experiment's
+own metrics. We found the gap while planning a later feature, by reading the code rather than through
+a failing test. \emph{Lesson:} a component can pass every test it owns and still be disconnected, so
+trace the data path from production input to the reported metric.
 
 \subsection{L4: Two Taxonomies That Never Met}
-Decision correctness is scored against an accepted-mitigation set (Eq.~\ref{eq:decision}) keyed by the \emph{injected
-scenario}'s name, while live incidents carry different fault-type names altogether. Applying that set
-to live incidents would have marked every real incident ``incorrect by construction.'' A mapping from
-live fault types onto the same accepted-mitigation set was added before the metric was ever exposed
-outside the experiment harness. \emph{Lesson:} a metric defined in the experiment's own vocabulary
-cannot move into production without an explicit mapping.
+Decision correctness is scored against an accepted-mitigation set (Eq.~\ref{eq:decision}) keyed by the
+name of the \emph{injected scenario}, whereas live incidents carry different fault-type names.
+Applying the set to live incidents would have marked every real incident ``incorrect by
+construction.'' A mapping from live fault types onto the same accepted-mitigation set was added
+before the metric was exposed outside the experiment harness. \emph{Lesson:} a metric defined in the
+experiment's own vocabulary cannot move into production without an explicit mapping.
 
 \subsection{L5: Hermeticity by Enumeration Does Not Scale}
-One class of unit-test failure kept recurring: a test that forgot to mock one module's database
-handle turned a millisecond test into a thirty-second pool timeout. We patched it instance by
-instance four separate times before addressing the underlying mechanism. Every such call now runs
-through a single connection-pool accessor patched to fail fast under test. Mutation-testing the guard
-by removing one load-bearing mock failed six tests within seconds, each naming the exact cause.
-\emph{Lesson:} once the same bug surfaces a fourth time, fix the mechanism, not the instance.
+One class of unit-test failure kept recurring: a test that did not mock one module's database handle
+turned a millisecond test into a thirty-second connection-pool timeout. We fixed it instance by
+instance four times before addressing the mechanism. Every such call now goes through a single
+connection-pool accessor that is patched to fail fast under test. Mutation testing of this guard, by
+removing one essential mock, made six tests fail within seconds, each naming the exact cause.
+\emph{Lesson:} when the same bug appears a fourth time, fix the mechanism rather than the instance.
 
 \subsection{L6: What the Adversarial Corpus Found}
-Grading a generated corpus against an independent oracle surfaced three things (numbers in
-Section~\ref{sec:results}). First, the cost policy priced a scaling target against the budget but
-said nothing about its floor: zero workers, which halts ingestion entirely, was budget-legal, and so
-was a negative ``scale-down.'' Non-numeric targets raised inside the gate before the audit row was
-written, so a rejected proposal could leave no record at all. The fix lives in the contract layer,
-where scaling targets must now be integers of at least one, with any violation taking the ordinary
-invalid-output path.
+Grading a generated corpus against an independent oracle revealed three things (numbers in
+Section~\ref{sec:results}). First, the contract layer had two gaps. The cost policy priced a scaling
+target against the budget but did not check its floor. Zero workers, which halts ingestion entirely,
+was therefore within budget, and so was a negative ``scale-down.'' In addition, non-numeric targets
+raised an exception inside the gate before the audit row was written, so a rejected proposal could
+leave no record. Both gaps are now closed in the contract layer: scaling targets must be integers of
+at least one, and any violation follows the ordinary invalid-output path.
 
-Second, under a newer policy-engine release than the one this project pins, some float budget
-comparisons evaluated as within budget when they were not, while the pinned release stayed correct.
-We report the observation without root-causing it or filing it upstream, since the consequence holds
-either way: the pin is load-bearing, and the corpus now serves as an integration test that would
-catch a version bump that changes these semantics again.
+Second, under a newer policy-engine release than the one this project pins, some floating-point budget
+comparisons evaluated as within budget when they were not, whereas the pinned release behaved
+correctly. We report this observation without having traced its root cause or reported it upstream,
+because the consequence holds either way: the version pin is essential, and the corpus now serves as
+an integration test that would catch a version upgrade that changes these semantics again.
 
-Third, once the contract fix landed, the policy agreed with the independent specification on every
-graded case. The containment claim is therefore a measured property with a confidence interval, not
-an assertion repeated from the code under test. \emph{Lesson:} a safety property a policy's own
-authors assert is not evidence until an independent oracle has tried to break it.
+Third, once the contract fixes were in place, the policy agreed with the independent specification on
+every graded case. The containment claim is therefore a measured property with a confidence interval
+rather than an assertion repeated from the code under test. \emph{Lesson:} a safety property asserted
+by a policy's own authors is not evidence until an independent oracle has tried to break it.
 
-\subsection{L7: The Pilot Found a Dead Model}
+\subsection{L7: The Pilot Found a Retired Model}
 Before the live campaign, an eight-run pilot at the real paper timings measured cost and wall time.
 Within minutes it found that the provider had retired the small model configured for the monitoring
-agent (HTTP 410, end of life). Since monitoring is the detector in every non-baseline configuration,
-the full campaign would have run against a detector degraded to a no-op, with every downstream number
-measuring provider retirement rather than the system itself. The supervisor's own degraded-streak
-guard would eventually have caught this too, but only after several wasted runs, while the pilot
-caught it on the very first call. \emph{Lesson:} the cheapest validity check available in a long,
-paid experiment is a short run at the real settings, since a model listed by a provider is not
-necessarily a model that still answers.
+agent (HTTP 410, end of life). Because monitoring is the detector in every agent configuration, the
+full campaign would otherwise have run with a detector degraded to a no-op, and every downstream
+number would have measured the provider's retirement of the model rather than the system. The
+supervisor's degraded-streak guard would eventually have caught the problem, but only after several
+wasted runs; the pilot caught it on the first call. \emph{Lesson:} the cheapest validity check in a
+long, paid experiment is a short run at the real settings, because a model that a provider lists is
+not necessarily a model that still answers.

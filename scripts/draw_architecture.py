@@ -150,7 +150,7 @@ for (x, w), t in zip(
 
 # ---- Layer 6 -----------------------------------------------------------------------------------
 l6 = row(6, [1, 1, 1, 1.45])
-box(l6[0][0], by(6), l6[0][1], BOX_H, "Control loop\n" + r"(tick $\tau$ = 15 s)")
+box(l6[0][0], by(6), l6[0][1], BOX_H, "Control loop\n" + r"(tick $\tau$ = 2 s)")
 box(l6[1][0], by(6), l6[1][1], BOX_H, "Arbitration\n(agent-priority bid)")
 box(l6[2][0], by(6), l6[2][1], BOX_H, "Per-target\nadvisory lock")
 box(l6[3][0], by(6), l6[3][1], BOX_H, "Autonomy modes, kill switch,\nblast-radius cap",

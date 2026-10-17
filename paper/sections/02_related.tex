@@ -1,111 +1,111 @@
 \section{BACKGROUND AND RELATED WORK}\label{sec:related}
 
-This work draws on four literatures: LLM agents for cloud operations, the evaluation validity of LLM
-agents, runtime governance of agent actions, and the non-LLM automation those agents must be measured
-against. We cover each in turn and close by stating how the present study differs.
+This work draws on four bodies of literature: LLM agents for cloud operations, the validity of LLM
+agent evaluations, runtime governance of agent actions, and the non-LLM automation against which such
+agents should be measured. We review each in turn and then state how the present study differs.
 
 \subsection{The Base Architecture}
-Kirubakaran et~al.~\cite{kirubakaran2025governing} describe a data plane, a policy plane, and an
-agentic control plane. Four bounded agents share the control plane and produce only a validated
-action proposal. Their evaluation compares the system against a static-orchestration baseline across
-injected failures. Our implementation follows that same decomposition; wherever the description
-leaves a choice unspecified, we record our decision and its alternatives in the accompanying
-artifact.
+The base paper~\cite{kirubakaran2025governing} describes a data plane, a policy plane, and an agentic
+control plane. Four bounded agents share the control plane, and each produces only a validated action
+proposal. The evaluation compares the system with a static-orchestration baseline across injected
+failures. Our implementation follows the same decomposition. Wherever the description leaves a choice
+open, we record our decision and the alternatives in the accompanying artifact.
 
 \subsection{Heuristic Automation as the Baseline}
-Workflow orchestrators such as Airflow, Prefect, and Dagster are execution-centric: they schedule,
-retry, and alert, without reasoning about a failure their author never anticipated. Automation
-driven only by resource signals already accomplishes a great deal at production scale. Google's
-Autopilot~\cite{rzadca2020autopilot}, a heuristic autoscaler covering a large share of Google's
-fleet, uses no LLM at all. This kind of automation is a legitimate comparator, not a strawman. An
-empirical study of real data pipelines catalogs 41 failure factors~\cite{foidl2024datapipeline}, and
-comparing against static orchestration alone cannot show whether an agent system handles them better
-than cheap automation does. Two idealized heuristic baselines in our own evaluation
-(Section~\ref{sec:results}) beat the full agent system on recovery time and manual interventions.
+Workflow orchestrators such as Airflow, Prefect, and Dagster are execution-centric. They schedule,
+retry, and alert, but they do not reason about failures their authors did not anticipate. Automation
+driven only by resource signals nonetheless achieves a great deal at production scale: Google's
+Autopilot~\cite{rzadca2020autopilot}, a heuristic autoscaler that covers a large share of Google's
+fleet, uses no LLM. Such automation is therefore a legitimate comparator rather than a strawman. An
+empirical study of real data pipelines catalogs 41 failure factors~\cite{foidl2024datapipeline}, and a
+comparison against static orchestration alone cannot show whether an agent system handles them better
+than cheap automation does. In our own evaluation, two idealized heuristic baselines outperform the
+full agent system on recovery time and manual interventions (Section~\ref{sec:results}).
 
 \subsection{LLM Agents for Cloud Operations}
 Reasoning-and-acting loops~\cite{yao2022react} are the general pattern behind agents that observe a
-system and propose actions. In root-cause analysis, RCACopilot~\cite{chen2024rcacopilot} and
+system and propose actions. For root-cause analysis, RCACopilot~\cite{chen2024rcacopilot} and
 RCAgent~\cite{wang2023rcagent} apply tool-augmented LLMs to production incidents at Microsoft and
-Alibaba Cloud. Those systems stop at a recommended diagnosis, while the design studied here also
-\emph{executes} an action, which is exactly what makes a policy gate necessary.
-OpsAgent~\cite{luo2025opsagent}, a multi-agent incident-management system running in production at
-Lenovo, shows industrial practice heading the same way.
+Alibaba Cloud. Both stop at a recommended diagnosis. The design studied here also \emph{executes} an
+action, and that step is what makes a policy gate necessary. OpsAgent~\cite{luo2025opsagent}, a
+multi-agent incident-management system in production at Lenovo, shows industrial practice moving in
+the same direction.
 
 \subsection{Evaluation Validity for LLM Agents}
-Our central finding, a mock and a live evaluation of the identical system diverging by orders of
-magnitude (Section~\ref{sec:livemock}), fits inside a growing literature on the sim-to-real gap for
-LLM agents. The closest theoretical framing decomposes the
+Our central finding is that a mock and a live evaluation of the same system diverge by orders of
+magnitude (Section~\ref{sec:livemock}). This finding belongs to a growing literature on the
+sim-to-real gap for LLM agents. The closest theoretical framing~\cite{liu2026simtoreal} decomposes the
 gap into observation, action, transition, and reward mismatches within a unified MDP view of
-foundation-model agents. The empirical evidence agrees: one study finds
-that LLM-simulated environments are ``excessively cooperative'' and inflate agent success relative to
-grounded real-user data. Another study~\cite{gupta2026reliabilitybench} measures a reliability drop once the
-same agents move from clean benchmark conditions to production-like stress such as task
-perturbation, tool faults, and rate limiting. TheAgentCompany~\cite{xu2024agentcompany}, a
-high-fidelity simulated workplace, finds that even its best agent completes only about 30\% of
-consequential tasks, which marks benchmark realism as a problem distinct from the mock-versus-live
-axis. Benchmark validity is questioned more broadly too: a survey of over 1{,}300 agentic benchmark papers~\cite{rystrom2026agentbenchmarks}
-finds that none meet basic procedural-validity criteria for public-sector deployment. We contribute a
-controlled mock-versus-live comparison of one system through one code path.
+foundation-model agents. Empirical studies point the same way. LLM-simulated users have been found to
+be ``excessively cooperative'' and to inflate agent success relative to grounded real-user
+data~\cite{zhu2026realusersim}, and agent reliability drops when the same agents move from clean
+benchmark conditions to production-like stress such as task perturbation, tool faults, and rate
+limiting~\cite{gupta2026reliabilitybench}. TheAgentCompany~\cite{xu2024agentcompany}, a high-fidelity
+simulated workplace, finds that even its best agent completes only about 30\% of consequential tasks,
+which identifies benchmark realism as a problem separate from the mock-versus-live question. Benchmark
+validity is also questioned more broadly: a survey of more than 1{,}300 agentic benchmark
+papers~\cite{rystrom2026agentbenchmarks} finds that none meets basic procedural-validity criteria for
+public-sector deployment. Our contribution to this literature is a controlled mock-versus-live
+comparison of one system through one code path.
 
 \subsection{Graduated Autonomy and Runtime Policy}
-The trust core described in Section~\ref{sec:system}, with its shadow, approval, and autonomous
-modes, a durable kill switch, and a blast-radius cap, traces back to the game-theoretic treatment of
-shutdown incentives~\cite{hadfieldmenell2016offswitch}. A related framework~\cite{zheng2026separating} casts
-the same idea in concrete governance terms by separating an agent's \emph{allowed} autonomy level
-from its \emph{capability} level, and demonstrates the split on an enterprise data-engineering
-agent whose structure closely resembles the problem studied here.
+The trust core described in Section~\ref{sec:system}, with its shadow, approval, and autonomous modes,
+a durable kill switch, and a blast-radius cap, builds on the game-theoretic treatment of shutdown
+incentives~\cite{hadfieldmenell2016offswitch}. A related framework~\cite{zheng2026separating} expresses
+the same idea in governance terms by separating an agent's \emph{permitted} autonomy level from its
+\emph{capability} level, and it demonstrates the separation on an enterprise data-engineering agent
+whose structure closely resembles the system studied here.
 
-The policy gate itself runs on Open Policy Agent~\cite{opa} and its Rego language. The base design's
-safety case is that policy, not the model, bounds what can happen, and that case is only as strong as
-the policy's behavior on inputs its authors never considered. One critique~\cite{joshi2026deontic}
-argues that Rego-style languages are not expressive enough for agentic governance, a claim our
-adversarial corpus (Section~\ref{sec:results}) puts to an empirical test. ActGov~\cite{zhang2026actgov}
-validates every proposed tool call against an SMT-verified policy engine before execution, which is
-functionally the same per-action gate that our \texttt{ProposedAction} contract and OPA policies
-implement.
+The policy gate runs on Open Policy Agent~\cite{opa} and its Rego language. The base design's safety
+case is that the policy, not the model, bounds what can happen, and that case is only as strong as the
+policy's behavior on inputs its authors did not consider. One critique~\cite{joshi2026deontic} argues
+that Rego-style languages are not expressive enough for agentic governance, and our adversarial corpus
+(Section~\ref{sec:results}) tests that concern empirically. ActGov~\cite{zhang2026actgov} validates
+every proposed tool call against an SMT-verified policy engine before execution, which is functionally
+the same per-action gate that our \texttt{ProposedAction} contract and OPA policies implement.
 
 \subsection{Adversarial Evaluation}
-Asserting that a policy bound holds is not the same as testing it. AgentDojo
-\cite{debenedetti2024agentdojo} and the Agent Security Bench~\cite{zhang2024asb}, which reports
-attack success rates up to 84.3\% against weak defenses, come closest among extensible benchmarks to
-the corpus used here. The difference lies in the oracle: ours is an independently written
-specification of the policy rather than the policy engine under test, so a containment figure does
-not depend on the policy grading itself.
+A policy bound that is asserted has not thereby been tested. Among extensible benchmarks,
+AgentDojo~\cite{debenedetti2024agentdojo} and the Agent Security Bench~\cite{zhang2024asb}, which
+reports attack success rates of up to 84.3\% against weak defenses, are the closest to the corpus used
+here. The difference lies in the oracle. Ours is an independently written specification of the policy
+rather than the policy engine under test, so the containment figure does not depend on the policy
+grading itself.
 
 \subsection{Decision Quality and Cross-Model Generalization}
-Resolving an incident quickly is not the same as resolving it correctly. AIOpsLab
-\cite{chen2025aiopslab} evaluates cloud agents across detection, localization, and mitigation rather
-than on latency alone, and OpenSec~\cite{barnes2026opensec} finds that frontier models detect
-incidents well but calibrate poorly, with false-positive containment-action rates of 82.5\% and 45\%
-for two current models. Our correct-mitigation metric (Section~\ref{sec:method}) rests on that same
+Resolving an incident quickly is not the same as resolving it correctly.
+AIOpsLab~\cite{chen2025aiopslab} evaluates cloud agents on detection, localization, and mitigation
+rather than on latency alone, and OpenSec~\cite{barnes2026opensec} finds that frontier models detect
+incidents well but are poorly calibrated, with false-positive containment-action rates of 82.5\% and
+45\% for two current models. Our correct-mitigation metric (Section~\ref{sec:method}) rests on the same
 distinction.
 
 The base paper states that the GPT, Claude, and Gemini model families worked as interchangeable
-backends, yet it reports no cross-model results. Evidence from elsewhere counsels caution. One study~\cite{sanna2025crossllm} measures a 43.4-point
-accuracy drop when a behavioral backdoor detector moves from in-distribution to cross-LLM evaluation
-across six production models, and another~\cite{zhang2026towardagentic} shows that on identical input, agent behavior shifts
-independently with model version, open- versus closed-weight status, serving provider, and system
-prompt, with weight-release status a better predictor of behavior than model identity. The
-cross-model harness described in Section~\ref{sec:system} exists precisely to test that claim, but
-its live sweep was not run in this campaign (Section~\ref{sec:discussion}).
+backends, but it reports no cross-model results. Evidence from other settings suggests caution. One
+study~\cite{sanna2025crossllm} measures a 43.4-point accuracy drop when a behavioral backdoor detector
+moves from in-distribution to cross-LLM evaluation across six production models. Another
+study~\cite{zhang2026towardagentic} shows that, on identical input, agent behavior shifts with model
+version, open- versus closed-weight status, serving provider, and system prompt, and that
+weight-release status predicts behavior better than model identity. The cross-model harness described
+in Section~\ref{sec:system} was built to test this claim, but its live sweep was not run in this
+campaign (Section~\ref{sec:discussion}).
 
 \subsection{Fault Injection and Statistics}
-Deliberately injecting faults to test resilience is established practice~\cite{basiri2016chaos}. Our
-seeded injector reproduces four scenarios exactly, namely schema drift, upstream delay, resource
-contention, and ingress burst. For inference we rely on bootstrap resampling~\cite{efron1979}, the
-Mann--Whitney rank-sum~\cite{mann1947} and Wilcoxon signed-rank~\cite{wilcoxon1945} tests, Holm's
-step-down correction~\cite{holm1979}, Cliff's $\delta$ as an ordinal effect size~\cite{cliff1993},
-and Wilson score intervals~\cite{wilson1927} for proportions near one, where the normal approximation
-collapses to a zero-width interval.
+Injecting faults deliberately to test resilience is established practice~\cite{basiri2016chaos}. Our
+seeded injector reproduces four scenarios exactly: schema drift, upstream delay, resource contention,
+and ingress burst. For inference we use bootstrap resampling~\cite{efron1979}, the Mann--Whitney
+rank-sum test~\cite{mann1947}, the Wilcoxon signed-rank test~\cite{wilcoxon1945}, Holm's step-down
+correction~\cite{holm1979}, Cliff's $\delta$ as an ordinal effect size~\cite{cliff1993}, and Wilson
+score intervals~\cite{wilson1927} for proportions near one, where the normal approximation collapses
+to a zero-width interval.
 
 \subsection{Positioning}
-The base paper positions policy-bounded agentic control as its advantage over unconstrained
-LLM-driven automation, yet it asserts that the bound holds without testing it against an adversary,
-offers no cross-model results for its model-agnostic claim, and compares only against static
-orchestration. We test the first claim adversarially, benchmark against explicit, idealized non-LLM
-baselines, and report plainly that the harness for the second exists but has not been run live.
-Prior work on the sim-to-real gap already establishes that agents can fail under live or adversarial
-conditions. What this study adds is a demonstration, inside one controlled campaign, that the same
-system run through the same code path reaches qualitatively different conclusions depending on
-whether the model in the loop is mocked or live.
+The base paper presents policy-bounded agentic control as its advantage over unconstrained LLM-driven
+automation. However, it asserts that the bound holds without testing it against an adversary, offers
+no cross-model results for its claim of model independence, and compares only against static
+orchestration. We test the bound adversarially, compare against explicit, idealized non-LLM
+baselines, and state that the harness for the cross-model claim exists but has not been run live.
+Prior work on the sim-to-real gap already shows that agents can fail under live or adversarial
+conditions. This study adds evidence from one controlled campaign that the same system, run
+through the same code path, reaches qualitatively different conclusions depending on whether the model
+in the loop is mocked or live.

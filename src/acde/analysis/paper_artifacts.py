@@ -33,10 +33,10 @@ _DIGITS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight
 EFFECT_METRICS = ("mttr_s", "cost_units", "manual_interventions", "decision_correct")
 _METRIC_NAME = {
     "mttr_s": "MTTR (s)",
-    "cost_units": "cost (units)",
-    "manual_interventions": "manual interv.",
-    "decision_correct": "decision correct",
-    "freshness_s": "freshness (s)",
+    "cost_units": "Cost (units)",
+    "manual_interventions": "Manual interv.",
+    "decision_correct": "Decision correct",
+    "freshness_s": "Freshness (s)",
 }
 
 
@@ -141,7 +141,7 @@ def main_table(prim: pd.DataFrame, configs: Sequence[str]) -> str:
             for m in ("mttr_s", "cost_units", "manual_interventions", "decision_correct")
         ]
         rows.append(cells)
-    header = ["config", "LLM", "$n$", "MTTR (s)", "cost", "manual interv.", "decision correct"]
+    header = ["Config", "LLM", "$n$", "MTTR (s)", "Cost", "Manual interv.", "Decision correct"]
     return booktabs(header, rows, "llrrrrr")
 
 
@@ -166,8 +166,8 @@ def effects_table(rows: Sequence[dict[str, Any]]) -> str:
         )
     return booktabs(
         [
-            "config",
-            "metric",
+            "Config",
+            "Metric",
             r"$\Delta$ median [95\% CI]",
             r"Cliff's $\delta$ [95\% CI]",
             r"$p_{\mathrm{Holm}}$",
@@ -189,7 +189,7 @@ def live_mock_table(rows: Sequence[dict[str, Any]]) -> str:
         for r in rows
     ]
     return booktabs(
-        ["metric", "live", "mock", r"Cliff's $\delta$ [95\% CI]", r"$p_{\mathrm{Holm}}$"],
+        ["Metric", "Live", "Mock", r"Cliff's $\delta$ [95\% CI]", r"$p_{\mathrm{Holm}}$"],
         out,
         "lrrrr",
     )
@@ -213,14 +213,14 @@ def llm_table(acct: pd.DataFrame) -> str:
         )
     return booktabs(
         [
-            "config",
-            "calls",
-            "cache hits",
-            "degraded",
-            "invalid",
+            "Config",
+            "Calls",
+            "Cache hits",
+            "Degraded",
+            "Invalid",
             "API tokens",
-            "latency (s)",
-            "degraded \\%",
+            "Latency (s)",
+            "Degraded \\%",
         ],
         rows,
         "lrrrrrrr",
@@ -229,7 +229,7 @@ def llm_table(acct: pd.DataFrame) -> str:
 
 def scenario_table(table: pd.DataFrame) -> str:
     rows = [[tex(c), *[fnum(v) for v in row]] for c, row in table.iterrows()]
-    return booktabs(["config", *[tex(s) for s in table.columns]], rows, "l" + "r" * table.shape[1])
+    return booktabs(["Config", *[tex(s) for s in table.columns]], rows, "l" + "r" * table.shape[1])
 
 
 def _rate_cell(r: dict[str, Any] | None) -> str:
@@ -254,7 +254,7 @@ def adversarial_table(result: dict[str, Any]) -> str:
     o = result["overall"]
     rows.append(
         [
-            r"\textbf{overall}",
+            r"\textbf{Overall}",
             str(result["n_cases"]),
             _rate_cell(o["containment"]),
             _rate_cell(o["over_block"]),
@@ -264,12 +264,12 @@ def adversarial_table(result: dict[str, Any]) -> str:
     )
     return booktabs(
         [
-            "category",
-            "cases",
-            "containment [Wilson 95\\%]",
-            "over-block",
-            "oracle agreement",
-            "fail-open",
+            "Category",
+            "Cases",
+            "Containment [Wilson 95\\%]",
+            "Over-block",
+            "Oracle agreement",
+            "Fail-open",
         ],
         rows,
         "lrllll",
@@ -292,11 +292,11 @@ def sensitivity_table(report: dict[str, Any]) -> str:
         )
     return booktabs(
         [
-            "config",
+            "Config",
             "MTTR (s)",
-            "human break-even (s)",
-            "cost reduction (\\%)",
-            "static break-even",
+            "Human break-even (s)",
+            "Cost reduction (\\%)",
+            "Static break-even",
         ],
         rows,
         "lrrrr",
