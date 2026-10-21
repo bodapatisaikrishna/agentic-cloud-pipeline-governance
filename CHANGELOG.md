@@ -6,6 +6,9 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Figure 1 restyle**: `scripts/draw_architecture.py` now tints the seven layers by logical plane
+  (data, agentic control, policy and governance, enterprise) and numbers the steps of one control-loop
+  tick; components and flows are unchanged. Caption and submission package updated.
 - **Azure deployment (D-104t)**: single-VM Azure deployment (`deploy/azure/`: `deploy.sh`,
   cloud-init, Caddy HTTPS overlay, `.dockerignore`) on an Arm64 `Standard_B2pls_v2` in southeastasia,
   with shadow mode, mock LLM and the `noop` connector. OPA uses the Arm-capable
