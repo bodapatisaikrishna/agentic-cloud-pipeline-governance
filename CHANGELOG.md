@@ -6,6 +6,9 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Added
+- **Cloud deployment in the manuscript**: new Fig. 2 (`scripts/draw_deployment.py`, drawn from
+  `deploy/azure/`) and a "Reference Cloud Deployment, Health-Checked Only" subsection in Section III
+  (D-104t); the project report gains section 5.11 with the same figure.
 - **Figure 1 restyle**: `scripts/draw_architecture.py` now tints the seven layers by logical plane
   (data, agentic control, policy and governance, enterprise) and numbers the steps of one control-loop
   tick; components and flows are unchanged. Caption and submission package updated.

@@ -87,3 +87,26 @@ full audit log through a keyset cursor. Role-based access control with viewer, a
 roles, together with a tenant registry, binds each actor to a tenant and lets an operator suspend a
 tenant. This layer supports multi-tenant deployment but played no part in the experimental
 measurements.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/azure_deployment.pdf}
+\caption{Reference cloud deployment on Microsoft Azure (health-checked, not used for the
+experiments).}
+\label{fig:deploy}
+\end{figure}
+
+\subsection{Reference Cloud Deployment, Health-Checked Only}
+To show that the governance stack runs outside the laboratory host, we deployed it to a single
+Microsoft Azure virtual machine (Fig.~\ref{fig:deploy}): a \texttt{Standard\_B2pls\_v2} instance
+(Arm64, 2 vCPU, 4\,GB) running Ubuntu 24.04 in the Southeast Asia region. One script provisions the
+machine, and cloud-init installs Docker, generates every secret on the machine itself, and starts a
+Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. A Caddy
+reverse proxy obtains a Let's Encrypt certificate and serves the API over HTTPS. The network security
+group exposes only ports 443 and 80, and SSH only from the deployer's address. The policy engine runs
+the same pinned release as the campaign, in its Arm64 build. Because no production pipeline was
+attached, the deployment runs in \texttt{shadow} mode with the mock model and a no-op connector, so
+it observes and proposes but never acts. We verified a valid certificate, the HTTP-to-HTTPS redirect,
+authentication on every protected endpoint, and all seven readiness checks. No experiment ran on this
+deployment, and none of the results in Section~\ref{sec:results} come from it; the campaign needs the
+full stack with Airflow and Redpanda.
