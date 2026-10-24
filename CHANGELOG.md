@@ -5,6 +5,14 @@ per phase, `v1.0.0` at Phase 9.
 
 ## [Unreleased]
 
+### Security
+- **CI green again (red on `main` since 2026-10-02)**: bumped three transitive deps in `uv.lock`
+  (`uv lock --upgrade-package ...`, no `pyproject.toml` change). certifi 2026.7.22 → 2026.10.23
+  (GHSA-6q48-6c7w-9gw2, CRITICAL) and urllib3 2.7.0 → 2.8.0 (CVE-2026-97687, CVE-2026-97689, HIGH)
+  failed both the `docker-build` Trivy scan and the `quality` job's pip-audit step; pillow
+  12.3.0 → 13.0.0 (25 CVEs, via matplotlib in the `research` extra / dev group) failed pip-audit
+  only, since the server image installs `--no-dev`. No code or paper data changed.
+
 ### Added
 - **Cloud deployment in the manuscript**: new Fig. 2 (`scripts/draw_deployment.py`, drawn from
   `deploy/azure/`) and a "Cloud Deployment" subsection in Section III
