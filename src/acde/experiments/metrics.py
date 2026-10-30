@@ -56,14 +56,15 @@ def harvest_metrics(
     )
     # D-105: incidents a human had to handle, counted once each. manual_interventions counts
     # escalation requests: baseline files one per fault, but an agent re-proposing on every tick of
-    # an open fault files one per tick. An intervention belongs to a fault when it was requested
-    # while that fault was open.
+    # an open fault files one per tick. D-106: each request belongs to exactly one fault, the most
+    # recently injected one open when it was filed, so overlapping faults (schema drift raises a
+    # second schema_breaking event) cannot count one request twice.
     escalated = db.fetch_one(
-        "SELECT count(*) AS n FROM telemetry.failure_events f "
-        "WHERE f.experiment_run = %s AND EXISTS ("
-        "SELECT 1 FROM telemetry.manual_interventions m "
-        "WHERE m.experiment_run = f.experiment_run AND m.requested_ts >= f.injected_ts "
-        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts))",
+        "SELECT count(DISTINCT (SELECT f.event_id FROM telemetry.failure_events f "
+        "WHERE f.experiment_run = m.experiment_run AND f.injected_ts <= m.requested_ts "
+        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts) "
+        "ORDER BY f.injected_ts DESC, f.event_id DESC LIMIT 1)) AS n "
+        "FROM telemetry.manual_interventions m WHERE m.experiment_run = %s",
         (experiment_run,),
     )
     tokens = db.fetch_one(

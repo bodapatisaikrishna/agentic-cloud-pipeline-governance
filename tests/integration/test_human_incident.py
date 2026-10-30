@@ -63,3 +63,17 @@ def test_unescalated_fault_is_paged_at_detection_with_the_same_draw():
     s = get_settings()
     latency = sample_latency(77, 0, s.human_latency_median_s, s.human_latency_sigma)
     assert _resolved() == t0 + dt.timedelta(seconds=2 + latency)
+
+
+def test_one_request_against_overlapping_faults_is_one_incident():
+    from acde.experiments.metrics import harvest_metrics
+
+    t0 = _setup(1)  # schema drift plus one escalation at t0 + 4 s
+    db.execute(  # the second, overlapping event schema drift raises
+        "INSERT INTO telemetry.failure_events (event_id, experiment_run, scenario, fault_type, "
+        "injected_ts, detected_ts) VALUES (%s, %s, 'schema_drift', 'schema_breaking', %s, %s)",
+        (str(uuid.uuid4()), RUN, t0 + dt.timedelta(seconds=1), t0 + dt.timedelta(seconds=2)),
+    )
+    m = harvest_metrics(RUN, 1.0, "schema_drift", "full")
+    assert m["manual_interventions"] == 1.0
+    assert m["escalated_incidents"] == 1.0

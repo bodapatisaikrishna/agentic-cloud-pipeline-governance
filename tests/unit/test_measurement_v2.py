@@ -35,9 +35,10 @@ class TestEscalatedIncidents:
     def test_query_ties_requests_to_the_open_fault_window(self, monkeypatch):
         _, fake = _harvest(monkeypatch, [], {"c": 0}, interventions=0, escalated=0)
         sql = fake.fetch_one.call_args_list[2].args[0]
-        assert "telemetry.failure_events" in sql and "EXISTS" in sql
-        assert "m.requested_ts >= f.injected_ts" in sql
+        assert "telemetry.failure_events" in sql and "count(DISTINCT" in sql
+        assert "f.injected_ts <= m.requested_ts" in sql
         assert "m.requested_ts <= f.resolved_ts" in sql
+        assert "LIMIT 1" in sql  # one fault per request
 
 
 class TestRecoveryFromInjection:

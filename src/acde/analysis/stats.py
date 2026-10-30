@@ -171,3 +171,84 @@ def median_diff_ci(
         diffs[i] = ma - mb
     tail = (1 - confidence) / 2 * 100
     return (float(np.percentile(diffs, tail)), float(np.percentile(diffs, 100 - tail)))
+
+
+def tost_median_diff(
+    a: Sequence[float],
+    b: Sequence[float],
+    margin: float,
+    n_resamples: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, bool]:
+    """Two one-sided tests for equivalence of medians within ``±margin`` (bootstrap form).
+
+    Equivalence at level ``alpha`` holds when the ``1 - 2*alpha`` percentile-bootstrap interval of
+    ``median(a) - median(b)`` lies inside ``(-margin, margin)``. Returns ``(lo, hi, equivalent)``.
+    A non-significant difference test is not evidence of no difference; this is.
+    """
+    lo, hi = median_diff_ci(a, b, n_resamples, confidence=1 - 2 * alpha, seed=seed)
+    return (lo, hi, -margin < lo and hi < margin)
+
+
+def stratified_permutation_test(
+    a_by_stratum: dict[str, Sequence[float]],
+    b_by_stratum: dict[str, Sequence[float]],
+    n_permutations: int = 5000,
+    seed: int = 0,
+) -> float:
+    """Two-sided p-value for a difference between ``a`` and ``b`` that respects strata.
+
+    Within each stratum (scenario) the pooled values are ranked and the statistic is the mean rank
+    of ``a`` minus that of ``b``, scaled by the stratum size and summed over strata. Group labels
+    are permuted *within* strata only, so a scenario where both groups are slow cannot stand in for
+    a treatment effect, which a pooled rank-sum test allows.
+    """
+    strata = [s for s in a_by_stratum if len(a_by_stratum[s]) and len(b_by_stratum.get(s, ()))]
+    if not strata:
+        return 1.0
+    rng = np.random.default_rng(seed)
+    blocks = []
+    for s in strata:
+        a_arr = np.asarray(a_by_stratum[s], dtype=float)
+        b_arr = np.asarray(b_by_stratum[s], dtype=float)
+        ranks = scipy_stats.rankdata(np.concatenate([a_arr, b_arr]))
+        blocks.append((ranks, a_arr.size))
+
+    def statistic(perms: list[np.ndarray] | None) -> float:
+        total = 0.0
+        for i, (ranks, n_a) in enumerate(blocks):
+            r = ranks if perms is None else ranks[perms[i]]
+            total += (r[:n_a].mean() - r[n_a:].mean()) / ranks.size
+        return total
+
+    observed = abs(statistic(None))
+    hits = 0
+    for _ in range(n_permutations):
+        perms = [rng.permutation(ranks.size) for ranks, _ in blocks]
+        if abs(statistic(perms)) >= observed - 1e-12:
+            hits += 1
+    return (hits + 1) / (n_permutations + 1)
+
+
+def tost_proportion_diff(
+    a: Sequence[float],
+    b: Sequence[float],
+    margin: float,
+    n_resamples: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float, bool]:
+    """TOST like :func:`tost_median_diff`, on the difference in means of a 0/1 metric."""
+    a_arr, b_arr = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a_arr.size == 0 or b_arr.size == 0:
+        return (math.nan, math.nan, False)
+    rng = np.random.default_rng(seed)
+    diffs = np.array(
+        [
+            rng.choice(a_arr, a_arr.size).mean() - rng.choice(b_arr, b_arr.size).mean()
+            for _ in range(n_resamples)
+        ]
+    )
+    lo, hi = np.percentile(diffs, [100 * alpha, 100 * (1 - alpha)])
+    return (float(lo), float(hi), -margin < lo and hi < margin)

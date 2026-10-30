@@ -2638,6 +2638,12 @@ behaviour a pager rewards); (c) start the human clock at injection for every con
 (rejected: an agent that escalates promptly should get credit for paging early). `HumanSimulator`
 itself (used by the standalone simulator loop) is unchanged.
 
+**Escalation attribution.** `escalated_incidents` (D-105) counted every fault whose open window
+contained an escalation. Schema drift raises a second, overlapping `schema_breaking` event, so one
+escalation counted twice (a hybrid smoke run reported 2 incidents from 1 request). Each request is
+now attributed to exactly one fault, the most recently injected one open when it was filed, so
+`escalated_incidents <= manual_interventions` always holds.
+
 **Escalation dedupe (opt-in).** `ESCALATION_DEDUPE=true` makes `executor._escalate` skip a new
 escalation while one is still open for the run, like a pager's dedup key. It is off by default so
 `full` keeps its v1 behaviour; with this entry's fix, duplicate pages no longer change MTTR, and
