@@ -290,6 +290,8 @@ def build_v2(
     excluded = ps.excluded_pairs(df_all)
     df = ps.apply_exclusions(df_all, excluded)
     prim = ps.primary(df)
+    if prim.empty:
+        raise FileNotFoundError(f"no live or LLM-free v2 runs under {root} (only the mock arm?)")
     configs = [c for c in ALL_CONFIGS if c in set(prim["config"])]
     kw: dict[str, Any] = {"seed": seed, "n_resamples": n_resamples, "paired": True}
     family_a = ps.compare_to_baseline(df, v2.V2_PRIMARY, configs, **kw)

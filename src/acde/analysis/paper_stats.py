@@ -293,4 +293,6 @@ def llm_accounting(df: pd.DataFrame, configs: Sequence[str]) -> pd.DataFrame:
         calls, degraded = row.get("llm_calls") or 0.0, row.get("llm_degraded") or 0.0
         row["degraded_fraction"] = degraded / (calls + degraded) if calls + degraded else None
         rows.append(row)
-    return pd.DataFrame(rows).set_index("config")
+    return pd.DataFrame(rows, columns=["config", *LLM_METRICS, "degraded_fraction"]).set_index(
+        "config"
+    )

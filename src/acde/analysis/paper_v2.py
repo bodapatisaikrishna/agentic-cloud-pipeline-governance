@@ -103,7 +103,7 @@ def cost_split(df: pd.DataFrame, configs: Sequence[str]) -> pd.DataFrame:
             vals = ps._values(df, c, term)
             row[term] = stats.median(vals) if vals else None
         rows.append(row)
-    return pd.DataFrame(rows).set_index("config")
+    return pd.DataFrame(rows, columns=["config", *COST_TERMS]).set_index("config")
 
 
 def side_by_side(v1: pd.DataFrame, v2: pd.DataFrame, configs: Sequence[str]) -> pd.DataFrame:
@@ -121,7 +121,8 @@ def side_by_side(v1: pd.DataFrame, v2: pd.DataFrame, configs: Sequence[str]) -> 
             row[f"{name}_v1"] = stats.median(a) if a else None
             row[f"{name}_v2"] = stats.median(b) if b else None
         rows.append(row)
-    return pd.DataFrame(rows).set_index("config")
+    columns = ["config", *(f"{n}_{v}" for n, _, _ in pairs for v in ("v1", "v2"))]
+    return pd.DataFrame(rows, columns=columns).set_index("config")
 
 
 def expected_min_draw_median(
