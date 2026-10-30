@@ -273,7 +273,7 @@ proposals within a run, and degrade to `no_action` on any provider failure. The 
 | Hardening | Concurrency fuzzing, OPA audit, bid-based arbitration, migrations, write-ahead audit, Helm, RBAC, multi-tenancy, backups (D-077–D-099) | ✅ verified (unreleased) |
 | Feature focus | Live decision-quality monitoring, Slack/PagerDuty, richer dashboard (D-100–D-103) | ✅ verified (unreleased) |
 | Journal paper (D-104) | 560-run live campaign (2026-09-26), adversarial corpus, sensitivity analyses, manuscript, Azure deployment (D-104t) | ✅ verified (unreleased) |
-| Measurement v2 (D-105) | Incident-level escalations, MTTR from injection, per-run state reset, fixed metering window, paired seeds, `paper_v2` profile | 🟡 unit-tested; integration + re-run pending |
+| Measurement v2 (D-105) | Incident-level escalations, MTTR from injection, per-run state reset, fixed metering window, paired seeds, `paper_v2` profile | 🟡 unit + integration tested, smoke verified; v2 campaign pending |
 
 ## License and citation
 

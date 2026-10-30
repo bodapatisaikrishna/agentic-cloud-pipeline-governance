@@ -2600,9 +2600,11 @@ it; v1 finished arm A before B and ran the mock arm last.
 **Provenance.** Every v2 manifest line records `measurement_protocol: v2`, `seed_policy`, the pool
 baseline and the sampling interval, so the existing provenance check refuses to merge v1 and v2.
 
-**Not verified.** Unit-tested only (22 new tests). The integration suite and a smoke campaign were
-not run because Docker was not running on the development machine; the Airflow pool reset in
-particular has only been exercised through its failure path. Run `make up` then
-`make campaign-smoke` and the integration tests before starting `make campaign-v2`. The analysis and
-paper-artifact code do not yet read the new metrics.
+**Verified (2026-10-30).** 22 new unit tests; all 32 integration tests pass against the full stack;
+`campaign-smoke` completes. With `default_pool` set to 4 slots before the smoke run, it was back at
+128 afterwards, and both runs recorded `state_reset_ok = 1`. Both runs metered the same compute
+(0.65 units over the same window). `baseline` reports `mttr_injection_s = mttr_s` (detection at
+injection); `full` reports a 0.10 s detection delay that `mttr_s` leaves out. The manifest records
+`measurement_protocol: v2`. *Still open:* the analysis and paper-artifact code do not yet read the
+new metrics, and no `paper_v2` run has been made.
 
