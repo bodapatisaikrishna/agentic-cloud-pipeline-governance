@@ -86,10 +86,10 @@ eventually, but only after several runs had been wasted. The pilot caught it on 
 the real settings. A model that a provider still lists may no longer answer.
 
 \subsection{L8: The Simulated Engineer Rewarded Repeated Escalation}\label{sec:humanartifact}
-After the campaign we found a flaw in the on-call model. It biases every MTTR comparison involving a
-configuration that escalates more than once. The simulator gave each escalation row its own
-log-normal delay, and the fault closed when the fastest of them finished. A configuration that
-escalated on several ticks of one fault therefore drew several delays and kept the minimum.
+After the campaign we found a flaw in the on-call model that favours any configuration escalating
+more than once. The simulator gave each escalation row its own log-normal delay and closed the fault
+when the fastest one finished. An agent that escalated on several ticks of the same fault thus drew
+several delays and kept the shortest.
 
 \begin{table}[t]
 \centering
@@ -103,19 +103,18 @@ escalated on several ticks of one fault therefore drew several delays and kept t
 
 Table~\ref{tab:humancheck} shows the effect. We count a run as human-resolved when its MTTR is at
 least \NHumanResolvedMin{}\,s; the chance that even the fastest of \NHumanEscalationsMax{} draws
-falls below that is about \NHumanFastBelowMinProb{}. In \texttt{full}, \NHumanResolvedFull{} of
-\NNFull{} runs were resolved by the human, after a median of \NHumanEscalationsFull{} escalations.
-Their median MTTR is \NHumanMttrFull{}\,s. That is much closer to the \NHumanFastestDrawFull{}\,s
-expected from the fastest of \NHumanEscalationsFull{} draws than to the \NHumanFastestDrawBaseline{}\,s
-of a single draw. \texttt{recovery\_only} behaves the same way (\NHumanMttrRecoveryOnly{}\,s).
-\texttt{monitor\_only} escalates once and stays at \NHumanMttrMonitorOnly{}\,s, near
-\texttt{baseline}. Most of the MTTR reduction that Section~\ref{sec:results} reports for
-\texttt{full} and \texttt{recovery\_only} therefore comes from the simulator, not from the agents.
-The same behaviour accounts for part of the rise in manual interventions, since each re-escalation
-adds a row.
+falls below that is about \NHumanFastBelowMinProb{}. The human resolved \NHumanResolvedFull{} of the
+\NNFull{} \texttt{full} runs, and those runs escalated a median of \NHumanEscalationsFull{} times.
+Their median MTTR, \NHumanMttrFull{}\,s, is much closer to the \NHumanFastestDrawFull{}\,s expected
+from the fastest of \NHumanEscalationsFull{} draws than to the \NHumanFastestDrawBaseline{}\,s of a
+single draw. \texttt{recovery\_only} shows the same pattern (\NHumanMttrRecoveryOnly{}\,s), whereas
+\texttt{monitor\_only}, which escalates once, stays at \NHumanMttrMonitorOnly{}\,s, close to
+\texttt{baseline}. For \texttt{full} and \texttt{recovery\_only}, then, the simulator rather than
+the agents produced most of the MTTR reduction reported in Section~\ref{sec:results}. It also
+explains part of the rise in manual interventions, because every re-escalation adds a row.
 
-We have changed the simulator to page once per incident. The page starts at the first escalation,
-and one delay is drawn per fault, so paired runs share it (D-106 in the repository). A pre-registered
-re-run with this fix is planned; its numbers are not part of this paper. \emph{Lesson:} a simulated
-human is part of the measuring instrument and deserves the same scrutiny as the system under test.
-Check that its output cannot be moved by how often the system asks it for help.
+The simulator now pages the engineer once per incident, starting at the first escalation, with a
+single delay per fault that paired runs share (D-106 in the repository). We plan a pre-registered
+re-run with this fix; this paper reports none of its numbers. \emph{Lesson:} a simulated human
+belongs to the measuring instrument and needs the same scrutiny as the system under test. Its output
+should not change with how often the system asks for help.

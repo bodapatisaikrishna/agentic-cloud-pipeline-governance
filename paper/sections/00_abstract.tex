@@ -5,9 +5,9 @@ produced them. We implement the system and evaluate it with a real, remote langu
 \NRunsTotal{}-run campaign that crosses four injected fault scenarios with eight configurations: three
 non-agent comparators, the full system, and four single-agent ablations. With a live model, the full
 system changes mean time to recovery (MTTR) by \NRelpctMttrSFull{}\% and cost by
-\NRelpctCostUnitsFull{}\% relative to static orchestration. Most of the cost change comes from an
-assumed provisioning gap. Most of the MTTR change comes from a flaw we found afterwards in the
-simulated on-call engineer, which drew one delay per escalation and kept the fastest. The full system
+\NRelpctCostUnitsFull{}\% relative to static orchestration. An assumed provisioning gap accounts for
+most of the cost change. Most of the MTTR change traces to a flaw we found afterwards in the
+simulated on-call engineer: it drew one delay per escalation and kept the fastest. The full system
 also \emph{increases} manual interventions by \NRelpctManualInterventionsFull{}\%. Two idealized
 non-LLM baselines with fixed modelled latencies recover faster still, changing MTTR by
 \NRelpctMttrSRuleBased{}\% and \NRelpctMttrSAutoscale{}\%. When the same \texttt{full} configuration

@@ -30,9 +30,11 @@ straightforward: the metric counts rows in the
 to that table. Why the count rises is a separate question, and we have not answered it. One fault
 that stays open could escalate again on tick after tick. Repeated denials could end in hand-offs to
 the human. Both could be happening at once. Telling these apart needs a per-tick trace of proposal
-outcomes across the life of a fault, and the current telemetry does not keep one. Section~\ref{sec:humanartifact} adds one fact: the median human-resolved \texttt{full}
-run escalated \NHumanEscalationsFull{} times, so repeated escalation on an open fault is at least
-part of the mechanism. Beyond that we leave it open and do not try to infer it from the total. Readers should not assume it resolves in the
+outcomes across the life of a fault, and the current telemetry does not keep one.
+Section~\ref{sec:humanartifact} settles one piece: the median human-resolved \texttt{full} run
+escalated \NHumanEscalationsFull{} times, so repeated escalation on an open fault is at least part of
+the mechanism. We leave the rest open and do not try to infer it from the total. Readers should not
+assume it resolves in the
 system's favor.
 
 \subsection{Limitations and Threats to Validity}\label{sec:limitations}
@@ -41,9 +43,9 @@ system's favor.
 We see nine threats. \emph{Simulated human.} All comparisons with \texttt{baseline} depend on the
 log-normal on-call model. Section~\ref{sec:sensitivity} gives the break-even point; it does not argue
 that the model is right. \emph{Per-escalation human draws.} The simulator drew one delay per
-escalation and kept the fastest, which shortens MTTR for configurations that escalate repeatedly.
-Section~\ref{sec:humanartifact} shows this accounts for most of the MTTR gain of \texttt{full} and
-\texttt{recovery\_only}. \emph{Modelled baselines.} In \texttt{rule\_based} and \texttt{autoscale},
+escalation and kept the fastest, so configurations that escalate repeatedly get shorter MTTRs.
+Section~\ref{sec:humanartifact} attributes most of the MTTR gain of \texttt{full} and
+\texttt{recovery\_only} to this effect. \emph{Modelled baselines.} In \texttt{rule\_based} and \texttt{autoscale},
 covered faults are resolved after fixed latencies that we assumed (Section~\ref{sec:method}). Their
 lead over the agents comes from those assumptions and is not a measurement of any deployed rule engine
 or autoscaler. \emph{Synthetic workload.} Our data are a downscaled synthetic table with injected
