@@ -20,9 +20,13 @@ import pandas as pd
 from acde.analysis import stats
 from acde.analysis.analyze import load_raw
 
-# results sub-directory -> arm label. "live" agents call a real model; "static" configs call none;
-# "mock" is the deterministic-mock counterpart of live ``full``.
-ARM_DIRS = {"paper-live": "live", "paper-baselines": "static", "paper-mock": "mock"}
+# results sub-directory -> arm label, per measurement protocol. "live" agents call a real model;
+# "static" configs call none; "mock" is the deterministic-mock counterpart of live ``full``.
+PROTOCOL_ARMS: dict[str, dict[str, str]] = {
+    "v1": {"paper-live": "live", "paper-baselines": "static", "paper-mock": "mock"},
+    "v2": {"paper-v2-live": "live", "paper-v2-baselines": "static", "paper-v2-mock": "mock"},
+}
+ARM_DIRS = PROTOCOL_ARMS["v1"]
 
 LLM_METRICS = (
     "api_tokens",
@@ -39,26 +43,32 @@ HEADLINE_METRICS = (
     "decision_correct",
     "freshness_s",
 )
-_PROVENANCE_KEYS = ("git_sha", "timings", "human_latency", "provisioning", "llm_budget")
+_PROVENANCE_KEYS = ("timings", "human_latency", "provisioning", "llm_budget")
+# v2 adds these; a v1 manifest has none of them, so they are only compared when present.
+_V2_PROVENANCE_KEYS = ("measurement_protocol", "seed_policy", "pool_baseline_slots")
+# A run whose pool reset failed (D-105) and the threshold at which the supervisor calls a live run
+# degraded (campaign.CampaignConfig.degraded_threshold).
+DEGRADED_THRESHOLD = 10.0
 
 
-def load_campaign(root: Path) -> pd.DataFrame:
-    """Load every arm under ``root`` into one long frame with an ``arm`` column."""
+def load_campaign(root: Path, protocol: str = "v1") -> pd.DataFrame:
+    """Load every arm of ``protocol`` under ``root`` into one long frame with an ``arm`` column."""
+    arm_dirs = PROTOCOL_ARMS[protocol]
     frames = []
-    for sub, arm in ARM_DIRS.items():
+    for sub, arm in arm_dirs.items():
         if (root / sub / "raw.csv").exists():
             df = load_raw(root / sub)
             df["arm"] = arm
             frames.append(df)
     if not frames:
-        raise FileNotFoundError(f"no arm results under {root} (looked for {sorted(ARM_DIRS)})")
+        raise FileNotFoundError(f"no arm results under {root} (looked for {sorted(arm_dirs)})")
     return pd.concat(frames, ignore_index=True)
 
 
-def load_manifests(root: Path) -> list[dict[str, Any]]:
-    """Every manifest record under ``root``, each tagged with its arm."""
+def load_manifests(root: Path, protocol: str = "v1") -> list[dict[str, Any]]:
+    """Every manifest record of ``protocol`` under ``root``, each tagged with its arm."""
     records: list[dict[str, Any]] = []
-    for sub, arm in ARM_DIRS.items():
+    for sub, arm in PROTOCOL_ARMS[protocol].items():
         path = root / sub / "manifest.jsonl"
         if path.exists():
             for line in path.read_text().splitlines():
@@ -75,10 +85,13 @@ def provenance_problems(records: Sequence[dict[str, Any]]) -> list[str]:
     numbers mix conditions and the paper cannot present them as one comparison.
     """
     problems: list[str] = []
-    for key in _PROVENANCE_KEYS:
-        seen = {
-            json.dumps(r["provenance"][key], sort_keys=True) for r in records if "provenance" in r
-        }
+    provs = [r["provenance"] for r in records if "provenance" in r]
+    # D-106: compare the experiment-code fingerprint when every run has one, so arms run at commits
+    # that differ only in docs or analysis code still merge; v1 manifests only have the commit.
+    version_key = "code_tree" if provs and all("code_tree" in p for p in provs) else "git_sha"
+    v2_keys = tuple(k for k in _V2_PROVENANCE_KEYS if any(k in p for p in provs))
+    for key in (version_key, *_PROVENANCE_KEYS, *v2_keys):
+        seen = {json.dumps(p.get(key), sort_keys=True) for p in provs}
         if len(seen) > 1:
             problems.append(f"provenance field {key!r} varies across runs: {len(seen)} values")
     if any("provenance" not in r for r in records):
@@ -93,6 +106,32 @@ def provenance_problems(records: Sequence[dict[str, Any]]) -> list[str]:
                 f"arm {arm!r} contains llm_mode {sorted(got - modes)}, expected {sorted(modes)}"
             )
     return problems
+
+
+def excluded_pairs(df: pd.DataFrame, *, drop_degraded: bool = False) -> set[tuple[str, int]]:
+    """(scenario, replicate) pairs to drop under the pre-registered rule (preregistration-v2 §6).
+
+    A pair is dropped from every configuration when any of its runs failed the pool reset
+    (``state_reset_ok = 0``), and, in the sensitivity analysis, when a live run was degraded.
+    Dropping the whole pair keeps the paired tests complete.
+    """
+    bad = df[(df["metric"] == "state_reset_ok") & (df["value"] == 0)]
+    if drop_degraded:
+        degraded = df[
+            (df["arm"] == "live")
+            & (df["metric"] == "llm_degraded")
+            & (df["value"] >= DEGRADED_THRESHOLD)
+        ]
+        bad = pd.concat([bad, degraded])
+    return {(str(s), int(r)) for s, r in zip(bad["scenario"], bad["replicate"], strict=True)}
+
+
+def apply_exclusions(df: pd.DataFrame, pairs: set[tuple[str, int]]) -> pd.DataFrame:
+    """``df`` without the runs of the given (scenario, replicate) pairs."""
+    if not pairs:
+        return df
+    keys = list(zip(df["scenario"].astype(str), df["replicate"].astype(int), strict=True))
+    return df[[k not in pairs for k in keys]]
 
 
 def primary(df: pd.DataFrame) -> pd.DataFrame:
@@ -129,8 +168,13 @@ def compare_samples(
     *,
     seed: int = 0,
     n_resamples: int = 2000,
+    paired: bool = False,
 ) -> dict[str, Any]:
-    """Effect summary of ``treat`` vs ``control`` (negative diff / delta = treat lower)."""
+    """Effect summary of ``treat`` vs ``control`` (negative diff / delta = treat lower).
+
+    ``paired`` (v2, shared seeds) makes the signed-rank test on the matched runs the primary test;
+    otherwise (v1, seeds independent across configs) the rank-sum test is.
+    """
     med_t, med_c = stats.median(treat), stats.median(control)
     _, p_mw = stats.mann_whitney(treat, control)
     p_wx = stats.paired_wilcoxon(matched[0], matched[1])[1] if matched and len(matched[0]) else 1.0
@@ -146,6 +190,8 @@ def compare_samples(
         "cliffs_delta_ci": stats.cliffs_delta_ci(treat, control, n_resamples, seed=seed),
         "p_mannwhitney": p_mw,
         "p_wilcoxon_matched": p_wx,
+        "p_primary": p_wx if paired else p_mw,
+        "test": "wilcoxon_signed_rank" if paired else "mann_whitney",
         "n_matched": len(matched[0]) if matched else 0,
     }
 
@@ -158,6 +204,7 @@ def compare_to_baseline(
     *,
     seed: int = 0,
     n_resamples: int = 2000,
+    paired: bool = False,
 ) -> list[dict[str, Any]]:
     """Every (metric, config) comparison against ``control``, Holm-corrected as one family."""
     df = primary(df)
@@ -175,14 +222,21 @@ def compare_to_baseline(
                     "metric": metric,
                     "config": config,
                     "control": control,
-                    **compare_samples(t, c, matched, seed=seed, n_resamples=n_resamples),
+                    **compare_samples(
+                        t, c, matched, seed=seed, n_resamples=n_resamples, paired=paired
+                    ),
                 }
             )
+    _holm(rows)
+    return rows
+
+
+def _holm(rows: list[dict[str, Any]]) -> None:
+    """Holm-adjust each row's primary p-value in place, the rows forming one family."""
     for row, (adj, reject) in zip(
-        rows, stats.holm_bonferroni([r["p_mannwhitney"] for r in rows]), strict=True
+        rows, stats.holm_bonferroni([r["p_primary"] for r in rows]), strict=True
     ):
         row["p_holm"], row["significant"] = adj, reject
-    return rows
 
 
 def live_vs_mock(
@@ -192,6 +246,7 @@ def live_vs_mock(
     *,
     seed: int = 0,
     n_resamples: int = 2000,
+    paired: bool = False,
 ) -> list[dict[str, Any]]:
     """Live-LLM ``config`` vs its mock-LLM twin: the paper's mock-vs-live divergence, measured."""
     live = df[(df["arm"] == "live") & (df["config"] == config)]
@@ -206,14 +261,16 @@ def live_vs_mock(
                     "metric": metric,
                     "config": config,
                     **compare_samples(
-                        t, c, _matched(live, mock, metric), seed=seed, n_resamples=n_resamples
+                        t,
+                        c,
+                        _matched(live, mock, metric),
+                        seed=seed,
+                        n_resamples=n_resamples,
+                        paired=paired,
                     ),
                 }
             )
-    for row, (adj, reject) in zip(
-        rows, stats.holm_bonferroni([r["p_mannwhitney"] for r in rows]), strict=True
-    ):
-        row["p_holm"], row["significant"] = adj, reject
+    _holm(rows)
     return rows
 
 

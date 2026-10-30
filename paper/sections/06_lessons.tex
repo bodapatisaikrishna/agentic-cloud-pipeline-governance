@@ -84,3 +84,38 @@ supervisor has a guard against streaks of degraded calls, so it would have caugh
 eventually, but only after several runs had been wasted. The pilot caught it on the first call.
 \emph{Lesson:} in a long experiment that costs money, the cheapest validity check is a short run with
 the real settings. A model that a provider still lists may no longer answer.
+
+\subsection{L8: The Simulated Engineer Rewarded Repeated Escalation}\label{sec:humanartifact}
+After the campaign we found a flaw in the on-call model. It biases every MTTR comparison involving a
+configuration that escalates more than once. The simulator gave each escalation row its own
+log-normal delay, and the fault closed when the fastest of them finished. A configuration that
+escalated on several ticks of one fault therefore drew several delays and kept the minimum.
+
+\begin{table}[t]
+\centering
+\caption{Human-Resolved Runs (``Human''), Their Median Escalations and MTTR (s), and the Median
+  Fastest of That Many Simulated-Human Draws (s)}
+\label{tab:humancheck}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\input{generated/tab_human_check.tex}
+\end{table}
+
+Table~\ref{tab:humancheck} shows the effect. We count a run as human-resolved when its MTTR is at
+least \NHumanResolvedMin{}\,s; the chance that even the fastest of \NHumanEscalationsMax{} draws
+falls below that is about \NHumanFastBelowMinProb{}. In \texttt{full}, \NHumanResolvedFull{} of
+\NNFull{} runs were resolved by the human, after a median of \NHumanEscalationsFull{} escalations.
+Their median MTTR is \NHumanMttrFull{}\,s. That is much closer to the \NHumanFastestDrawFull{}\,s
+expected from the fastest of \NHumanEscalationsFull{} draws than to the \NHumanFastestDrawBaseline{}\,s
+of a single draw. \texttt{recovery\_only} behaves the same way (\NHumanMttrRecoveryOnly{}\,s).
+\texttt{monitor\_only} escalates once and stays at \NHumanMttrMonitorOnly{}\,s, near
+\texttt{baseline}. Most of the MTTR reduction that Section~\ref{sec:results} reports for
+\texttt{full} and \texttt{recovery\_only} therefore comes from the simulator, not from the agents.
+The same behaviour accounts for part of the rise in manual interventions, since each re-escalation
+adds a row.
+
+We have changed the simulator to page once per incident. The page starts at the first escalation,
+and one delay is drawn per fault, so paired runs share it (D-106 in the repository). A pre-registered
+re-run with this fix is planned; its numbers are not part of this paper. \emph{Lesson:} a simulated
+human is part of the measuring instrument and deserves the same scrutiny as the system under test.
+Check that its output cannot be moved by how often the system asks it for help.

@@ -1,15 +1,15 @@
 \begin{abstract}
 A recent proposal governs cloud data pipelines with four policy-gated LLM agents and reports
-substantial gains over static orchestration. The original study does not disclose sufficient
-implementation detail to determine the exact model-in-the-loop evaluation condition behind those
-gains. We implement the system and evaluate it with a real, remote language model in a
+substantial gains over static orchestration, without saying which model-in-the-loop condition
+produced them. We implement the system and evaluate it with a real, remote language model in a
 \NRunsTotal{}-run campaign that crosses four injected fault scenarios with eight configurations: three
-non-agent comparators, the full system, and four single-agent ablations. The runs are divided into
-live-agent, non-agent, and mock-model arms. With a live model, the full system changes mean time to
-recovery (MTTR) by \NRelpctMttrSFull{}\% and cost by \NRelpctCostUnitsFull{}\% relative to static
-orchestration, with most of the cost change coming from an assumed provisioning gap. Yet it
-\emph{increases} manual interventions by \NRelpctManualInterventionsFull{}\%. Two idealized non-LLM
-baselines, each given a fixed modelled remediation latency, recover faster still, changing MTTR by
+non-agent comparators, the full system, and four single-agent ablations. With a live model, the full
+system changes mean time to recovery (MTTR) by \NRelpctMttrSFull{}\% and cost by
+\NRelpctCostUnitsFull{}\% relative to static orchestration. Most of the cost change comes from an
+assumed provisioning gap. Most of the MTTR change comes from a flaw we found afterwards in the
+simulated on-call engineer, which drew one delay per escalation and kept the fastest. The full system
+also \emph{increases} manual interventions by \NRelpctManualInterventionsFull{}\%. Two idealized
+non-LLM baselines with fixed modelled latencies recover faster still, changing MTTR by
 \NRelpctMttrSRuleBased{}\% and \NRelpctMttrSAutoscale{}\%. When the same \texttt{full} configuration
 runs under a deterministic mock instead of the live model, recovery time falls to
 \NLiveVsMockMttrSMock{}\,s, about three orders of magnitude below the live figure, and the
@@ -17,7 +17,7 @@ correct-mitigation score rises from \NDeltaDecisionCorrectFull{} to \NLiveVsMock
 A mock evaluation and a live evaluation of the same system therefore support different conclusions.
 Graded against an oracle independent of the policy code, a generated adversarial corpus of
 $\NAdversarialCases{}$ cases yields containment $\geq\NAdversarialWilsonLo{}$, but only after two
-contract-layer gaps exposed by the corpus were fixed. The evidence is bounded by a single host,
+contract-layer gaps it exposed were fixed. The evidence is bounded by a single host,
 synthetic data with injected faults, a simulated on-call engineer, one live model family, and
 baselines that are modelled rather than deployed.
 \end{abstract}

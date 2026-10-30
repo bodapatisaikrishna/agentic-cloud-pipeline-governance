@@ -4,7 +4,8 @@ We implemented and evaluated a policy-gated multi-agent design for cloud pipelin
 live remote language model, explicit non-agent baselines, an adversarial evaluation against an
 independent oracle, and closed-form sensitivity analyses. The design holds up only in part. Compared
 with static orchestration, it shortens recovery time, though by less than the original report
-claimed. It lowers cost by more than claimed, but nearly all of that saving comes from an assumed
+claimed, and most of that reduction turns out to come from the simulated engineer rather than the
+agents. It lowers cost by more than claimed, but nearly all of that saving comes from an assumed
 provisioning gap. Manual interventions go up, and two idealized non-LLM comparators recover faster
 still. The result we consider most important concerns the evaluation, not the design. With the same
 code path and the same configuration, a deterministic mock and a live model lead to very different
@@ -17,8 +18,8 @@ mock and live numbers are separate findings until both have been measured.
 
 We see two directions for future work. One is to collect the evidence this campaign lacks: a live
 cross-model sweep to test model independence, a test of the trust core's mode transitions and
-kill-switch latency under load, a cost re-run that resets per-run state and uses a fixed measurement
-window, and deployed controllers and real production traces in place of the two modelled baselines
+kill-switch latency under load, a pre-registered re-run with the corrected simulator, per-run state
+resets and a fixed cost window, and deployed controllers and real production traces in place of the two modelled baselines
 (Section~\ref{sec:discussion}). The other is design work: replacing the
 static agent-priority bid with an explicit negotiation protocol, enabling the bounded-adaptation
 mechanism that is currently disabled to preserve determinism, and extending the evaluation to

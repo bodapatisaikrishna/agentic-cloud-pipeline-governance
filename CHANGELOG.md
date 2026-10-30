@@ -28,9 +28,18 @@ per phase, `v1.0.0` at Phase 9.
   that differ only in docs or analysis code can still be merged.
 - **`ESCALATION_DEDUPE` (D-106)**: opt-in, one open escalation per run.
 
+- **Pre-registered v2 analysis (D-108)**: `docs/preregistration-v2.md`; `paper_artifacts --protocol v2`
+  (paired tests, exclusions, stratified permutation test, TOST equivalence, rules-vs-agents family,
+  cost split, decision-failure taxonomy, v1-vs-v2 table) into `paper/generated-v2`;
+  `python -m acde.analysis.power` (v1-based power); Make targets `campaign-v2-free`,
+  `paper-artifacts-v2`, `power`.
+- **Paper: lesson L8 and Table IX (D-108)**: the v1 human-simulator artifact, with generated numbers,
+  referenced from the abstract, results, threats, discussion, conclusion and claims audit.
+
 ### Changed
 - `runner.py` split into `metrics.py` (metric harvest) and `provenance.py`; the campaign's health
-  and model preflight checks moved to `preflight.py`.
+  and model preflight checks moved to `preflight.py`; paper table rendering moved to
+  `paper_tables.py`.
 
 ### Added
 - **Measurement protocol v2 (D-105)**: fixes the four measurement problems the paper discloses,

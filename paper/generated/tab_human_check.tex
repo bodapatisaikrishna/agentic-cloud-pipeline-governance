@@ -1,0 +1,14 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Config & $n$ & Human & Escal. & MTTR & Fastest \\
+\midrule
+baseline & 80 & 80 & 1 & 378 & 360 \\
+rule\_based & 80 & 20 & 1 & 433 & 360 \\
+autoscale & 80 & 40 & 1 & 380 & 360 \\
+monitor\_only & 40 & 40 & 1 & 359 & 360 \\
+recovery\_only & 40 & 40 & 6 & 220 & 195 \\
+optimization\_only & 40 & 31 & 2 & 347 & 274 \\
+schema\_only & 40 & 40 & 1 & 315 & 360 \\
+full & 80 & 73 & 6 & 241 & 195 \\
+\bottomrule
+\end{tabular}

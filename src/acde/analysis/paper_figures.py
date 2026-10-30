@@ -47,7 +47,9 @@ def _label(config: str) -> str:
     return config.replace("_", "\n", 1) if len(config) > 11 else config
 
 
-def mttr_distribution(df: pd.DataFrame, configs: Sequence[str], out: Path) -> None:
+def mttr_distribution(
+    df: pd.DataFrame, configs: Sequence[str], out: Path, metric: str = "mttr_s"
+) -> None:
     """Per-run MTTR by config on a log axis; live vs mock ``full`` shown side by side."""
     fig, ax = plt.subplots(figsize=(6.4, 3.2))
     rng = np.random.default_rng(0)  # jitter only; fixed so the PDF is reproducible
@@ -58,7 +60,7 @@ def mttr_distribution(df: pd.DataFrame, configs: Sequence[str], out: Path) -> No
         if c == "full" and (df["arm"] == "mock").any():
             slots.append(("full", "mock", "full\n(mock)"))
     for i, (cfg, arm, _) in enumerate(slots):
-        v = df[(df["config"] == cfg) & (df["arm"] == arm) & (df["metric"] == "mttr_s")]["value"]
+        v = df[(df["config"] == cfg) & (df["arm"] == arm) & (df["metric"] == metric)]["value"]
         v = v.dropna().clip(lower=0.01)
         ax.scatter(
             i + rng.uniform(-0.18, 0.18, len(v)),
@@ -190,8 +192,10 @@ def live_mock_comparison(rows: Sequence[dict[str, Any]], out: Path) -> None:
 
 _METRIC_LABEL = {
     "mttr_s": "MTTR (s)",
+    "mttr_injection_s": "MTTR from injection (s)",
     "cost_units": "Cost (units)",
     "manual_interventions": "Manual interv.",
+    "escalated_incidents": "Escalated incidents",
     "decision_correct": "Decision correct",
     "freshness_s": "Freshness (s)",
 }

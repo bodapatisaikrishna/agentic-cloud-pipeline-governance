@@ -7,7 +7,7 @@ Cliff's delta effect size. No I/O — unit-tested against hand-computed fixtures
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 from scipy import stats as scipy_stats
@@ -188,12 +188,12 @@ def tost_median_diff(
     A non-significant difference test is not evidence of no difference; this is.
     """
     lo, hi = median_diff_ci(a, b, n_resamples, confidence=1 - 2 * alpha, seed=seed)
-    return (lo, hi, -margin < lo and hi < margin)
+    return (lo, hi, bool(-margin < lo and hi < margin))
 
 
 def stratified_permutation_test(
-    a_by_stratum: dict[str, Sequence[float]],
-    b_by_stratum: dict[str, Sequence[float]],
+    a_by_stratum: Mapping[str, Sequence[float]],
+    b_by_stratum: Mapping[str, Sequence[float]],
     n_permutations: int = 5000,
     seed: int = 0,
 ) -> float:
@@ -251,4 +251,4 @@ def tost_proportion_diff(
         ]
     )
     lo, hi = np.percentile(diffs, [100 * alpha, 100 * (1 - alpha)])
-    return (float(lo), float(hi), -margin < lo and hi < margin)
+    return (float(lo), float(hi), bool(-margin < lo and hi < margin))

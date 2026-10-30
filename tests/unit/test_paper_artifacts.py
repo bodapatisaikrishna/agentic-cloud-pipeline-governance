@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from acde.analysis import paper_artifacts as pa
+from acde.analysis import paper_tables as pt
 
 SCENARIOS = ("schema_drift", "upstream_delay")
 PROV = {
@@ -76,7 +77,7 @@ def campaign(tmp_path):
 
 class TestFormatting:
     def test_tex_escapes_specials(self):
-        assert pa.tex("a_b & 5%") == r"a\_b \& 5\%"
+        assert pt.tex("a_b & 5%") == r"a\_b \& 5\%"
 
     @pytest.mark.parametrize(
         ("x", "out"),
@@ -90,23 +91,23 @@ class TestFormatting:
         ],
     )
     def test_fnum(self, x, out):
-        assert pa.fnum(x) == out
+        assert pt.fnum(x) == out
 
     def test_fnum_thousands_and_nan(self):
-        assert pa.fnum(12345.0) == "12{,}345"
-        assert pa.fnum(float("nan")) == "--"
+        assert pt.fnum(12345.0) == "12{,}345"
+        assert pt.fnum(float("nan")) == "--"
 
     def test_fp(self):
-        assert pa.fp(0.0004) == "<0.001" and pa.fp(0.0456) == "0.046" and pa.fp(None) == "--"
+        assert pt.fp(0.0004) == "<0.001" and pt.fp(0.0456) == "0.046" and pt.fp(None) == "--"
 
     def test_macro_names_are_letters_only(self):
-        name = pa.macro_name("mttr", "full", "median", 2)
+        name = pt.macro_name("mttr", "full", "median", 2)
         assert name == "NMttrFullMedianTwo"
-        assert pa.macro_name("pHolm", "mttr_s", "recovery_only") == "NPHolmMttrSRecoveryOnly"
-        assert pa.macro_name("x")[1:].isalpha()
+        assert pt.macro_name("pHolm", "mttr_s", "recovery_only") == "NPHolmMttrSRecoveryOnly"
+        assert pt.macro_name("x")[1:].isalpha()
 
     def test_numbers_render(self):
-        n = pa.Numbers()
+        n = pt.Numbers()
         n.add("12.3", "a", "b")
         assert r"\newcommand{\NAB}{12.3}" in n.render()
 

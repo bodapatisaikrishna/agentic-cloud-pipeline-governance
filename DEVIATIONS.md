@@ -2680,3 +2680,37 @@ on faults rules already handle); (b) let the full agent set handle uncovered fau
 schema drift is uncovered, so the other agents would add calls without a fault to act on).
 *Caveat:* like `rule_based`, the routing reads the injected fault type, an oracle a production rule
 engine would replace with its own classifier.
+
+## D-108 — Pre-registered v2 analysis, v2 artifact build, and the v1 human-simulator check
+
+**Pre-registration.** `docs/preregistration-v2.md` fixes the v2 outcomes, hypotheses, primary test
+(paired Wilcoxon on the 80 matched pairs per config), three Holm families, equivalence margins,
+exclusion rule and stopping rule. It was committed before any `paper_v2` run started (commit
+`1b0ab90`); later changes go under its Amendments heading. The power section uses v1 data only
+(`python -m acde.analysis.power`): with 80 runs per config, a 20% MTTR reduction is detectable at
+α = 0.05 (30% at α = 0.05/32), and a 5% cost reduction. *Alternative:* register on OSF (still
+recommended; the git commit is the timestamp until then).
+
+**Analysis code.** `paper_stats` takes a `protocol` (`v1` reads `paper-*`, `v2` reads
+`paper-v2-*`), uses the paired signed-rank test as the primary test when `paired=True` (Holm on
+`p_primary`), and drops whole (scenario, replicate) pairs with `state_reset_ok = 0` (and, in the
+sensitivity analysis, degraded live runs). Provenance is compared on `code_tree` when every run has
+it (D-106). `paper_v2` adds the stratified permutation test, TOST equivalence (median form; the
+proportion form for `decision_correct`), the pre-registered verdict per comparison (different /
+scenario-dependent / equivalent / inconclusive), the rules-vs-agents family, the cost split, the
+v1-vs-v2 side-by-side table and the decision-failure taxonomy from the action exports.
+`paper_artifacts --protocol v2` writes all of it to `paper/generated-v2`, with `\NVTwo...` macros so
+v1 and v2 numbers cannot be confused in one manuscript. Table rendering moved to `paper_tables.py`.
+*Alternative:* a mixed-effects model with scenario as a random effect (rejected for now: it would add
+a dependency, and the stratified permutation test answers the same question without distributional
+assumptions).
+
+**v1 human-simulator check.** The v1 build adds `tab_human_check.tex`: per config, the runs resolved
+by the human (MTTR ≥ 60 s), their median escalations and MTTR, and the median of the fastest of that
+many simulated draws. The paper reports it as lesson L8 and in the threats, results, discussion,
+conclusion and claims audit. All numbers are generated macros. v1 tables are unchanged byte for
+byte.
+
+**Free arms started (2026-10-30).** The two v2 arms that make no API calls (`baselines`, 240 runs;
+`mock-full`, 80 runs) were started with `make campaign-v2-free` at commit `6fa8e40`. Per the
+pre-registration (§7), only their pipeline health is inspected until the live arm completes.

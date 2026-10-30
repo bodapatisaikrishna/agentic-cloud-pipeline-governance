@@ -8,7 +8,7 @@
 [![CI](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/tag/bodapatisaikrishna/agentic-cloud-pipeline-governance?label=release)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/tags)
-[![Unit tests](https://img.shields.io/badge/unit%20tests-774%20passing-brightgreen.svg)](tests/unit)
+[![Unit tests](https://img.shields.io/badge/unit%20tests-815%20passing-brightgreen.svg)](tests/unit)
 [![Adversarial containment](https://img.shields.io/badge/adversarial%20containment-3867%2F3867-brightgreen.svg)](docs/SECURITY.md)
 
 [Architecture](#architecture) · [Results](#results-live-campaign) · [Quickstart](#quickstart) ·
@@ -109,10 +109,17 @@ Cliff's δ and Holm-corrected Mann–Whitney tests in the paper.
 
 | Base paper claim | Measured (live) | Verdict |
 |---|---|---|
-| MTTR down up to 45% | ↓38% (378 s → 235 s), p < 0.001 | Partly; smaller than claimed |
+| MTTR down up to 45% | ↓38% (378 s → 235 s), p < 0.001 | Mostly a simulator artifact (see below) |
 | Cost down about 25% | ↓56% (158 → 69.8 units) | Mostly from an assumed provisioning gap |
 | Manual interventions down more than 70% | ↑500% (1 → 6) | Does not reproduce |
 | Correct mitigation (not reported) | 42% of live runs vs 100% under the mock | Speed ≠ correctness |
+
+**Correction (D-106).** The simulated on-call engineer drew one delay per escalation and kept the
+fastest. `full` escalated a median of 6 times per fault and 73 of its 80 runs were resolved by the
+human, so most of its MTTR gain is the fastest of 6 draws (median ≈195 s vs 360 s for one), not the
+agents. The simulator now pages once per incident; the paper reports this as lesson L8, and a
+pre-registered re-run ([`docs/preregistration-v2.md`](docs/preregistration-v2.md)) will measure the
+corrected effect.
 
 The headline lesson is about evaluation: **the same code, under a mock model, looks 1,219× faster
 and perfectly correct.** Treat mock and live results as separate findings until both exist.
@@ -135,7 +142,7 @@ make paper-repro-quick            # regenerate every table, figure and number, t
 
 ```bash
 cp .env.example .env              # defaults work
-make lint && make test-unit       # ruff + mypy clean, 774 unit tests, coverage ≥ 80%
+make lint && make test-unit       # ruff + mypy clean, 815 unit tests, coverage ≥ 80%
 make up && make seed              # PostgreSQL, OPA, Redpanda, Airflow + seeded data
 make experiment-quick             # 96-run matrix (8 configs × 4 scenarios × 3)
 make report                       # → results/results.md + results/figures/
@@ -156,6 +163,8 @@ acde doctor                       # validate, then `acde run`
 make campaign-pilot               # short live pilot at paper timings
 make campaign                     # full campaign (~49 h; arms A live, B baselines, C mock)
 make campaign-v2                  # v2 re-run: equal n, paired seeds, interleaved, fixed metering (D-105)
+make campaign-v2-free             # only the v2 arms with no API calls (baselines + mock full)
+make paper-artifacts-v2           # pre-registered v2 analysis → paper/generated-v2
 make campaign-status              # heartbeat; make campaign-stop to stop resumably
 make adversarial-corpus           # adversarial corpus vs the pinned OPA → results/adversarial.json
 ```
@@ -163,7 +172,9 @@ make adversarial-corpus           # adversarial corpus vs the pinned OPA → res
 Every run is keyed `"{config}__{scenario}__r{replicate}"` with seed
 `sha256("{config}:{scenario}:{replicate}") % 2**32`, and the runner skips runs already in the
 manifest, so a killed campaign resumes where it left off. The `paper_v2` profile drops the config
-from the seed so every config sees the same faults. See [`docs/CAMPAIGN.md`](docs/CAMPAIGN.md).
+from the seed so every config sees the same faults and the same simulated-human delay. Its analysis
+plan was fixed before any v2 data existed: [`docs/preregistration-v2.md`](docs/preregistration-v2.md).
+See [`docs/CAMPAIGN.md`](docs/CAMPAIGN.md).
 </details>
 
 ## Cloud deployment (Microsoft Azure)
@@ -230,7 +241,7 @@ src/acde/
 └── connectors/      airflow · prefect · noop
 infra/opa/policies/  Rego policies + tests          infra/postgres/init/  idempotent DDL
 deploy/              production compose, Helm chart, observability, Azure
-tests/unit/          774 tests, no Docker           tests/integration/    needs `make up`
+tests/unit/          815 tests, no Docker           tests/integration/    needs `make up`
 ```
 </details>
 
@@ -273,7 +284,7 @@ proposals within a run, and degrade to `no_action` on any provider failure. The 
 | Hardening | Concurrency fuzzing, OPA audit, bid-based arbitration, migrations, write-ahead audit, Helm, RBAC, multi-tenancy, backups (D-077–D-099) | ✅ verified (unreleased) |
 | Feature focus | Live decision-quality monitoring, Slack/PagerDuty, richer dashboard (D-100–D-103) | ✅ verified (unreleased) |
 | Journal paper (D-104) | 560-run live campaign (2026-09-26), adversarial corpus, sensitivity analyses, manuscript, Azure deployment (D-104t) | ✅ verified (unreleased) |
-| Measurement v2 (D-105) | Incident-level escalations, MTTR from injection, per-run state reset, fixed metering window, paired seeds, `paper_v2` profile | 🟡 unit + integration tested, smoke verified; v2 campaign pending |
+| Measurement v2 (D-105–D-108) | Incident-level escalations, MTTR from injection, per-run state reset, fixed metering window, paired seeds, one human page per incident, `hybrid` config, pre-registered v2 analysis | 🟡 unit + integration tested; v2 LLM-free arms running, live arm pending |
 
 ## License and citation
 

@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-v2 campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-v2 campaign-v2-free paper-artifacts-v2 power campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -114,6 +114,15 @@ campaign:  ## LIVE paper campaign (~49h; arms A live agents, B baselines, C mock
 campaign-v2:  ## LIVE v2 re-run (D-105): equal n, paired seeds, interleaved arms, fixed metering; needs MAX_TOKENS
 	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
 	caffeinate -i $(UV) python -m acde.experiments.campaign --profile paper_v2 --max-tokens $(MAX_TOKENS)
+
+campaign-v2-free:  ## The v2 arms that make no API calls (baselines + mock full, ~19h); resumable
+	MOCK_LLM=1 caffeinate -i $(UV) python -m acde.experiments.campaign --profile paper_v2 --arms baselines,mock-full
+
+paper-artifacts-v2:  ## Pre-registered v2 analysis (docs/preregistration-v2.md) -> paper/generated-v2
+	$(UV) python -m acde.analysis.paper_artifacts --protocol v2 --root results --out paper/generated-v2
+
+power:  ## v2 power analysis from v1 data -> results/power_v1.json
+	$(UV) python -m acde.analysis.power --root $${ROOT:-results}
 
 campaign-smoke:  ## Free 2-run mock drill of the supervisor (kill it mid-run, re-run: it resumes)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.campaign --profile smoke --results-root $${ROOT:-results}
