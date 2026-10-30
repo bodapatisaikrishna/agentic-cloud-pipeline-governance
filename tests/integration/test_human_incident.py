@@ -71,9 +71,42 @@ def test_one_request_against_overlapping_faults_is_one_incident():
     t0 = _setup(1)  # schema drift plus one escalation at t0 + 4 s
     db.execute(  # the second, overlapping event schema drift raises
         "INSERT INTO telemetry.failure_events (event_id, experiment_run, scenario, fault_type, "
-        "injected_ts, detected_ts) VALUES (%s, %s, 'schema_drift', 'schema_breaking', %s, %s)",
+        "injected_ts, detected_ts) VALUES (%s, %s, 'schema', 'schema_breaking', %s, %s)",
         (str(uuid.uuid4()), RUN, t0 + dt.timedelta(seconds=1), t0 + dt.timedelta(seconds=2)),
     )
     m = harvest_metrics(RUN, 1.0, "schema_drift", "full")
     assert m["manual_interventions"] == 1.0
     assert m["escalated_incidents"] == 1.0
+    assert m["secondary_events"] == 1.0
+
+
+def test_host_load_the_monitor_flags_is_not_the_injected_incident():
+    from acde.experiments.metrics import harvest_metrics
+
+    t0 = _setup(0)  # the injected fault, never escalated
+    db.execute(  # D-109: cpu_high on the scheduler, flagged two minutes in and paged
+        "INSERT INTO telemetry.failure_events (event_id, experiment_run, scenario, fault_type, "
+        "injected_ts, detected_ts, resolved_ts) VALUES (%s, %s, 'acde-airflow-scheduler-1', "
+        "'cpu_high', %s, %s, %s)",
+        (
+            str(uuid.uuid4()),
+            RUN,
+            t0 + dt.timedelta(seconds=120),
+            t0 + dt.timedelta(seconds=120),
+            t0 + dt.timedelta(seconds=450),
+        ),
+    )
+    db.execute(
+        "UPDATE telemetry.failure_events SET resolved_ts = %s "
+        "WHERE experiment_run = %s AND scenario = 'schema_drift'",
+        (t0 + dt.timedelta(seconds=5), RUN),
+    )
+    db.execute(
+        "INSERT INTO telemetry.manual_interventions (experiment_run, reason, requested_ts) "
+        "VALUES (%s, 'cpu', %s)",
+        (RUN, t0 + dt.timedelta(seconds=121)),
+    )
+    m = harvest_metrics(RUN, 1.0, "schema_drift", "full")
+    assert m["mttr_injection_s"] == 5.0  # the injected fault alone
+    assert m["escalated_incidents"] == 0.0  # paged after the injected fault was resolved
+    assert m["secondary_events"] == 1.0

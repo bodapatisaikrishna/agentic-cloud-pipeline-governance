@@ -2714,3 +2714,34 @@ byte.
 **Free arms started (2026-10-30).** The two v2 arms that make no API calls (`baselines`, 240 runs;
 `mock-full`, 80 runs) were started with `make campaign-v2-free` at commit `6fa8e40`. Per the
 pre-registration (§7), only their pipeline health is inspected until the live arm completes.
+
+## D-109 — v2 metrics describe the injected incident only
+
+**Context.** The first `paper_v2` mock run (`full`, upstream delay, replicate 1) reported an MTTR of
+164 s, where v1's mock `full` was 0.19 s. Its events showed why: the recovery agent fixed the
+injected fault in 0.4 s, but two minutes later the monitoring agent flagged `cpu_high` on the Airflow
+scheduler container, a real load spike on the host, and nobody handled that event until the human
+fallback (327 s). MTTR is a median over the run's events, so it became the mean of the two. This is
+a side effect of D-105: v1 sampled resources only before injection and after the settle, so the
+monitor almost never saw a mid-run spike, while v2 samples every 15 s. Only configurations with a
+monitor can raise such events, so counting them biases every agent-versus-baseline comparison
+against the agents.
+
+**Decision.** `mttr_injection_s`, `detection_delay_s` and `escalated_incidents` now describe the
+injected incident only: the chaos injector labels its event with the scenario name, and the
+monitoring agent labels its detections with a component or dataset name. `escalated_incidents` is
+1 when any escalation was filed while the injected fault was open (when the human is paged) and 0
+otherwise. Events the monitor raised are counted separately as `secondary_events`. `mttr_s` keeps
+its v1 definition (every event) for continuity, and is therefore not comparable across v1 and v2. The
+runner also exports each run's fault events to `<results>/events/<run_id>.jsonl`. *Alternatives:*
+(a) stop the monitor from opening events from resource readings during experiments (rejected: that
+changes the system under test); (b) sample resources only at the endpoints, as in v1 (rejected: the
+metered cost would again miss mid-loop changes); (c) keep the all-events median and report the
+bias (rejected: the bias is known in advance and only hits one side). This replaces the
+most-recent-open attribution from D-106: with only the injected fault counted, one request cannot be
+counted twice.
+
+**Effect on the campaign.** The two mock runs made before this change (started at commit `6fa8e40`)
+were moved to `results/_aborted-v2-free-20261030/` and are not part of the v2 dataset; the free arms
+were restarted from scratch at the commit that adds this entry. The pre-registration records this as
+amendment 1.

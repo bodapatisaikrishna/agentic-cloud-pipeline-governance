@@ -33,17 +33,23 @@ def harvest_metrics(
     events = db.fetch_all(
         "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr, "
         "EXTRACT(EPOCH FROM (resolved_ts - injected_ts)) AS stall, "
-        "EXTRACT(EPOCH FROM (detected_ts - injected_ts)) AS detect, fault_type "
+        "EXTRACT(EPOCH FROM (detected_ts - injected_ts)) AS detect, fault_type, scenario "
         "FROM telemetry.failure_events "
         "WHERE experiment_run = %s AND detected_ts IS NOT NULL AND resolved_ts IS NOT NULL",
         (experiment_run,),
     )
     mttrs = [float(e["mttr"]) for e in events if e["mttr"] is not None]
+    # D-109: the v2 metrics describe the injected incident only. The chaos injector labels its event
+    # with the scenario; the monitoring agent labels what it detects with the component or dataset.
+    # Since v2 samples resources mid-loop, the monitor also flags real host load (cpu_high on the
+    # Airflow scheduler) unrelated to the injected fault -- events only configs with a monitor can
+    # raise, so counting them would bias every agent-vs-baseline comparison.
+    injected = [e for e in events if not scenario or e.get("scenario") == scenario]
     # D-105: recovery measured from injection for every config. mttr_s starts the clock at
     # detection, which non-agent configs stamp at injection but agents only when the monitor flags
     # the fault -- so it silently omits the agents' detection delay.
-    from_injection = [float(e["stall"]) for e in events if e["stall"] is not None]
-    detect_delays = [float(e["detect"]) for e in events if e.get("detect") is not None]
+    from_injection = [float(e["stall"]) for e in injected if e["stall"] is not None]
+    detect_delays = [float(e["detect"]) for e in injected if e.get("detect") is not None]
     cost = db.fetch_one(
         "SELECT COALESCE(SUM(cost_units), 0) AS c, "
         "COALESCE(SUM(cost_units) FILTER (WHERE component = %s), 0) AS storage "
@@ -56,16 +62,20 @@ def harvest_metrics(
     )
     # D-105: incidents a human had to handle, counted once each. manual_interventions counts
     # escalation requests: baseline files one per fault, but an agent re-proposing on every tick of
-    # an open fault files one per tick. D-106: each request belongs to exactly one fault, the most
-    # recently injected one open when it was filed, so overlapping faults (schema drift raises a
-    # second schema_breaking event) cannot count one request twice.
+    # an open fault files one per tick. D-109: only the injected incident counts, and it counts as
+    # escalated when any request was filed while it was open -- the moment the human is paged.
     escalated = db.fetch_one(
-        "SELECT count(DISTINCT (SELECT f.event_id FROM telemetry.failure_events f "
-        "WHERE f.experiment_run = m.experiment_run AND f.injected_ts <= m.requested_ts "
-        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts) "
-        "ORDER BY f.injected_ts DESC, f.event_id DESC LIMIT 1)) AS n "
-        "FROM telemetry.manual_interventions m WHERE m.experiment_run = %s",
-        (experiment_run,),
+        "SELECT count(*) AS n FROM telemetry.failure_events f "
+        "WHERE f.experiment_run = %s AND (%s = '' OR f.scenario = %s) AND EXISTS ("
+        "SELECT 1 FROM telemetry.manual_interventions m "
+        "WHERE m.experiment_run = f.experiment_run AND m.requested_ts >= f.injected_ts "
+        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts))",
+        (experiment_run, scenario, scenario),
+    )
+    secondary = db.fetch_one(
+        "SELECT count(*) AS n FROM telemetry.failure_events "
+        "WHERE experiment_run = %s AND %s <> '' AND scenario <> %s",
+        (experiment_run, scenario, scenario),
     )
     tokens = db.fetch_one(
         "SELECT COALESCE(SUM(llm_tokens_in + llm_tokens_out), 0) AS t "
@@ -102,6 +112,8 @@ def harvest_metrics(
         "cost_provisioning_units": provisioning,
         "manual_interventions": float(interventions["n"]) if interventions else 0.0,
         "escalated_incidents": float(escalated["n"]) if escalated else 0.0,
+        # D-109: events the monitor raised that are not the injected fault (host load, echoes).
+        "secondary_events": float(secondary["n"]) if secondary else 0.0,
         "llm_tokens": float(tokens["t"]) if tokens else 0.0,
         "freshness_s": freshness_s,
         "decision_correct": 1.0 if decision_correct else 0.0,

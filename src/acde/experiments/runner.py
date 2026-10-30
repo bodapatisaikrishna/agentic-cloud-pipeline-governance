@@ -133,22 +133,32 @@ def _write_rows(csv_path: Path, run: Run, seed: int, metrics: dict[str, float]) 
             )
 
 
-def _export_actions(results_dir: Path, experiment_run: str) -> None:
-    """Write the run's agent decisions to ``actions/<run_id>.jsonl`` (D-106).
-
-    The per-run telemetry is cleared before the next run with the same id, so without this the
-    decision-quality failure analysis (which action, which policy verdict, which outcome) cannot be
-    done after the campaign. Overwriting the file keeps a re-run idempotent.
-    """
-    rows = db.fetch_all(
+# Per-run telemetry exported next to raw.csv (D-106, D-109): the tables are cleared before the next
+# run with the same id, so without these the decision-failure taxonomy and any re-check of which
+# events a run raised could not be done after the campaign.
+_EXPORTS = {
+    "actions": (
         "SELECT agent, action_type, target, policy_decision, policy_reason, executed, status, "
         "outcome, confidence, ts FROM telemetry.agent_actions WHERE experiment_run = %s "
-        "ORDER BY ts",
-        (experiment_run,),
-    )
-    out = results_dir / "actions" / f"{experiment_run}.jsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("".join(json.dumps(r, default=str) + "\n" for r in rows))
+        "ORDER BY ts"
+    ),
+    "events": (
+        "SELECT event_id, scenario, fault_type, injected_ts, detected_ts, resolved_ts, resolution "
+        "FROM telemetry.failure_events WHERE experiment_run = %s ORDER BY injected_ts"
+    ),
+}
+
+
+def _export_actions(results_dir: Path, experiment_run: str) -> None:
+    """Write the run's agent decisions and fault events to ``<kind>/<run_id>.jsonl``.
+
+    Overwriting the files keeps a re-run idempotent.
+    """
+    for kind, sql in _EXPORTS.items():
+        rows = db.fetch_all(sql, (experiment_run,))
+        out = results_dir / kind / f"{experiment_run}.jsonl"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("".join(json.dumps(r, default=str) + "\n" for r in rows))
 
 
 def uses_llm(config: str) -> bool:

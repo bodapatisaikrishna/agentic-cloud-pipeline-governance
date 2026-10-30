@@ -19,6 +19,12 @@ per phase, `v1.0.0` at Phase 9.
   MTTR gain of `full` and `recovery_only`. The human now handles each incident once: one delay per
   fault, keyed on `(seed, fault ordinal)` so paired runs share it, starting at the first page.
 
+- **v2 metrics counted host-load events as part of the incident (D-109)**: mid-run resource
+  sampling lets the monitor flag real load spikes (e.g. `cpu_high` on the Airflow scheduler) as new
+  fault events, which only monitored configs can raise. `mttr_injection_s`, `detection_delay_s` and
+  `escalated_incidents` now cover the injected fault only; the rest are `secondary_events`. Fault
+  events are exported per run to `<results>/events/`.
+
 ### Added
 - **`hybrid` config (D-107)**: rule-based remediation for the faults it covers, the schema agent for
   schema drift. Added to the live arm and `paper_v2` (800 runs including the mock arm).

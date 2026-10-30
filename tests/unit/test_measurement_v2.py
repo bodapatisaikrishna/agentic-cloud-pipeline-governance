@@ -17,10 +17,16 @@ from acde.telemetry import cost
 T0 = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
 
 
-def _harvest(monkeypatch, events, cost_row, interventions, escalated, config="full"):
+def _harvest(monkeypatch, events, cost_row, interventions, escalated, config="full", secondary=0):
     fake = MagicMock()
     fake.fetch_all.side_effect = [events, []]
-    fake.fetch_one.side_effect = [cost_row, {"n": interventions}, {"n": escalated}, {"t": 0}]
+    fake.fetch_one.side_effect = [
+        cost_row,
+        {"n": interventions},
+        {"n": escalated},
+        {"n": secondary},
+        {"t": 0},
+    ]
     monkeypatch.setattr(metrics, "db", fake)
     return metrics.harvest_metrics("run", 1.0, "upstream_delay", config), fake
 
@@ -34,24 +40,52 @@ class TestEscalatedIncidents:
 
     def test_query_ties_requests_to_the_open_fault_window(self, monkeypatch):
         _, fake = _harvest(monkeypatch, [], {"c": 0}, interventions=0, escalated=0)
-        sql = fake.fetch_one.call_args_list[2].args[0]
-        assert "telemetry.failure_events" in sql and "count(DISTINCT" in sql
-        assert "f.injected_ts <= m.requested_ts" in sql
+        sql, params = fake.fetch_one.call_args_list[2].args
+        assert "telemetry.failure_events" in sql and "EXISTS" in sql
+        assert "f.scenario = %s" in sql and params == ("run", "upstream_delay", "upstream_delay")
+        assert "m.requested_ts >= f.injected_ts" in sql
         assert "m.requested_ts <= f.resolved_ts" in sql
-        assert "LIMIT 1" in sql  # one fault per request
+
+    def test_secondary_events_are_reported_separately(self, monkeypatch):
+        m, _ = _harvest(monkeypatch, [], {"c": 0}, 2, 1, secondary=3)
+        assert m["secondary_events"] == 3.0
 
 
 class TestRecoveryFromInjection:
     def test_mttr_from_injection_includes_detection_delay(self, monkeypatch):
         # An agent detects 8 s after injection and resolves 20 s after detection.
-        events = [{"mttr": 20.0, "stall": 28.0, "detect": 8.0, "fault_type": "upstream_delay"}]
+        events = [
+            {
+                "mttr": 20.0,
+                "stall": 28.0,
+                "detect": 8.0,
+                "fault_type": "upstream_delay",
+                "scenario": "upstream_delay",
+            },
+            # host load the monitor flagged mid-run (D-109): not part of the injected incident
+            {
+                "mttr": 300.0,
+                "stall": 330.0,
+                "detect": 30.0,
+                "fault_type": "cpu_high",
+                "scenario": "acde-airflow-scheduler-1",
+            },
+        ]
         m, _ = _harvest(monkeypatch, events, {"c": 0}, 0, 0)
-        assert m["mttr_s"] == 20.0  # v1 definition, from detection
+        assert m["mttr_s"] == 160.0  # v1 definition: every event, from detection
         assert m["mttr_injection_s"] == 28.0
         assert m["detection_delay_s"] == 8.0
 
     def test_non_agent_detection_at_injection_gives_equal_clocks(self, monkeypatch):
-        events = [{"mttr": 360.0, "stall": 360.0, "detect": 0.0, "fault_type": "schema_drift"}]
+        events = [
+            {
+                "mttr": 360.0,
+                "stall": 360.0,
+                "detect": 0.0,
+                "fault_type": "upstream_delay",
+                "scenario": "upstream_delay",
+            }
+        ]
         m, _ = _harvest(monkeypatch, events, {"c": 0}, 1, 1, config="baseline")
         assert m["mttr_s"] == m["mttr_injection_s"] == 360.0
         assert m["detection_delay_s"] == 0.0

@@ -47,8 +47,8 @@ class TestHarvest:
             ],
             [{"action_type": "replay"}],
         ]
-        # fetch_one: cost, interventions, escalated incidents, tokens.
-        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"n": 1}, {"t": 800}]
+        # fetch_one: cost, interventions, escalated incidents, secondary events, tokens.
+        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"n": 1}, {"n": 0}, {"t": 800}]
         monkeypatch.setattr(metrics, "db", fake)
         m = metrics.harvest_metrics(
             "run", wall_s=12.5, scenario="upstream_delay", config="baseline"
@@ -66,7 +66,7 @@ class TestHarvest:
 
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 999}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"n": 0}, {"t": 999}]
         monkeypatch.setattr(metrics, "db", fake)
         stats = LLMStats(
             real_calls=3, cache_hits=5, tokens_in=100, tokens_out=40, invalid_outputs=1
@@ -79,7 +79,7 @@ class TestHarvest:
     def test_no_llm_config_reports_zeros(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
         monkeypatch.setattr(metrics, "db", fake)
         m = metrics.harvest_metrics("run", 1.0, "upstream_delay", "baseline")
         assert m["api_tokens"] == m["llm_calls"] == m["llm_degraded"] == 0.0
@@ -93,7 +93,7 @@ class TestHarvest:
     def test_no_events_zero_mttr(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
         monkeypatch.setattr(metrics, "db", fake)
         m = metrics.harvest_metrics("run", 1.0, scenario="upstream_delay", config="baseline")
         assert m["mttr_s"] == 0.0
@@ -139,6 +139,7 @@ class TestActionExport:
         runner._export_actions(tmp_path, "full__schema_drift__r0")
         lines = (tmp_path / "actions" / "full__schema_drift__r0.jsonl").read_text().splitlines()
         assert [json.loads(ln)["action_type"] for ln in lines] == ["replay", "apply_mapping"]
+        assert (tmp_path / "events" / "full__schema_drift__r0.jsonl").exists()
 
 
 class TestRunProfileResumability:

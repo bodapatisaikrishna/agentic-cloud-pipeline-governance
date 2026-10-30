@@ -41,7 +41,9 @@ Primary (each run contributes one value):
 | `cost_units` | metered compute + storage + held provisioning over the fixed window |
 | `decision_correct` | 1 if an executed action is a valid mitigation for the scenario |
 
-Secondary: `mttr_s` (from detection, for continuity with v1), `detection_delay_s`,
+`mttr_injection_s`, `escalated_incidents` and `detection_delay_s` are computed on the injected fault
+only (amendment 1). Secondary: `mttr_s` (from detection, every event, for continuity with v1),
+`detection_delay_s`, `secondary_events` (events the monitor raised that are not the injected fault),
 `manual_interventions` (requests), `cost_compute_units` (metered compute only, the part not set by
 the provisioning assumption), `freshness_s`, and the LLM accounting metrics.
 
@@ -128,4 +130,10 @@ mode does not match the arm.
 
 ## Amendments
 
-(none yet)
+**1 (2026-10-30, before any data entered the analysis).** The first two runs of the mock arm showed
+that, with resources now sampled during the run, the monitoring agent flags real host load (for
+example `cpu_high` on the Airflow scheduler) as new fault events. These events are not the injected
+fault and only configurations with a monitor can raise them. The primary metrics are therefore
+computed on the injected fault only, and the monitor's other events are reported as the secondary
+outcome `secondary_events` (D-109). The two runs were discarded, and the free arms restarted from
+scratch with the corrected code. No agent-versus-baseline comparison had been computed.
