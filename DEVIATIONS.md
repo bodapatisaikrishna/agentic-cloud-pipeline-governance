@@ -2764,7 +2764,7 @@ corpus, cross-model harness, this drill), so, like `acde.analysis`, editing it d
 `code_tree` or abort a running campaign.
 
 **Code freeze.** v2 arms must share one `code_tree`, and the LLM-free arms run before the live arm,
-so experiment code (everything under `CODE_PATHS`) is frozen at the commit that adds this entry
+so experiment code (everything under `CODE_PATHS`) is frozen at commit `b46602e`
 until the v2 campaign is complete. Any later change there means re-running the LLM-free arms
 (no API cost, about 19 hours). The two mock runs started at `87e7926` were moved to
 `results/_aborted-v2-free-20261030/` with the earlier two.

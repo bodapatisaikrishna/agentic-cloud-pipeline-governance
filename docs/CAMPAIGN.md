@@ -68,3 +68,29 @@ a different `git_sha` than earlier ones and this check will fail. Before reachin
 the change touched nothing on the run's execution path (agents, contracts, policy, runner) — only then
 is it safe to override, and the override must be recorded in `DEVIATIONS.md` with that diff as evidence
 (see D-104n for the template this project used the one time it happened).
+
+## v2 re-run (D-105 to D-110)
+
+The v2 campaign follows the pre-registered plan in [`preregistration-v2.md`](preregistration-v2.md).
+Its arms write to `results/paper-v2-*`:
+
+| Arm | Configs | LLM | Runs |
+|---|---|---|---|
+| `live-agents` | `full`, `hybrid`, 4 ablations, ×20/scenario | live (`hybrid` calls it only for schema drift) | 480 |
+| `baselines` | `baseline`, `rule_based`, `autoscale` ×20/scenario | none | 240 |
+| `mock-full` | `full` ×20/scenario | mock | 80 |
+
+1. **LLM-free arms first** (no API cost, about 19 h): `make campaign-v2-free`. Per the
+   pre-registration, look only at pipeline health (`state_reset_ok`, crashes) until the live arm is
+   done, not at comparisons.
+2. **Experiment code is frozen** at the commit recorded in D-110. All three arms must share one
+   `code_tree`; a change under `CODE_PATHS` means re-running the LLM-free arms. Analysis
+   (`src/acde/analysis`), drills (`src/acde/eval`), docs and the manuscript can still change.
+3. **Pilot the live arm**, then run it: `make campaign-pilot PROFILE=pilot` to size `MAX_TOKENS`, then
+   `make campaign-v2 MAX_TOKENS=<ceiling>`. The supervisor skips the runs the free arms already
+   recorded and interleaves the rest in the pre-registered order.
+4. **Record the model** under "Amendments" in the pre-registration before launching the live arm.
+5. **Analyse**: `make paper-artifacts-v2` writes `paper/generated-v2` (paired tests, exclusions,
+   robustness checks, verdicts, the v1-vs-v2 table). It refuses to build if the arms' `code_tree`
+   differs.
+6. **Trust drill** after the campaign, never during it: `make trust-drill`.

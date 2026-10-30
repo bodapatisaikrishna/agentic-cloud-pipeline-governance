@@ -58,3 +58,12 @@ class TestPower:
 
     def test_unreachable_power_returns_none(self):
         assert power.min_detectable_ratio(self.BASE, 3, 1e-6, grid=(0.05,), n_sim=20) is None
+
+
+def test_power_report_reads_the_v1_baseline(tmp_path):
+    from tests.unit.test_paper_artifacts import _campaign
+
+    _campaign(tmp_path / "res")
+    out = power.report(tmp_path / "res", n=12, family_size=4, seed=1)
+    assert set(out["metrics"]) == {"mttr_s", "cost_units"}
+    assert out["metrics"]["mttr_s"]["baseline_median"] > 0
