@@ -1,7 +1,6 @@
 """Unit tests for the v2 statistics: equivalence (TOST), stratified permutation test, power."""
 
 import numpy as np
-import pytest
 
 from acde.analysis import power, stats
 
@@ -46,7 +45,7 @@ class TestStratifiedPermutation:
 
 
 class TestPower:
-    BASE = list(np.random.default_rng(0).lognormal(np.log(360), 0.5, 80))
+    BASE = tuple(np.random.default_rng(0).lognormal(np.log(360), 0.5, 80))
 
     def test_power_grows_with_the_effect(self):
         small = power.power_at_ratio(self.BASE, 0.05, 80, 0.05, n_sim=100, seed=1)
