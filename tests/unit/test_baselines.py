@@ -51,3 +51,32 @@ def test_coverage_sets_are_sane():
     assert "schema_drift" not in baselines.RULE_COVERAGE  # rules can't reconcile schema
     assert baselines.AUTOSCALE_COVERAGE < baselines.RULE_COVERAGE  # autoscale is strictly weaker
     assert "baseline" in baselines.NON_AGENT_CONFIGS
+
+
+class TestHybridRouting:
+    """D-107: hybrid sends a run to the rules only when they cover every open fault."""
+
+    def _route(self, monkeypatch, fault_types):
+        fake = MagicMock()
+        fake.fetch_all.return_value = [{"fault_type": f} for f in fault_types]
+        monkeypatch.setattr(baselines, "db", fake)
+        return baselines.rules_cover_run("run")
+
+    def test_covered_fault_goes_to_rules(self, monkeypatch):
+        assert self._route(monkeypatch, ["upstream_delay"]) is True
+
+    def test_schema_drift_goes_to_the_agent(self, monkeypatch):
+        assert self._route(monkeypatch, ["schema_drift"]) is False
+
+    def test_mixed_faults_go_to_the_agent(self, monkeypatch):
+        assert self._route(monkeypatch, ["ingress_burst", "schema_drift"]) is False
+
+    def test_no_open_fault_is_not_covered(self, monkeypatch):
+        assert self._route(monkeypatch, []) is False
+
+    def test_hybrid_is_an_llm_config_with_the_schema_agent(self):
+        from acde.experiments.runner import uses_llm
+        from acde.orchestrator.configs import enabled_agents
+
+        assert uses_llm("hybrid")
+        assert enabled_agents("hybrid") == {"monitoring", "schema"}

@@ -16,19 +16,18 @@ import datetime as dt
 import faulthandler
 import json
 import os
-import statistics
-import subprocess
 import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
 from acde import db
-from acde.config import Settings, get_settings
+from acde.config import get_settings
 from acde.experiments.baseline import resolve_via_human
 from acde.experiments.configs import ALL_CONFIGS, PAIRED_PROFILES, Run, profile_runs
-from acde.experiments.decision_quality import is_correct
 from acde.experiments.isolation import ResourceSampler, reset_run_state
+from acde.experiments.metrics import harvest_metrics
+from acde.experiments.provenance import build_provenance
 from acde.experiments.scenarios import TIMINGS, RunTimings, run_seed
 from acde.llm.client import LLMStats
 from acde.logging import get_logger
@@ -74,7 +73,11 @@ def _respond(  # pragma: no cover - live loop
     run: Run, seed: int, timings: RunTimings
 ) -> LLMStats | None:
     """Drive the run's response; returns the LLM client's stats for agent configs (D-104)."""
-    from acde.experiments.baselines import resolve_via_autoscale, resolve_via_rules
+    from acde.experiments.baselines import (
+        resolve_via_autoscale,
+        resolve_via_rules,
+        rules_cover_run,
+    )
     from acde.orchestrator.loop import ControlLoop
 
     if run.config == "baseline":
@@ -86,108 +89,14 @@ def _respond(  # pragma: no cover - live loop
     if run.config == "autoscale":
         resolve_via_autoscale(run_id_for(run), seed)
         return None
+    if run.config == "hybrid" and rules_cover_run(run_id_for(run)):
+        resolve_via_rules(run_id_for(run), seed)  # D-107: no model call for a covered fault
+        return LLMStats()
     loop = ControlLoop(experiment_run=run_id_for(run), config=run.config)
     loop.interval_s = min(2.0, timings.loop_s / 3)
     asyncio.run(loop.run(timings.loop_s))
     resolve_via_human(run_id_for(run), seed)  # fallback for faults no agent resolved
     return loop.llm.stats
-
-
-FRESHNESS_FAULTS = frozenset({"upstream_delay", "ingress_burst"})
-
-
-def harvest_metrics(
-    experiment_run: str,
-    wall_s: float,
-    scenario: str = "",
-    config: str = "",
-    llm_stats: LLMStats | None = None,
-) -> dict[str, float]:
-    """Compute the §5.4 metrics for a completed run from the telemetry tables.
-
-    ``llm_stats`` (D-104) adds the billing-accurate LLM accounting the agent_actions rows cannot
-    give (they replay cached tokens); a run with no LLM (baselines) reports all zeros for those
-    columns so every run shares one metric set.
-    """
-    from acde.telemetry.cost import STORAGE_COMPONENT, provisioning_cost
-
-    events = db.fetch_all(
-        "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr, "
-        "EXTRACT(EPOCH FROM (resolved_ts - injected_ts)) AS stall, "
-        "EXTRACT(EPOCH FROM (detected_ts - injected_ts)) AS detect, fault_type "
-        "FROM telemetry.failure_events "
-        "WHERE experiment_run = %s AND detected_ts IS NOT NULL AND resolved_ts IS NOT NULL",
-        (experiment_run,),
-    )
-    mttrs = [float(e["mttr"]) for e in events if e["mttr"] is not None]
-    # D-105: recovery measured from injection for every config. mttr_s starts the clock at
-    # detection, which non-agent configs stamp at injection but agents only when the monitor flags
-    # the fault -- so it silently omits the agents' detection delay.
-    from_injection = [float(e["stall"]) for e in events if e["stall"] is not None]
-    detect_delays = [float(e["detect"]) for e in events if e.get("detect") is not None]
-    cost = db.fetch_one(
-        "SELECT COALESCE(SUM(cost_units), 0) AS c, "
-        "COALESCE(SUM(cost_units) FILTER (WHERE component = %s), 0) AS storage "
-        "FROM telemetry.cost_ledger WHERE experiment_run = %s",
-        (STORAGE_COMPONENT, experiment_run),
-    )
-    interventions = db.fetch_one(
-        "SELECT count(*) AS n FROM telemetry.manual_interventions WHERE experiment_run = %s",
-        (experiment_run,),
-    )
-    # D-105: incidents a human had to handle, counted once each. manual_interventions counts
-    # escalation requests: baseline files one per fault, but an agent re-proposing on every tick of
-    # an open fault files one per tick. An intervention belongs to a fault when it was requested
-    # while that fault was open.
-    escalated = db.fetch_one(
-        "SELECT count(*) AS n FROM telemetry.failure_events f "
-        "WHERE f.experiment_run = %s AND EXISTS ("
-        "SELECT 1 FROM telemetry.manual_interventions m "
-        "WHERE m.experiment_run = f.experiment_run AND m.requested_ts >= f.injected_ts "
-        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts))",
-        (experiment_run,),
-    )
-    tokens = db.fetch_one(
-        "SELECT COALESCE(SUM(llm_tokens_in + llm_tokens_out), 0) AS t "
-        "FROM telemetry.agent_actions WHERE experiment_run = %s",
-        (experiment_run,),
-    )
-    # Freshness (A3, D-060): for streaming (ingestion-stall) faults, data-freshness lag equals how
-    # long ingestion was stalled = the fault's open duration (resolved - injected). Batch faults
-    # don't degrade streaming freshness → 0. Derived from independently-measured resolution timing.
-    stalls = [
-        float(e["stall"])
-        for e in events
-        if e["stall"] is not None and e["fault_type"] in FRESHNESS_FAULTS
-    ]
-    freshness_s = statistics.median(stalls) if stalls else 0.0
-    executed = db.fetch_all(
-        "SELECT action_type FROM telemetry.agent_actions "
-        "WHERE experiment_run = %s AND executed = TRUE",
-        (experiment_run,),
-    )
-    decision_correct = is_correct(scenario, [r["action_type"] for r in executed])
-    metered = float(cost["c"]) if cost else 0.0
-    storage = float(cost.get("storage") or 0.0) if cost else 0.0
-    provisioning = provisioning_cost(config)
-    return {
-        "mttr_s": statistics.median(mttrs) if mttrs else 0.0,
-        "mttr_injection_s": statistics.median(from_injection) if from_injection else 0.0,
-        "detection_delay_s": statistics.median(detect_delays) if detect_delays else 0.0,
-        # cost v2: measured compute/storage + the held-allocation (provisioning) cost (D-061).
-        "cost_units": metered + provisioning,
-        # D-105: the same total split into its three terms, so the metered part can be read alone.
-        "cost_compute_units": metered - storage,
-        "cost_storage_units": storage,
-        "cost_provisioning_units": provisioning,
-        "manual_interventions": float(interventions["n"]) if interventions else 0.0,
-        "escalated_incidents": float(escalated["n"]) if escalated else 0.0,
-        "llm_tokens": float(tokens["t"]) if tokens else 0.0,
-        "freshness_s": freshness_s,
-        "decision_correct": 1.0 if decision_correct else 0.0,
-        "wall_clock_s": wall_s,
-        **(llm_stats or LLMStats()).as_metrics(),
-    }
 
 
 def _drop_run_rows(csv_path: Path, run_id: str) -> None:
@@ -224,91 +133,27 @@ def _write_rows(csv_path: Path, run: Run, seed: int, metrics: dict[str, float]) 
             )
 
 
+def _export_actions(results_dir: Path, experiment_run: str) -> None:
+    """Write the run's agent decisions to ``actions/<run_id>.jsonl`` (D-106).
+
+    The per-run telemetry is cleared before the next run with the same id, so without this the
+    decision-quality failure analysis (which action, which policy verdict, which outcome) cannot be
+    done after the campaign. Overwriting the file keeps a re-run idempotent.
+    """
+    rows = db.fetch_all(
+        "SELECT agent, action_type, target, policy_decision, policy_reason, executed, status, "
+        "outcome, confidence, ts FROM telemetry.agent_actions WHERE experiment_run = %s "
+        "ORDER BY ts",
+        (experiment_run,),
+    )
+    out = results_dir / "actions" / f"{experiment_run}.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("".join(json.dumps(r, default=str) + "\n" for r in rows))
+
+
 def uses_llm(config: str) -> bool:
     """True if the config runs LLM-driven agents (the baselines never call a model)."""
     return bool(AGENT_CONFIGS.get(config))
-
-
-# Paths whose contents can change an experiment's outcome. Editing the manuscript -- or the
-# post-hoc analysis code, which only reads finished results -- while a multi-day campaign runs must
-# not mark (or abort) the runs, so "dirty" is judged on these alone (git pathspec syntax).
-CODE_PATHS = ("src", "infra", "pyproject.toml", "uv.lock", ":(exclude)src/acde/analysis")
-
-
-def _git_state() -> dict[str, Any]:
-    """Commit SHA and whether experiment code had uncommitted changes when the run started."""
-    try:
-        sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True, timeout=10
-        ).stdout.strip()
-        dirty = bool(
-            subprocess.run(
-                ["git", "status", "--porcelain", "--untracked-files=no", "--", *CODE_PATHS],
-                capture_output=True,
-                text=True,
-                check=True,
-                timeout=10,
-            ).stdout.strip()
-        )
-    except (OSError, subprocess.SubprocessError):
-        return {"git_sha": "unknown", "git_dirty": None}
-    return {"git_sha": sha, "git_dirty": dirty}
-
-
-def _llm_models(settings: Settings) -> dict[str, str]:
-    """Model ids only -- never credentials -- for the provenance record."""
-    if settings.mock_llm:
-        return {}
-    if settings.llm_provider == "gemini":
-        return {
-            "reasoning": settings.gemini_model_reasoning,
-            "fast": settings.gemini_model_fast,
-        }
-    if settings.llm_provider == "openai_compatible":
-        return {"reasoning": settings.oai_model_reasoning, "fast": settings.oai_model_fast}
-    return {"reasoning": settings.model_reasoning, "fast": settings.model_fast}
-
-
-def seed_policy(profile: str) -> str:
-    """``paired`` for profiles in PAIRED_PROFILES, else the v1 per-config policy (D-105)."""
-    return "paired" if profile in PAIRED_PROFILES else "per_config"
-
-
-def build_provenance(profile: str, timings: RunTimings) -> dict[str, Any]:
-    """Everything needed to say *exactly* what produced a run's numbers (D-104).
-
-    Recorded in every manifest line so a merged dataset can never silently mix conditions (the
-    D-081 near-miss: a shared manifest made a whole rerun look already done). Contains model ids
-    and modelled-environment parameters, never a secret.
-    """
-    s = get_settings()
-    return {
-        "profile": profile,
-        # D-105: v2 resets run state, meters a fixed window, and records the split metrics. Part
-        # of the provenance so a v1 and a v2 dataset can never be merged by accident.
-        "measurement_protocol": "v2",
-        "seed_policy": seed_policy(profile),
-        "pool_baseline_slots": s.airflow_pool_baseline_slots,
-        "cost_sample_interval_s": s.cost_sample_interval_s,
-        "timings": {
-            "warmup_s": timings.warmup_s,
-            "loop_s": timings.loop_s,
-            "settle_s": timings.settle_s,
-        },
-        "llm_provider": "mock" if s.mock_llm else s.llm_provider,
-        "llm_models": _llm_models(s),
-        "human_latency": {"median_s": s.human_latency_median_s, "sigma": s.human_latency_sigma},
-        "provisioning": {
-            "static_units": s.provisioned_units_static,
-            "rightsized_units": s.provisioned_units_rightsized,
-            "horizon_s": s.provisioning_horizon_s,
-        },
-        "llm_budget": {
-            "max_calls_per_run": s.llm_max_calls_per_run,
-            "max_tokens_per_run": s.llm_max_tokens_per_run,
-        },
-        **_git_state(),
-    }
 
 
 def _append_manifest(
@@ -391,6 +236,7 @@ def run_one(
         experiment_run, time.monotonic() - t0, run.scenario, run.config, llm_stats=llm_stats
     )
     metrics["state_reset_ok"] = 1.0 if state_reset_ok else 0.0
+    _export_actions(results_dir, experiment_run)
     _write_rows(results_dir / "raw.csv", run, seed, metrics)
     _append_manifest(results_dir / "manifest.jsonl", run, seed, metrics, provenance)
     faulthandler.cancel_dump_traceback_later()

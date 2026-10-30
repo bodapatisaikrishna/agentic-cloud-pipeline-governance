@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from acde.config import Settings
-from acde.experiments import campaign, runner
+from acde.experiments import campaign, preflight, runner
 from acde.experiments.campaign import Arm, CampaignConfig
 from acde.experiments.configs import Run
 
@@ -208,10 +208,10 @@ class _StubClient:
 
 class TestPreflight:
     def test_healthy_models_pass(self):
-        assert campaign.preflight_live_models(lambda: _StubClient(_GOOD)) == []
+        assert preflight.preflight_live_models(lambda: _StubClient(_GOOD)) == []
 
     def test_unavailable_model_is_named(self):
-        problems = campaign.preflight_live_models(lambda: _StubClient(_GOOD, unavailable=True))
+        problems = preflight.preflight_live_models(lambda: _StubClient(_GOOD, unavailable=True))
         assert len(problems) == 2  # both roles probed
         assert "model-for-monitoring" in problems[0] and "unavailable" in problems[0]
 
@@ -222,7 +222,7 @@ class TestPreflight:
             "justification": "j",
             "confidence": 0.5,
         }
-        problems = campaign.preflight_live_models(lambda: _StubClient(bad))
+        problems = preflight.preflight_live_models(lambda: _StubClient(bad))
         assert len(problems) == 2 and "invalid output" in problems[0]
 
 
@@ -256,29 +256,29 @@ class TestPrimitives:
             ("openai_compatible", "OAI_API_KEY"),
             ("anthropic", "ANTHROPIC_API_KEY"),
         ]:
-            why = campaign.missing_credentials(Settings(_env_file=None, llm_provider=provider))
+            why = preflight.missing_credentials(Settings(_env_file=None, llm_provider=provider))
             assert why is not None and expect in why
         ok = Settings(_env_file=None, llm_provider="gemini", gemini_api_key="sekrit-value")
-        assert campaign.missing_credentials(ok) is None
+        assert preflight.missing_credentials(ok) is None
 
     def test_check_health_reports_each_failing_dependency(self, monkeypatch):
         def bad_db(*a, **k):
             raise RuntimeError("down")
 
-        monkeypatch.setattr(campaign.db, "fetch_one", bad_db)
-        monkeypatch.setattr(campaign, "_http_ok", lambda url: "8181" not in url)
-        assert campaign.check_health(Settings(_env_file=None)) == ["postgres", "opa"]
-        monkeypatch.setattr(campaign.db, "fetch_one", lambda *a, **k: {"ok": 1})
-        monkeypatch.setattr(campaign, "_http_ok", lambda url: True)
-        assert campaign.check_health(Settings(_env_file=None)) == []
+        monkeypatch.setattr(preflight.db, "fetch_one", bad_db)
+        monkeypatch.setattr(preflight, "_http_ok", lambda url: "8181" not in url)
+        assert preflight.check_health(Settings(_env_file=None)) == ["postgres", "opa"]
+        monkeypatch.setattr(preflight.db, "fetch_one", lambda *a, **k: {"ok": 1})
+        monkeypatch.setattr(preflight, "_http_ok", lambda url: True)
+        assert preflight.check_health(Settings(_env_file=None)) == []
 
     def test_check_health_bounds_a_hanging_db_call(self, monkeypatch):
         """A real incident: db.fetch_one blocked 2+h with Postgres down, freezing health checks."""
-        monkeypatch.setattr(campaign, "_HEALTH_DB_TIMEOUT_S", 0.05)
-        monkeypatch.setattr(campaign.db, "fetch_one", lambda *a, **k: threading.Event().wait(30))
-        monkeypatch.setattr(campaign, "_http_ok", lambda url: True)
+        monkeypatch.setattr(preflight, "_HEALTH_DB_TIMEOUT_S", 0.05)
+        monkeypatch.setattr(preflight.db, "fetch_one", lambda *a, **k: threading.Event().wait(30))
+        monkeypatch.setattr(preflight, "_http_ok", lambda url: True)
         started = time.monotonic()
-        assert campaign.check_health(Settings(_env_file=None)) == ["postgres"]
+        assert preflight.check_health(Settings(_env_file=None)) == ["postgres"]
         assert time.monotonic() - started < 2.0  # bounded, not the 30s stall
 
     def test_http_ok(self, monkeypatch):
@@ -291,14 +291,14 @@ class TestPrimitives:
             def __exit__(self, *a):
                 return False
 
-        monkeypatch.setattr(campaign.urllib.request, "urlopen", lambda *a, **k: Resp())
-        assert campaign._http_ok("http://x")
+        monkeypatch.setattr(preflight.urllib.request, "urlopen", lambda *a, **k: Resp())
+        assert preflight._http_ok("http://x")
 
         def boom(*a, **k):
             raise OSError("refused")
 
-        monkeypatch.setattr(campaign.urllib.request, "urlopen", boom)
-        assert not campaign._http_ok("http://x")
+        monkeypatch.setattr(preflight.urllib.request, "urlopen", boom)
+        assert not preflight._http_ok("http://x")
 
     @pytest.mark.parametrize(("rc", "expected"), [(0, False), (1, True), (128, False)])
     def test_code_changed_since(self, monkeypatch, rc, expected):

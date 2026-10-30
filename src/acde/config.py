@@ -120,6 +120,9 @@ class Settings(BaseSettings):
     # --- Human simulator (§6 baseline) ---
     human_latency_median_s: float = 360.0
     human_latency_sigma: float = 0.5
+    # D-106: file at most one open escalation per run, like a pager's dedup key. Off by default so
+    # `full` keeps its v1 behaviour; escalated_incidents already counts each fault once.
+    escalation_dedupe: bool = False
 
     # --- Non-agent baselines (Phase A credibility) ---
     # Rule-based automation resolves faults it has a predefined rule for at a fixed remediation

@@ -134,6 +134,19 @@ class TestDecisionSemantics:
         assert "escalated_to_human" in out.outcome
         assert "manual_interventions" in fake_db.execute.call_args.args[0]
 
+    def test_dedupe_skips_a_second_open_escalation(self, fake_db, monkeypatch):
+        monkeypatch.setattr(executor, "get_settings", lambda: Settings(escalation_dedupe=True))
+        fake_db.fetch_one.return_value = {"open": 1}  # an escalation is already open
+        out = executor.execute(_action("recovery", "escalate_to_human"), ESCALATE, "run-1")
+        assert "escalated_to_human" in out.outcome
+        fake_db.execute.assert_not_called()
+
+    def test_dedupe_still_files_the_first_escalation(self, fake_db, monkeypatch):
+        monkeypatch.setattr(executor, "get_settings", lambda: Settings(escalation_dedupe=True))
+        fake_db.fetch_one.return_value = None
+        executor.execute(_action("recovery", "escalate_to_human"), ESCALATE, "run-1")
+        assert "manual_interventions" in fake_db.execute.call_args.args[0]
+
     def test_allowed_and_escalate_does_both(self, fake_db):
         out = executor.execute(
             _action("schema", "quarantine_partition", dataset="d"), ALLOW_ESCALATE, "run-1"

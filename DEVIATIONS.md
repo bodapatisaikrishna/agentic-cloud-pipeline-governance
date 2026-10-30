@@ -2608,3 +2608,69 @@ injection); `full` reports a 0.10 s detection delay that `mttr_s` leaves out. Th
 `measurement_protocol: v2`. *Still open:* the analysis and paper-artifact code do not yet read the
 new metrics, and no `paper_v2` run has been made.
 
+
+## D-106 — The simulated human handles each incident once; code fingerprint; action export
+
+**Context.** Reading `resolve_via_human` while adding the v2 analysis showed a fifth measurement
+problem, larger than the four in D-105. `HumanSimulator.assign_latencies` drew an independent
+lognormal delay for every `manual_interventions` row, and the fault was back-filled with the
+*earliest* completion. An agent that re-escalated on every tick therefore got the fastest of several
+draws. With the v1 parameters (median 360 s, sigma 0.5) the median of the minimum of k draws is
+about 359 s for k=1, 274 s for k=2, 219 s for k=4 and 195 s for k=6. In the v1 data, 73 of 80
+`full` runs and all 40 `recovery_only` runs were resolved by the human (MTTR above 60 s; the
+probability that even the fastest of six draws is under 60 s is about 0.001). Both file a median of six
+escalations, and their median MTTRs (241 s and 220 s) are far closer to the minimum of six draws
+(195 s) than to a single draw (359 s). `monitor_only`, which escalates once, sits at 359 s, next to
+`baseline` (378 s). Most of the v1 MTTR reduction for
+`full` and `recovery_only` is therefore produced by the simulator, not by the agents. The draw was
+also keyed on the database row id, so it changed between reruns and paired runs did not share it,
+contrary to what D-105 item 4 intended.
+
+**Decision.** `resolve_via_human` pages the human once per fault: the page is the earliest
+escalation filed while the fault was open (or, if nobody escalated, the fixed monitor's page at
+detection), the delay is `sample_latency(seed, fault ordinal)`, and every re-page of that incident is
+closed at the same completion time. The ordinal counts all of the run's faults in injection order,
+so it does not depend on which faults an agent already fixed. All escalation rows are kept, so
+`manual_interventions` still counts requests. *Alternatives:* (a) keep the per-row draws and report
+the artifact (rejected: the headline MTTR comparison would stay biased toward configurations that
+escalate more); (b) resolve at the *last* page (rejected: penalises early escalation, which is the
+behaviour a pager rewards); (c) start the human clock at injection for every configuration
+(rejected: an agent that escalates promptly should get credit for paging early). `HumanSimulator`
+itself (used by the standalone simulator loop) is unchanged.
+
+**Escalation dedupe (opt-in).** `ESCALATION_DEDUPE=true` makes `executor._escalate` skip a new
+escalation while one is still open for the run, like a pager's dedup key. It is off by default so
+`full` keeps its v1 behaviour; with this entry's fix, duplicate pages no longer change MTTR, and
+`escalated_incidents` already counts each fault once. It exists for a separately reported arm.
+
+**Code fingerprint.** Provenance now records `code_tree`, a SHA-256 of `git ls-files -s` over
+`CODE_PATHS` (experiment code, infra, lockfile; analysis code excluded). Two arms run at different
+commits that differ only in documentation or analysis code share it. The v2 analysis compares
+`code_tree` across arms instead of `git_sha`, which would refuse such a merge.
+
+**Action export.** `run_one` writes the run's `telemetry.agent_actions` rows (agent, action, target,
+policy verdict, executed, outcome) to `<results>/actions/<run_id>.jsonl`. The table is cleared
+before the next run with the same id, which is why the v1 decision-quality failures could not be
+analysed after the campaign.
+
+**Effect on v1.** None on the published v1 numbers, which were produced by the earlier code (the
+manifests record its commit). The paper now reports the artifact as a threat to validity with
+generated numbers.
+
+## D-107 — `hybrid`: rules for covered faults, the schema agent for the rest
+
+**Context.** In v1, `rule_based` resolves the faults it has a rule for in 30 s but escalates schema
+drift to the human, while the schema agent resolves schema drift itself. A design reviewers would
+ask about is the combination: cheap rules where they apply, the LLM only where they do not.
+
+**Decision.** New config `hybrid` (agents `{monitoring, schema}`). If the rule set covers every open
+fault of the run (`rules_cover_run`, the same fault-type classification `rule_based` uses), the run is
+resolved by `resolve_via_rules` with no model call; otherwise the control loop runs with the
+monitoring and schema agents, followed by the usual human fallback. It holds the static allocation
+(not in `RIGHTSIZING_CONFIGS`), like `rule_based`. `hybrid` joins `ALL_CONFIGS`, the live arm and
+`paper_v2` (now 720 cells, 800 runs with the mock arm). Only its schema-drift runs (20) call a model.
+*Alternatives:* (a) run the LLM agents first and fall back to rules (rejected: pays for model calls
+on faults rules already handle); (b) let the full agent set handle uncovered faults (rejected: only
+schema drift is uncovered, so the other agents would add calls without a fault to act on).
+*Caveat:* like `rule_based`, the routing reads the injected fault type, an oracle a production rule
+engine would replace with its own classifier.

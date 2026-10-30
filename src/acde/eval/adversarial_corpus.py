@@ -521,14 +521,14 @@ def policy_fingerprint(policy_dir: Path = Path("infra/opa/policies")) -> str:
 
 def run_all(policy_dir: Path = Path("infra/opa/policies")) -> dict[str, Any]:
     """Run the whole adversarial evaluation against the live gate."""
-    from acde.experiments.runner import _git_state
+    from acde.experiments.provenance import git_state
 
     result = run_corpus(build_corpus())
     result["contract_layer"] = run_contract()
     result["provenance"] = {
         "policy_sha256": policy_fingerprint(policy_dir),
         "fuzz_seed": run_seed("adversarial", "fuzz", 0),
-        **_git_state(),
+        **git_state(),
     }
     return result
 

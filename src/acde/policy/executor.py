@@ -194,6 +194,16 @@ _HANDLERS = {
 
 
 def _escalate(action: ProposedAction, decision: PolicyDecision, experiment_run: str) -> None:
+    if get_settings().escalation_dedupe and db.fetch_one(
+        "SELECT 1 AS open FROM telemetry.manual_interventions "
+        "WHERE experiment_run = %s AND completed_ts IS NULL LIMIT 1",
+        (experiment_run,),
+    ):
+        log.info(
+            "escalation_deduplicated",
+            extra={"action_id": str(action.action_id), "experiment_run": experiment_run},
+        )
+        return
     tenant_id, environment = current_scope()
     db.execute(
         "INSERT INTO telemetry.manual_interventions "

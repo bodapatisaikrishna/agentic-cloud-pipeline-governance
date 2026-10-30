@@ -73,6 +73,20 @@ def _resolve_covered(
     return auto
 
 
+def rules_cover_run(experiment_run: str) -> bool:
+    """True if the rule set covers every open fault of the run (D-107 hybrid routing).
+
+    Uses the same fault-type classification as ``rule_based``, so hybrid's rule half sees exactly
+    what the rule baseline sees.
+    """
+    rows = db.fetch_all(
+        "SELECT fault_type FROM telemetry.failure_events "
+        "WHERE experiment_run = %s AND resolved_ts IS NULL",
+        (experiment_run,),
+    )
+    return bool(rows) and all(r["fault_type"] in RULE_COVERAGE for r in rows)
+
+
 def resolve_via_rules(experiment_run: str, seed: int) -> int:
     """Rule-based automation baseline: canned remediation for known faults, human for the rest."""
     return _resolve_covered(

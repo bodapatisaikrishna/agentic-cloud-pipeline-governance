@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from acde.chaos.scenarios import run_seed
-from acde.experiments import campaign, isolation, runner
+from acde.experiments import campaign, isolation, metrics, provenance, runner
 from acde.experiments.configs import ALL_CONFIGS, profile_runs
 from acde.experiments.scenarios import TIMINGS
 from acde.telemetry import cost
@@ -21,8 +21,8 @@ def _harvest(monkeypatch, events, cost_row, interventions, escalated, config="fu
     fake = MagicMock()
     fake.fetch_all.side_effect = [events, []]
     fake.fetch_one.side_effect = [cost_row, {"n": interventions}, {"n": escalated}, {"t": 0}]
-    monkeypatch.setattr(runner, "db", fake)
-    return runner.harvest_metrics("run", 1.0, "upstream_delay", config), fake
+    monkeypatch.setattr(metrics, "db", fake)
+    return metrics.harvest_metrics("run", 1.0, "upstream_delay", config), fake
 
 
 class TestEscalatedIncidents:
@@ -152,8 +152,8 @@ class TestPairedSeeds:
         assert run_seed("full", "schema_drift", 1, paired=True) != base
 
     def test_profile_decides_the_policy(self):
-        assert runner.seed_policy("paper_v2") == "paired"
-        assert runner.seed_policy("paper") == "per_config"
+        assert provenance.seed_policy("paper_v2") == "paired"
+        assert provenance.seed_policy("paper") == "per_config"
 
     def test_run_profile_passes_paired_for_v2(self, tmp_path, monkeypatch):
         seen = []
@@ -163,8 +163,8 @@ class TestPairedSeeds:
         assert seen == [True, False]
 
     def test_provenance_records_protocol_and_seed_policy(self, monkeypatch):
-        monkeypatch.setattr(runner, "_git_state", lambda: {"git_sha": "abc", "git_dirty": False})
-        prov = runner.build_provenance("paper_v2", TIMINGS["paper_v2"])
+        monkeypatch.setattr(provenance, "git_state", lambda: {"git_sha": "abc", "git_dirty": False})
+        prov = provenance.build_provenance("paper_v2", TIMINGS["paper_v2"])
         assert prov["measurement_protocol"] == "v2"
         assert prov["seed_policy"] == "paired"
         assert prov["pool_baseline_slots"] == {"default_pool": 128}
@@ -178,7 +178,7 @@ class TestPaperV2Profile:
 
     def test_order_is_interleaved_and_deterministic(self):
         runs = profile_runs("paper_v2")
-        assert len(set(runs)) == len(runs) == 640
+        assert len(set(runs)) == len(runs) == 720
         assert runs[:8] != sorted(runs[:8], key=lambda r: r.config)  # not config-major
         assert len({r.config for r in runs[:20]}) > 1
 

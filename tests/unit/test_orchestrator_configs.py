@@ -29,7 +29,7 @@ def test_unknown_config_raises():
         enabled_agents("turbo")
 
 
-def test_six_configs_registered():
+def test_agent_configs_registered():
     assert set(AGENT_CONFIGS) == {
         "baseline",
         "monitor_only",
@@ -37,4 +37,5 @@ def test_six_configs_registered():
         "optimization_only",
         "schema_only",
         "full",
+        "hybrid",
     }

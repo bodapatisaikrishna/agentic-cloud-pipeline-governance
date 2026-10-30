@@ -13,6 +13,25 @@ per phase, `v1.0.0` at Phase 9.
   12.3.0 → 13.0.0 (25 CVEs, via matplotlib in the `research` extra / dev group) failed pip-audit
   only, since the server image installs `--no-dev`. No code or paper data changed.
 
+### Fixed
+- **Simulated human drew one delay per escalation and kept the fastest (D-106)**: an agent that
+  re-escalated on every tick got the minimum of several draws, which accounts for most of the v1
+  MTTR gain of `full` and `recovery_only`. The human now handles each incident once: one delay per
+  fault, keyed on `(seed, fault ordinal)` so paired runs share it, starting at the first page.
+
+### Added
+- **`hybrid` config (D-107)**: rule-based remediation for the faults it covers, the schema agent for
+  schema drift. Added to the live arm and `paper_v2` (800 runs including the mock arm).
+- **Per-run action export (D-106)**: `<results>/actions/<run_id>.jsonl` keeps each run's agent
+  decisions for the decision-quality failure analysis.
+- **`code_tree` provenance (D-106)**: a fingerprint of the experiment code, so arms run at commits
+  that differ only in docs or analysis code can still be merged.
+- **`ESCALATION_DEDUPE` (D-106)**: opt-in, one open escalation per run.
+
+### Changed
+- `runner.py` split into `metrics.py` (metric harvest) and `provenance.py`; the campaign's health
+  and model preflight checks moved to `preflight.py`.
+
 ### Added
 - **Measurement protocol v2 (D-105)**: fixes the four measurement problems the paper discloses,
   for a re-run. Existing v1 results and paper numbers are unchanged.

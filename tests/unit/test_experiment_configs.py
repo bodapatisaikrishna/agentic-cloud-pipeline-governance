@@ -6,9 +6,9 @@ from acde.experiments.configs import ALL_CONFIGS, profile_runs
 from acde.experiments.scenarios import SCENARIOS
 
 
-def test_quick_is_96_runs():
+def test_quick_is_108_runs():
     runs = profile_runs("quick")
-    assert len(runs) == 8 * 4 * 3  # 8 configs x 4 scenarios x N=3
+    assert len(runs) == 9 * 4 * 3  # 9 configs x 4 scenarios x N=3
 
 
 def test_paper_run_count():
@@ -47,5 +47,5 @@ def test_seeds_distinct_across_matrix_cells():
         for r in runs
     }
     # seed keys on config too, so every cell has its own seed. Just assert no accidental collisions
-    # beyond the birthday-bound noise: nearly all 96 keys map to distinct values.
-    assert len(set(seeds.values())) >= 94
+    # beyond the birthday-bound noise: nearly all 108 keys map to distinct values.
+    assert len(set(seeds.values())) >= 106

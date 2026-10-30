@@ -14,6 +14,8 @@ AGENT_CONFIGS: dict[str, set[str]] = {
     "optimization_only": {"monitoring", "optimization"},
     "schema_only": {"monitoring", "schema"},
     "full": {"monitoring", "recovery", "optimization", "schema"},
+    # D-107: the agents hybrid runs for faults outside the rule set (schema drift).
+    "hybrid": {"monitoring", "schema"},
 }
 
 

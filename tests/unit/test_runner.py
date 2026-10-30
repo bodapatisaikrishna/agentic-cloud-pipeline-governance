@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from acde.experiments import runner
+from acde.experiments import metrics, provenance, runner
 from acde.experiments.configs import Run
 from acde.experiments.scenarios import TIMINGS
 
@@ -49,8 +49,10 @@ class TestHarvest:
         ]
         # fetch_one: cost, interventions, escalated incidents, tokens.
         fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"n": 1}, {"t": 800}]
-        monkeypatch.setattr(runner, "db", fake)
-        m = runner.harvest_metrics("run", wall_s=12.5, scenario="upstream_delay", config="baseline")
+        monkeypatch.setattr(metrics, "db", fake)
+        m = metrics.harvest_metrics(
+            "run", wall_s=12.5, scenario="upstream_delay", config="baseline"
+        )
         assert m["mttr_s"] == 20.0  # median
         assert m["cost_units"] == 5.0 + provisioning_cost("baseline")  # measured + provisioning
         assert m["manual_interventions"] == 2.0
@@ -65,11 +67,11 @@ class TestHarvest:
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
         fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 999}]
-        monkeypatch.setattr(runner, "db", fake)
+        monkeypatch.setattr(metrics, "db", fake)
         stats = LLMStats(
             real_calls=3, cache_hits=5, tokens_in=100, tokens_out=40, invalid_outputs=1
         )
-        m = runner.harvest_metrics("run", 1.0, "upstream_delay", "full", llm_stats=stats)
+        m = metrics.harvest_metrics("run", 1.0, "upstream_delay", "full", llm_stats=stats)
         assert m["api_tokens"] == 140.0  # billing-accurate, not the row-level 999
         assert m["llm_tokens"] == 999.0  # legacy row-level figure kept for continuity
         assert (m["llm_calls"], m["llm_cache_hits"], m["llm_invalid"]) == (3.0, 5.0, 1.0)
@@ -78,8 +80,8 @@ class TestHarvest:
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
         fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
-        monkeypatch.setattr(runner, "db", fake)
-        m = runner.harvest_metrics("run", 1.0, "upstream_delay", "baseline")
+        monkeypatch.setattr(metrics, "db", fake)
+        m = metrics.harvest_metrics("run", 1.0, "upstream_delay", "baseline")
         assert m["api_tokens"] == m["llm_calls"] == m["llm_degraded"] == 0.0
 
     def test_rightsizing_config_costs_less(self, monkeypatch):
@@ -92,8 +94,8 @@ class TestHarvest:
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
         fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
-        monkeypatch.setattr(runner, "db", fake)
-        m = runner.harvest_metrics("run", 1.0, scenario="upstream_delay", config="baseline")
+        monkeypatch.setattr(metrics, "db", fake)
+        m = metrics.harvest_metrics("run", 1.0, scenario="upstream_delay", config="baseline")
         assert m["mttr_s"] == 0.0
         assert m["freshness_s"] == 0.0  # no resolved streaming faults
         assert m["decision_correct"] == 0.0  # no executed action → incorrect
@@ -103,6 +105,7 @@ class TestRunOne:
     def test_writes_row_and_manifest(self, tmp_path, monkeypatch):
         monkeypatch.setattr(runner, "_reset_run", lambda r: None)
         monkeypatch.setattr(runner, "reset_run_state", lambda: True)
+        monkeypatch.setattr(runner, "_export_actions", lambda d, r: None)
         monkeypatch.setattr(runner, "_sample_resources", lambda r: None)
         monkeypatch.setattr(runner, "_respond", lambda run, seed, timings: None)
         monkeypatch.setattr(runner.time, "sleep", lambda s: None)
@@ -122,6 +125,20 @@ class TestRunOne:
         assert runner.load_completed(tmp_path / "manifest.jsonl") == {
             "baseline__upstream_delay__r0"
         }
+
+
+class TestActionExport:
+    def test_writes_one_line_per_action_and_overwrites_on_rerun(self, tmp_path, monkeypatch):
+        fake = MagicMock()
+        fake.fetch_all.return_value = [
+            {"agent": "recovery", "action_type": "replay", "executed": True},
+            {"agent": "schema", "action_type": "apply_mapping", "executed": False},
+        ]
+        monkeypatch.setattr(runner, "db", fake)
+        runner._export_actions(tmp_path, "full__schema_drift__r0")
+        runner._export_actions(tmp_path, "full__schema_drift__r0")
+        lines = (tmp_path / "actions" / "full__schema_drift__r0.jsonl").read_text().splitlines()
+        assert [json.loads(ln)["action_type"] for ln in lines] == ["replay", "apply_mapping"]
 
 
 class TestRunProfileResumability:
@@ -169,8 +186,8 @@ class TestAtomicRowReplacement:
 
 class TestProvenance:
     def test_manifest_records_llm_mode_and_provenance(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(runner, "_git_state", lambda: {"git_sha": "abc", "git_dirty": False})
-        prov = runner.build_provenance("smoke", TIMINGS["smoke"])
+        monkeypatch.setattr(provenance, "git_state", lambda: {"git_sha": "abc", "git_dirty": False})
+        prov = provenance.build_provenance("smoke", TIMINGS["smoke"])
         assert prov["profile"] == "smoke" and prov["git_sha"] == "abc"
         assert prov["timings"]["loop_s"] == TIMINGS["smoke"].loop_s
         metrics = {"mttr_s": 1.0, "wall_clock_s": 2.0}
@@ -186,30 +203,35 @@ class TestProvenance:
         assert recs[1]["provenance"]["git_sha"] == "abc"
 
     def test_provenance_never_contains_credentials(self, monkeypatch):
-        monkeypatch.setattr(runner, "_git_state", lambda: {"git_sha": "abc", "git_dirty": True})
-        dumped = json.dumps(runner.build_provenance("paper", TIMINGS["paper"])).lower()
+        monkeypatch.setattr(provenance, "git_state", lambda: {"git_sha": "abc", "git_dirty": True})
+        dumped = json.dumps(provenance.build_provenance("paper", TIMINGS["paper"])).lower()
         assert "key" not in dumped and "secret" not in dumped and "token_value" not in dumped
 
     def test_live_provenance_lists_model_ids(self, monkeypatch):
         from acde.config import Settings
 
         live = Settings(_env_file=None, mock_llm=False, llm_provider="openai_compatible")
-        monkeypatch.setattr(runner, "get_settings", lambda: live)
-        monkeypatch.setattr(runner, "_git_state", lambda: {"git_sha": "abc", "git_dirty": False})
-        prov = runner.build_provenance("paper", TIMINGS["paper"])
+        monkeypatch.setattr(provenance, "get_settings", lambda: live)
+        monkeypatch.setattr(provenance, "git_state", lambda: {"git_sha": "abc", "git_dirty": False})
+        prov = provenance.build_provenance("paper", TIMINGS["paper"])
         assert prov["llm_provider"] == "openai_compatible"
         assert set(prov["llm_models"]) == {"reasoning", "fast"}
 
     def test_git_state_reports_sha(self):
-        state = runner._git_state()
-        assert set(state) == {"git_sha", "git_dirty"}
+        state = provenance.git_state()
+        assert set(state) == {"git_sha", "code_tree", "git_dirty"}
+        assert len(state["code_tree"]) == 64
 
     def test_git_state_survives_missing_git(self, monkeypatch):
         def boom(*a, **k):
             raise OSError("no git")
 
-        monkeypatch.setattr(runner.subprocess, "run", boom)
-        assert runner._git_state() == {"git_sha": "unknown", "git_dirty": None}
+        monkeypatch.setattr(provenance.subprocess, "run", boom)
+        assert provenance.git_state() == {
+            "git_sha": "unknown",
+            "code_tree": "unknown",
+            "git_dirty": None,
+        }
 
 
 class TestConfigFilter:

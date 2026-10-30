@@ -35,6 +35,8 @@ ALL_CONFIGS = (
     "optimization_only",
     "schema_only",
     "full",
+    # D-107: rule-based automation for the faults it covers, the schema agent (LLM) for the rest.
+    "hybrid",
 )
 # Non-agent comparison points (static+human, rule-based automation, autoscaling).
 BASELINE_CONFIGS = ("baseline", "rule_based", "autoscale")
