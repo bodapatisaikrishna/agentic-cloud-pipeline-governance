@@ -289,6 +289,12 @@ class Settings(BaseSettings):
     experiment_run: str = "adhoc"  # tags every telemetry row; overridden by the runner (P7)
     telemetry_interval_s: float = 5.0  # collector sampling period
     cost_window_s: float = 60.0  # cost-ledger aggregation window
+    # Measurement protocol v2 (D-105): resources are sampled at this cadence while a run responds,
+    # so the metered term sees what agents change mid-loop, not just the before/after endpoints.
+    cost_sample_interval_s: float = 15.0
+    # Pools every run starts from (D-105). Agents can patch pool slots, and v1 never put them back,
+    # so each run inherited the previous run's allocation. 128 is Airflow's stock default_pool.
+    airflow_pool_baseline_slots: dict[str, int] = {"default_pool": 128}
 
     # --- Determinism ---
     default_seed: int = 42

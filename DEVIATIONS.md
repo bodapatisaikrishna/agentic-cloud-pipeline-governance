@@ -2542,3 +2542,67 @@ LLM); the experiment harness still needs the full compose stack with Airflow and
 Secrets are generated on the VM at first boot and never committed. SSH is limited to the deployer's
 IP and could not be reached from the laptop behind its VPN, so the VM is administered through
 `az vm run-command`.
+
+## D-105 — Measurement protocol v2: fair counting, timing, metering and seeding for a re-run
+
+**Context.** The v1 campaign (D-104) produced four measurement problems that the paper discloses as
+threats to validity. Each one biases a headline comparison, so a re-run needs them fixed first. v1
+data, analysis and paper numbers are left exactly as they are; v2 is a separate profile and results
+tree.
+
+**1. Manual interventions counted per request, not per incident.**
+`executor._escalate` inserts a row for every escalated proposal, and an agent re-proposing on every
+2 s tick of an open fault files one row per tick, while `baseline` files one row per fault.
+*Decision:* add `escalated_incidents`, the number of failure events with at least one intervention
+requested while the event was open (`injected_ts <= requested_ts <= resolved_ts`), and keep
+`manual_interventions` unchanged. *Alternatives:* (a) redefine `manual_interventions` (rejected: the
+same metric name would mean two things across v1 and v2 data); (b) add a `fault_event_id` column to
+`manual_interventions` and set it at escalation time (rejected for now: escalations carry no fault
+id, so it would be the same time-window attribution with a migration on top). The window rule is
+exact when a run has one fault, which every campaign run does.
+*Not changed:* the escalation behaviour itself (one open escalation per fault, back-off after a
+denial). That is a design change, not a measurement fix, and is left for a separately reported
+configuration.
+
+**2. Recovery clock started later for agents.** `mttr_s` runs from `detected_ts`, which non-agent
+configs stamp at injection but agents only when the monitor flags the fault. *Decision:* add
+`mttr_injection_s` (resolved minus injected, all configs) and `detection_delay_s`; keep `mttr_s`.
+*Alternative:* change `mttr_s` (rejected for the same naming reason as above).
+
+**3. Cost confounded by carried-over state and unequal windows.** *Decisions:* (a) before every run,
+delete the desired-state keys agent actions write (`streaming.workers`, `ingestion.blocked.*`,
+`pipeline.priority.*`, `schema.mapping.*`) and patch Airflow pools back to
+`AIRFLOW_POOL_BASELINE_SLOTS` (default `{"default_pool": 128}`, Airflow's stock size). The kill
+switch and loop heartbeat are operator state and are not touched. If Airflow is unreachable the run
+continues and records `state_reset_ok = 0` so the analysis can exclude it; aborting would lose the
+run and continuing silently would hide the confound. (b) Sample resources every
+`COST_SAMPLE_INTERVAL_S` (15 s) on a background thread while the run responds, so the metered term
+sees mid-loop changes; v1 had only the before and after samples. (c) Meter every run over the same
+span, loop plus settle from the pre-injection sample, holding the last sampled allocation to the end
+(`compute_cost_windows(..., span_s=...)`); windows never pass the span end. v1 metered first to last
+sample, about 300 s for agents and a few seconds for non-agent configs. (d) Record the cost split
+(`cost_compute_units`, `cost_storage_units`, `cost_provisioning_units`). *Alternative to (c):* make
+non-agent runs sleep for the loop duration (rejected: about 20 extra hours of wall time for the same
+step-integral result, since their allocation does not change after they respond).
+
+**4. Seeds not paired.** The v1 seed hashes the config name, so matched (scenario, replicate) runs
+draw different faults and human latencies. *Decision:* `run_seed(..., paired=True)` hashes only
+`scenario:replicate`; profiles in `PAIRED_PROFILES` (`paper_v2`) use it, everything else keeps the
+v1 policy, whose value is pinned by a unit test. This departs from the seed policy in CLAUDE.md
+rule 5 for `paper_v2` only, at the user's request, because a paired design is what the analysis
+needs. The policy is chosen by profile, not by an environment variable, so it cannot be forgotten.
+
+**5. Unequal n and run order.** `paper_v2` runs all eight configs at N=20 (640 cells; with the mock
+`full` arm, 720 runs) in an order shuffled once with `DEFAULT_SEED`. The supervisor, with
+`interleave` (set automatically for `paper_v2`), takes the next run in that order whichever arm owns
+it; v1 finished arm A before B and ran the mock arm last.
+
+**Provenance.** Every v2 manifest line records `measurement_protocol: v2`, `seed_policy`, the pool
+baseline and the sampling interval, so the existing provenance check refuses to merge v1 and v2.
+
+**Not verified.** Unit-tested only (22 new tests). The integration suite and a smoke campaign were
+not run because Docker was not running on the development machine; the Airflow pool reset in
+particular has only been exercised through its failure path. Run `make up` then
+`make campaign-smoke` and the integration tests before starting `make campaign-v2`. The analysis and
+paper-artifact code do not yet read the new metrics.
+

@@ -115,12 +115,22 @@ def _worker_samples(
     return [(r["ts"], float(r["workers"] or 0)) for r in rows]
 
 
-def compute_cost_windows(experiment_run: str | None = None, window_s: float | None = None) -> int:
+def compute_cost_windows(
+    experiment_run: str | None = None,
+    window_s: float | None = None,
+    span_s: float | None = None,
+) -> int:
     """Aggregate ``resource_usage`` into per-component 1-min ``cost_ledger`` rows.
 
     Returns the number of ledger rows written. Idempotent per (experiment_run, component,
     window_start) via delete-then-insert of the run's ledger.
+
+    ``span_s`` (D-105) meters exactly ``[first sample, first sample + span_s]`` for every run, the
+    last sampled allocation held to the end. Without it the span is first-to-last sample, which in
+    v1 was ~300 s for agent runs but a few seconds for non-agent ones.
     """
+    if span_s is not None:
+        return _compute_fixed_span(experiment_run, window_s, span_s)
     settings = get_settings()
     experiment_run = settings.experiment_run if experiment_run is None else experiment_run
     window_s = settings.cost_window_s if window_s is None else window_s
@@ -138,56 +148,92 @@ def compute_cost_windows(experiment_run: str | None = None, window_s: float | No
     storage_gb = warehouse_size_gb()
     delta = dt.timedelta(seconds=window_s)
     written = 0
-    tenant_id, environment = current_scope()
     start = span["lo"]
     while start < span["hi"] + delta:
         end = start + delta
-        for component in COMPUTE_COMPONENTS:
-            samples = _worker_samples(experiment_run, component, start, end)
-            cus = integrate_worker_seconds(samples, start, end)
-            if cus <= 0:
-                continue
-            db.execute(
-                "INSERT INTO telemetry.cost_ledger (experiment_run, component, "
-                "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end, "
-                "tenant_id, environment) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (
-                    experiment_run,
-                    component,
-                    cus,
-                    0.0,
-                    cost_units(cus, 0.0),
-                    start,
-                    end,
-                    tenant_id,
-                    environment,
-                ),
-            )
-            written += 1
-        # storage cost for the window, attributed to the storage component
-        sgh = storage_gb * (window_s / 3600.0)
-        db.execute(
-            "INSERT INTO telemetry.cost_ledger (experiment_run, component, "
-            "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end, "
-            "tenant_id, environment) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (
-                experiment_run,
-                STORAGE_COMPONENT,
-                0.0,
-                sgh,
-                cost_units(0.0, sgh),
-                start,
-                end,
-                tenant_id,
-                environment,
-            ),
-        )
-        written += 1
+        written += _write_window(experiment_run, storage_gb, start, end)
         start = end
     log.info("cost_windows_written", extra={"experiment_run": experiment_run, "rows": written})
     return written
+
+
+def _compute_fixed_span(experiment_run: str | None, window_s: float | None, span_s: float) -> int:
+    """Meter ``[first sample, first sample + span_s]`` in windows that never pass the span end."""
+    settings = get_settings()
+    experiment_run = settings.experiment_run if experiment_run is None else experiment_run
+    window_s = settings.cost_window_s if window_s is None else window_s
+
+    span = db.fetch_one(
+        "SELECT MIN(ts) AS lo FROM telemetry.resource_usage WHERE experiment_run = %s",
+        (experiment_run,),
+    )
+    if not span or span["lo"] is None:
+        log.warning("cost_no_samples", extra={"experiment_run": experiment_run})
+        return 0
+
+    db.execute("DELETE FROM telemetry.cost_ledger WHERE experiment_run = %s", (experiment_run,))
+    storage_gb = warehouse_size_gb()
+    delta = dt.timedelta(seconds=window_s)
+    hi = span["lo"] + dt.timedelta(seconds=span_s)
+    written = 0
+    start = span["lo"]
+    while start < hi:
+        end = min(start + delta, hi)
+        written += _write_window(experiment_run, storage_gb, start, end)
+        start = end
+    log.info(
+        "cost_windows_written",
+        extra={"experiment_run": experiment_run, "rows": written, "span_s": span_s},
+    )
+    return written
+
+
+def _write_window(
+    experiment_run: str, storage_gb: float, start: dt.datetime, end: dt.datetime
+) -> int:
+    """Write one window's compute rows (one per busy component) and its storage row."""
+    tenant_id, environment = current_scope()
+    written = 0
+    for component in COMPUTE_COMPONENTS:
+        samples = _worker_samples(experiment_run, component, start, end)
+        cus = integrate_worker_seconds(samples, start, end)
+        if cus <= 0:
+            continue
+        _insert_ledger(experiment_run, component, cus, 0.0, start, end, tenant_id, environment)
+        written += 1
+    # storage cost for the window, attributed to the storage component
+    sgh = storage_gb * ((end - start).total_seconds() / 3600.0)
+    _insert_ledger(experiment_run, STORAGE_COMPONENT, 0.0, sgh, start, end, tenant_id, environment)
+    return written + 1
+
+
+def _insert_ledger(
+    experiment_run: str,
+    component: str,
+    compute_unit_seconds: float,
+    storage_gb_hours: float,
+    start: dt.datetime,
+    end: dt.datetime,
+    tenant_id: str,
+    environment: str,
+) -> None:
+    db.execute(
+        "INSERT INTO telemetry.cost_ledger (experiment_run, component, "
+        "compute_unit_seconds, storage_gb_hours, cost_units, window_start, window_end, "
+        "tenant_id, environment) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (
+            experiment_run,
+            component,
+            compute_unit_seconds,
+            storage_gb_hours,
+            cost_units(compute_unit_seconds, storage_gb_hours),
+            start,
+            end,
+            tenant_id,
+            environment,
+        ),
+    )
 
 
 def costs_by_tenant(

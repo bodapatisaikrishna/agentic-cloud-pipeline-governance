@@ -1,14 +1,17 @@
 """Experiment configs and profile matrices (§6).
 
 A ``Run`` is one cell of the matrix: (config, scenario, replicate). Profiles build the full run
-list; the seed for a run is ``run_seed(config, scenario, replicate)`` so the same fault conditions
-recur across configs for paired statistics.
+list; the seed for a run is ``run_seed(config, scenario, replicate)``. That hash includes the
+config, so v1 profiles do not share fault draws across configs; ``paper_v2`` uses the paired
+variant (D-105).
 """
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 
+from acde.config import get_settings
 from acde.experiments.scenarios import SCENARIOS
 from acde.orchestrator.configs import AGENT_CONFIGS, enabled_agents
 
@@ -16,6 +19,7 @@ __all__ = [
     "AGENT_CONFIGS",
     "ALL_CONFIGS",
     "BASELINE_CONFIGS",
+    "PAIRED_PROFILES",
     "PROFILES",
     "Run",
     "enabled_agents",
@@ -52,6 +56,17 @@ def _matrix(configs: tuple[str, ...], n: int) -> list[Run]:
     ]
 
 
+def _interleaved(runs: list[Run], seed: int) -> list[Run]:
+    """A fixed pseudo-random order, so no config or arm always runs after another (D-105)."""
+    shuffled = list(runs)
+    random.Random(seed).shuffle(shuffled)
+    return shuffled
+
+
+# Profiles whose runs use the paired seed policy (``run_seed(..., paired=True)``, D-105).
+PAIRED_PROFILES = frozenset({"paper_v2"})
+
+
 # quick: all 8 configs x 4 scenarios x N=3 = 96 runs (smoke of the full matrix).
 # paper: the 3 baselines + full at N=20, the four single-agent ablations at N=10 = 480 runs.
 # smoke: a tiny 2-run profile for the automated gate.
@@ -61,6 +76,9 @@ PROFILES: dict[str, list[Run]] = {
     "smoke": [Run("baseline", "upstream_delay", 0), Run("full", "upstream_delay", 0)],
     "quick": _matrix(ALL_CONFIGS, 3),
     "paper": (_matrix((*BASELINE_CONFIGS, "full"), 20) + _matrix(SINGLE_ABLATIONS, 10)),
+    # paper_v2 (D-105): every config at N=20 (equal n for the ablations), paired seeds, and a
+    # fixed interleaved order instead of config-major.
+    "paper_v2": _interleaved(_matrix(ALL_CONFIGS, 20), get_settings().default_seed),
     "pilot": [
         Run(config, scenario, r)
         for config in ("full", "recovery_only")

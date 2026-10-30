@@ -14,6 +14,22 @@ per phase, `v1.0.0` at Phase 9.
   only, since the server image installs `--no-dev`. No code or paper data changed.
 
 ### Added
+- **Measurement protocol v2 (D-105)**: fixes the four measurement problems the paper discloses,
+  for a re-run. Existing v1 results and paper numbers are unchanged.
+  - `escalated_incidents`: faults that needed a human, counted once each. `manual_interventions`
+    (escalation requests, one per tick for an agent) is kept as-is for continuity.
+  - `mttr_injection_s` and `detection_delay_s`: recovery timed from injection for every config, so
+    the agents' detection delay is no longer left out. `mttr_s` is unchanged.
+  - Per-run reset of agent-written desired state and Airflow pool slots
+    (`AIRFLOW_POOL_BASELINE_SLOTS`), resource sampling every `COST_SAMPLE_INTERVAL_S` while a run
+    responds, and a fixed metering window (loop + settle) for every config. New metrics
+    `cost_compute_units`, `cost_storage_units`, `cost_provisioning_units`, `state_reset_ok`.
+  - `paper_v2` profile: all eight configs at N=20 (equal n), paired seeds
+    (`run_seed(..., paired=True)`), fixed interleaved order. `make campaign-v2` runs it with the
+    supervisor taking runs across arms in that order; results go to `results/paper-v2-*`.
+  - Provenance records `measurement_protocol`, `seed_policy` and the pool baseline, so v1 and v2
+    data cannot be merged by accident.
+
 - **Cloud deployment in the manuscript**: new Fig. 2 (`scripts/draw_deployment.py`, drawn from
   `deploy/azure/`) and a "Cloud Deployment" subsection in Section III
   (D-104t); the project report gains section 5.11 with the same figure.

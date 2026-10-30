@@ -43,6 +43,7 @@ from acde.experiments.configs import (
     ALL_CONFIGS,
     BASELINE_CONFIGS,
     SINGLE_ABLATIONS,
+    Run,
     profile_runs,
 )
 from acde.experiments.runner import CODE_PATHS, _git_state, remaining_runs, run_id_for
@@ -84,10 +85,26 @@ def arms_for(profile: str, root: Path) -> list[Arm]:
         return [Arm(profile, root / profile, frozenset(ALL_CONFIGS), True, profile)]
     if profile == "smoke":  # mock, seconds per run: exercises the supervisor end to end for free
         return [Arm("smoke", root / "smoke", frozenset(ALL_CONFIGS), False, "smoke")]
+    # paper_v2 (D-105) keeps the same three arms in their own results dirs, so v1 and v2 data
+    # never share a manifest.
+    prefix = "paper-v2" if profile == "paper_v2" else "paper"
+    arm_profile = "paper_v2" if profile == "paper_v2" else "paper"
     return [
-        Arm("live-agents", root / "paper-live", frozenset({"full", *SINGLE_ABLATIONS}), True),
-        Arm("baselines", root / "paper-baselines", frozenset(BASELINE_CONFIGS), False),
-        Arm("mock-full", root / "paper-mock", frozenset({"full"}), False),
+        Arm(
+            "live-agents",
+            root / f"{prefix}-live",
+            frozenset({"full", *SINGLE_ABLATIONS}),
+            True,
+            arm_profile,
+        ),
+        Arm(
+            "baselines",
+            root / f"{prefix}-baselines",
+            frozenset(BASELINE_CONFIGS),
+            False,
+            arm_profile,
+        ),
+        Arm("mock-full", root / f"{prefix}-mock", frozenset({"full"}), False, arm_profile),
     ]
 
 
@@ -107,6 +124,10 @@ class CampaignConfig:
     degraded_pause_after: int = 3  # consecutive degraded runs before pausing
     degraded_abort_after: int = 6  # ... before aborting
     degraded_pause_s: float = 600.0
+    # D-105: take the next run in the profile's own order, whichever arm it belongs to, instead of
+    # finishing arm A before starting B. In v1 the mock arm ran last and inherited a different
+    # starting state from the live arm.
+    interleave: bool = False
 
 
 # --- primitives (each isolated so tests can drive the loop without a stack) -----------------------
@@ -300,6 +321,25 @@ class _Progress:
         log.info("campaign_status", extra={"state": state, "detail": message, **fields})
 
 
+def next_pending(arms: list[Arm], interleave: bool) -> tuple[Arm | None, list[Run]]:
+    """The arm to run next and its pending runs; ``(None, [])`` once every arm is done.
+
+    Without ``interleave`` this is the first arm with work left (v1). With it, the arm whose next
+    run comes earliest in the profile's order, so arms alternate as the profile's order dictates.
+    """
+    best: tuple[int, Arm, list[Run]] | None = None
+    for arm in arms:
+        pending = remaining_runs(arm.profile, arm.results_dir, arm.configs)
+        if not pending:
+            continue
+        if not interleave:
+            return arm, pending
+        position = profile_runs(arm.profile).index(pending[0])
+        if best is None or position < best[0]:
+            best = (position, arm, pending)
+    return (best[1], best[2]) if best else (None, [])
+
+
 def _wait_healthy(
     cfg: CampaignConfig,
     prog: _Progress,
@@ -335,57 +375,56 @@ def run_campaign(
     failures = 0
     degraded_streak = 0
 
-    for arm in cfg.arms:
-        while True:
-            pending = remaining_runs(arm.profile, arm.results_dir, arm.configs)
-            if not pending:
-                break
-            run_id = run_id_for(pending[0])
+    while True:
+        arm, pending = next_pending(cfg.arms, cfg.interleave)
+        if arm is None:
+            break
+        run_id = run_id_for(pending[0])
 
-            if cfg.stop_path.exists():
-                prog.emit(STOPPED, f"stop file {cfg.stop_path} present", next_run=run_id)
-                return STOPPED
-            if code_changed(start_sha):
-                prog.emit(CODE_CHANGED, f"experiment code differs from {start_sha[:10]}")
-                return CODE_CHANGED
-            if cfg.max_tokens is not None and arm.live and total_tokens(cfg.arms) >= cfg.max_tokens:
-                prog.emit(TOKEN_CEILING, f"token ceiling {cfg.max_tokens:.0f} reached")
-                return TOKEN_CEILING
-            if not _wait_healthy(cfg, prog, health, sleep):
-                return UNHEALTHY_ABORT
+        if cfg.stop_path.exists():
+            prog.emit(STOPPED, f"stop file {cfg.stop_path} present", next_run=run_id)
+            return STOPPED
+        if code_changed(start_sha):
+            prog.emit(CODE_CHANGED, f"experiment code differs from {start_sha[:10]}")
+            return CODE_CHANGED
+        if cfg.max_tokens is not None and arm.live and total_tokens(cfg.arms) >= cfg.max_tokens:
+            prog.emit(TOKEN_CEILING, f"token ceiling {cfg.max_tokens:.0f} reached")
+            return TOKEN_CEILING
+        if not _wait_healthy(cfg, prog, health, sleep):
+            return UNHEALTHY_ABORT
 
-            prog.emit("running", f"{arm.name}: {run_id}", arm=arm.name, current_run=run_id)
-            rc = invoke(arm)
-            after = remaining_runs(arm.profile, arm.results_dir, arm.configs)
-            if rc != 0 or len(after) >= len(pending):
-                # Non-zero exit, or a "successful" child that recorded nothing: either way retry.
-                failures += 1
+        prog.emit("running", f"{arm.name}: {run_id}", arm=arm.name, current_run=run_id)
+        rc = invoke(arm)
+        after = remaining_runs(arm.profile, arm.results_dir, arm.configs)
+        if rc != 0 or len(after) >= len(pending):
+            # Non-zero exit, or a "successful" child that recorded nothing: either way retry.
+            failures += 1
+            prog.emit(
+                "run_failed",
+                f"{run_id}: exit {rc} (consecutive failures {failures})",
+                consecutive_failures=failures,
+            )
+            if failures >= cfg.max_consecutive_failures:
+                prog.emit(FAILURE_ABORT, f"{failures} consecutive failures at {run_id}")
+                return FAILURE_ABORT
+            sleep(cfg.failure_backoff_s)
+            continue
+        failures = 0
+
+        if arm.live:
+            degraded = run_metric(arm.results_dir, run_id, "llm_degraded") or 0.0
+            degraded_streak = degraded_streak + 1 if degraded >= cfg.degraded_threshold else 0
+            if degraded_streak >= cfg.degraded_abort_after:
+                prog.emit(DEGRADED_ABORT, f"{degraded_streak} consecutive degraded-LLM runs")
+                return DEGRADED_ABORT
+            if degraded_streak >= cfg.degraded_pause_after:
                 prog.emit(
-                    "run_failed",
-                    f"{run_id}: exit {rc} (consecutive failures {failures})",
-                    consecutive_failures=failures,
+                    "backing_off",
+                    f"{degraded_streak} consecutive degraded-LLM runs; pausing",
+                    degraded_streak=degraded_streak,
                 )
-                if failures >= cfg.max_consecutive_failures:
-                    prog.emit(FAILURE_ABORT, f"{failures} consecutive failures at {run_id}")
-                    return FAILURE_ABORT
-                sleep(cfg.failure_backoff_s)
-                continue
-            failures = 0
-
-            if arm.live:
-                degraded = run_metric(arm.results_dir, run_id, "llm_degraded") or 0.0
-                degraded_streak = degraded_streak + 1 if degraded >= cfg.degraded_threshold else 0
-                if degraded_streak >= cfg.degraded_abort_after:
-                    prog.emit(DEGRADED_ABORT, f"{degraded_streak} consecutive degraded-LLM runs")
-                    return DEGRADED_ABORT
-                if degraded_streak >= cfg.degraded_pause_after:
-                    prog.emit(
-                        "backing_off",
-                        f"{degraded_streak} consecutive degraded-LLM runs; pausing",
-                        degraded_streak=degraded_streak,
-                    )
-                    sleep(cfg.degraded_pause_s)
-            prog.emit("run_done", run_id, last_run=run_id, consecutive_failures=0)
+                sleep(cfg.degraded_pause_s)
+        prog.emit("run_done", run_id, last_run=run_id, consecutive_failures=0)
 
     prog.emit(COMPLETE, "all arms complete")
     return COMPLETE
@@ -396,7 +435,9 @@ def run_campaign(
 
 def main() -> None:  # pragma: no cover - CLI
     parser = argparse.ArgumentParser(description="ACDE paper-campaign supervisor")
-    parser.add_argument("--profile", choices=["paper", "pilot", "pilot2", "smoke"], default="paper")
+    parser.add_argument(
+        "--profile", choices=["paper", "paper_v2", "pilot", "pilot2", "smoke"], default="paper"
+    )
     parser.add_argument("--results-root", default=None)
     parser.add_argument("--arms", default=None, help="comma-separated arm names (default: all)")
     parser.add_argument(
@@ -433,6 +474,7 @@ def main() -> None:  # pragma: no cover - CLI
         status_path=root / "campaign_status.json",
         stop_path=root / "CAMPAIGN_STOP",
         max_tokens=args.max_tokens,
+        interleave=args.profile == "paper_v2",
     )
     child_timeout_s = 3 * (timings.warmup_s + timings.loop_s + timings.settle_s) + 600
     log_path = root / "campaign.log"

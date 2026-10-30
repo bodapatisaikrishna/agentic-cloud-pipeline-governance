@@ -1,8 +1,8 @@
 """Chaos scenario definitions and the seed policy (§6).
 
-Every run derives its seed from ``run_seed(config, scenario, replicate)`` so identical fault
-conditions are reproducible across configs (paired statistics in Phase 8). Each scenario has a
-warmup → fault-window → recovery timeline bounded by a hard cap.
+Every run derives its seed from ``run_seed(config, scenario, replicate)``, so each run is
+reproducible. Only the ``paired`` variant (D-105) gives every config the same fault conditions.
+Each scenario has a warmup → fault-window → recovery timeline bounded by a hard cap.
 """
 
 from __future__ import annotations
@@ -14,9 +14,14 @@ from acde.config import get_settings
 from acde.contracts import FaultType
 
 
-def run_seed(config: str, scenario: str, replicate: int) -> int:
-    """Deterministic per-run seed: sha256("{config}:{scenario}:{replicate}") % 2**32."""
-    digest = hashlib.sha256(f"{config}:{scenario}:{replicate}".encode()).hexdigest()
+def run_seed(config: str, scenario: str, replicate: int, *, paired: bool = False) -> int:
+    """Deterministic per-run seed: sha256("{config}:{scenario}:{replicate}") % 2**32.
+
+    ``paired`` (D-105) drops the config from the hash, so every config sees the same fault and
+    human-latency draws at a given (scenario, replicate) and the comparison is a true paired one.
+    """
+    key = f"{scenario}:{replicate}" if paired else f"{config}:{scenario}:{replicate}"
+    digest = hashlib.sha256(key.encode()).hexdigest()
     return int(digest, 16) % 2**32
 
 

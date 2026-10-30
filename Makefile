@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-v2 campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -110,6 +110,10 @@ campaign-pilot:  ## LIVE pilot at paper timings to measure cost/time; needs MAX_
 campaign:  ## LIVE paper campaign (~49h; arms A live agents, B baselines, C mock full); needs MAX_TOKENS
 	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
 	caffeinate -i $(UV) python -m acde.experiments.campaign --profile paper --max-tokens $(MAX_TOKENS)
+
+campaign-v2:  ## LIVE v2 re-run (D-105): equal n, paired seeds, interleaved arms, fixed metering; needs MAX_TOKENS
+	@test -n "$(MAX_TOKENS)" || (echo "set MAX_TOKENS=<live-arm token ceiling>"; exit 2)
+	caffeinate -i $(UV) python -m acde.experiments.campaign --profile paper_v2 --max-tokens $(MAX_TOKENS)
 
 campaign-smoke:  ## Free 2-run mock drill of the supervisor (kill it mid-run, re-run: it resumes)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.campaign --profile smoke --results-root $${ROOT:-results}

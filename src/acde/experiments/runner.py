@@ -26,8 +26,9 @@ from typing import Any
 from acde import db
 from acde.config import Settings, get_settings
 from acde.experiments.baseline import resolve_via_human
-from acde.experiments.configs import ALL_CONFIGS, Run, profile_runs
+from acde.experiments.configs import ALL_CONFIGS, PAIRED_PROFILES, Run, profile_runs
 from acde.experiments.decision_quality import is_correct
+from acde.experiments.isolation import ResourceSampler, reset_run_state
 from acde.experiments.scenarios import TIMINGS, RunTimings, run_seed
 from acde.llm.client import LLMStats
 from acde.logging import get_logger
@@ -108,23 +109,42 @@ def harvest_metrics(
     give (they replay cached tokens); a run with no LLM (baselines) reports all zeros for those
     columns so every run shares one metric set.
     """
-    from acde.telemetry.cost import provisioning_cost
+    from acde.telemetry.cost import STORAGE_COMPONENT, provisioning_cost
 
     events = db.fetch_all(
         "SELECT EXTRACT(EPOCH FROM (resolved_ts - detected_ts)) AS mttr, "
-        "EXTRACT(EPOCH FROM (resolved_ts - injected_ts)) AS stall, fault_type "
+        "EXTRACT(EPOCH FROM (resolved_ts - injected_ts)) AS stall, "
+        "EXTRACT(EPOCH FROM (detected_ts - injected_ts)) AS detect, fault_type "
         "FROM telemetry.failure_events "
         "WHERE experiment_run = %s AND detected_ts IS NOT NULL AND resolved_ts IS NOT NULL",
         (experiment_run,),
     )
     mttrs = [float(e["mttr"]) for e in events if e["mttr"] is not None]
+    # D-105: recovery measured from injection for every config. mttr_s starts the clock at
+    # detection, which non-agent configs stamp at injection but agents only when the monitor flags
+    # the fault -- so it silently omits the agents' detection delay.
+    from_injection = [float(e["stall"]) for e in events if e["stall"] is not None]
+    detect_delays = [float(e["detect"]) for e in events if e.get("detect") is not None]
     cost = db.fetch_one(
-        "SELECT COALESCE(SUM(cost_units), 0) AS c FROM telemetry.cost_ledger "
-        "WHERE experiment_run = %s",
-        (experiment_run,),
+        "SELECT COALESCE(SUM(cost_units), 0) AS c, "
+        "COALESCE(SUM(cost_units) FILTER (WHERE component = %s), 0) AS storage "
+        "FROM telemetry.cost_ledger WHERE experiment_run = %s",
+        (STORAGE_COMPONENT, experiment_run),
     )
     interventions = db.fetch_one(
         "SELECT count(*) AS n FROM telemetry.manual_interventions WHERE experiment_run = %s",
+        (experiment_run,),
+    )
+    # D-105: incidents a human had to handle, counted once each. manual_interventions counts
+    # escalation requests: baseline files one per fault, but an agent re-proposing on every tick of
+    # an open fault files one per tick. An intervention belongs to a fault when it was requested
+    # while that fault was open.
+    escalated = db.fetch_one(
+        "SELECT count(*) AS n FROM telemetry.failure_events f "
+        "WHERE f.experiment_run = %s AND EXISTS ("
+        "SELECT 1 FROM telemetry.manual_interventions m "
+        "WHERE m.experiment_run = f.experiment_run AND m.requested_ts >= f.injected_ts "
+        "AND (f.resolved_ts IS NULL OR m.requested_ts <= f.resolved_ts))",
         (experiment_run,),
     )
     tokens = db.fetch_one(
@@ -147,11 +167,21 @@ def harvest_metrics(
         (experiment_run,),
     )
     decision_correct = is_correct(scenario, [r["action_type"] for r in executed])
+    metered = float(cost["c"]) if cost else 0.0
+    storage = float(cost.get("storage") or 0.0) if cost else 0.0
+    provisioning = provisioning_cost(config)
     return {
         "mttr_s": statistics.median(mttrs) if mttrs else 0.0,
+        "mttr_injection_s": statistics.median(from_injection) if from_injection else 0.0,
+        "detection_delay_s": statistics.median(detect_delays) if detect_delays else 0.0,
         # cost v2: measured compute/storage + the held-allocation (provisioning) cost (D-061).
-        "cost_units": (float(cost["c"]) if cost else 0.0) + provisioning_cost(config),
+        "cost_units": metered + provisioning,
+        # D-105: the same total split into its three terms, so the metered part can be read alone.
+        "cost_compute_units": metered - storage,
+        "cost_storage_units": storage,
+        "cost_provisioning_units": provisioning,
         "manual_interventions": float(interventions["n"]) if interventions else 0.0,
+        "escalated_incidents": float(escalated["n"]) if escalated else 0.0,
         "llm_tokens": float(tokens["t"]) if tokens else 0.0,
         "freshness_s": freshness_s,
         "decision_correct": 1.0 if decision_correct else 0.0,
@@ -239,6 +269,11 @@ def _llm_models(settings: Settings) -> dict[str, str]:
     return {"reasoning": settings.model_reasoning, "fast": settings.model_fast}
 
 
+def seed_policy(profile: str) -> str:
+    """``paired`` for profiles in PAIRED_PROFILES, else the v1 per-config policy (D-105)."""
+    return "paired" if profile in PAIRED_PROFILES else "per_config"
+
+
 def build_provenance(profile: str, timings: RunTimings) -> dict[str, Any]:
     """Everything needed to say *exactly* what produced a run's numbers (D-104).
 
@@ -249,6 +284,12 @@ def build_provenance(profile: str, timings: RunTimings) -> dict[str, Any]:
     s = get_settings()
     return {
         "profile": profile,
+        # D-105: v2 resets run state, meters a fixed window, and records the split metrics. Part
+        # of the provenance so a v1 and a v2 dataset can never be merged by accident.
+        "measurement_protocol": "v2",
+        "seed_policy": seed_policy(profile),
+        "pool_baseline_slots": s.airflow_pool_baseline_slots,
+        "cost_sample_interval_s": s.cost_sample_interval_s,
         "timings": {
             "warmup_s": timings.warmup_s,
             "loop_s": timings.loop_s,
@@ -313,11 +354,13 @@ def run_one(
     timings: RunTimings,
     results_dir: Path,
     provenance: dict[str, Any] | None = None,
+    paired: bool = False,
 ) -> dict[str, float]:
     """Execute one matrix cell end-to-end and persist its metrics."""
     experiment_run = run_id_for(run)
-    seed = run_seed(run.config, run.scenario, run.replicate)
+    seed = run_seed(run.config, run.scenario, run.replicate, paired=paired)
     _reset_run(experiment_run)
+    state_reset_ok = reset_run_state()
     t0 = time.monotonic()
     # Hang watchdog: if a run overruns twice its nominal length, dump every thread's Python stack to
     # stderr (the campaign log) so a stuck run diagnoses itself instead of failing silently.
@@ -330,17 +373,24 @@ def run_one(
     from acde.chaos.injector import FaultInjector
 
     FaultInjector(experiment_run=experiment_run).inject(run.scenario, seed)
-    llm_stats = _respond(run, seed, timings)
+    interval = get_settings().cost_sample_interval_s
+    with ResourceSampler(lambda: _sample_resources(experiment_run), interval):
+        llm_stats = _respond(run, seed, timings)
 
     time.sleep(timings.settle_s)
     _sample_resources(experiment_run)
     from acde.telemetry.cost import compute_cost_windows
 
-    compute_cost_windows(experiment_run=experiment_run, window_s=5)
+    # D-105: every config is metered over the same window, loop plus settle, from the
+    # pre-injection sample. v1 metered first-to-last sample, a few seconds for non-agent runs.
+    compute_cost_windows(
+        experiment_run=experiment_run, window_s=5, span_s=timings.loop_s + timings.settle_s
+    )
 
     metrics = harvest_metrics(
         experiment_run, time.monotonic() - t0, run.scenario, run.config, llm_stats=llm_stats
     )
+    metrics["state_reset_ok"] = 1.0 if state_reset_ok else 0.0
     _write_rows(results_dir / "raw.csv", run, seed, metrics)
     _append_manifest(results_dir / "manifest.jsonl", run, seed, metrics, provenance)
     faulthandler.cancel_dump_traceback_later()
@@ -391,7 +441,7 @@ def run_profile(
     ran = 0
     for i, run in enumerate(todo, 1):
         log.info("run_start", extra={"experiment_run": run_id_for(run), "i": i, "total": total})
-        run_one(run, timings, results_dir, provenance)
+        run_one(run, timings, results_dir, provenance, paired=profile in PAIRED_PROFILES)
         ran += 1
     log.info("profile_complete", extra={"profile": profile, "ran": ran, "total": total})
     return ran

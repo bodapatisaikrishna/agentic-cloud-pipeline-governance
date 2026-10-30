@@ -8,7 +8,7 @@
 [![CI](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](pyproject.toml)
 [![Release](https://img.shields.io/github/v/tag/bodapatisaikrishna/agentic-cloud-pipeline-governance?label=release)](https://github.com/bodapatisaikrishna/agentic-cloud-pipeline-governance/tags)
-[![Unit tests](https://img.shields.io/badge/unit%20tests-752%20passing-brightgreen.svg)](tests/unit)
+[![Unit tests](https://img.shields.io/badge/unit%20tests-774%20passing-brightgreen.svg)](tests/unit)
 [![Adversarial containment](https://img.shields.io/badge/adversarial%20containment-3867%2F3867-brightgreen.svg)](docs/SECURITY.md)
 
 [Architecture](#architecture) · [Results](#results-live-campaign) · [Quickstart](#quickstart) ·
@@ -135,7 +135,7 @@ make paper-repro-quick            # regenerate every table, figure and number, t
 
 ```bash
 cp .env.example .env              # defaults work
-make lint && make test-unit       # ruff + mypy clean, 752 unit tests, coverage ≥ 80%
+make lint && make test-unit       # ruff + mypy clean, 774 unit tests, coverage ≥ 80%
 make up && make seed              # PostgreSQL, OPA, Redpanda, Airflow + seeded data
 make experiment-quick             # 96-run matrix (8 configs × 4 scenarios × 3)
 make report                       # → results/results.md + results/figures/
@@ -155,13 +155,15 @@ acde doctor                       # validate, then `acde run`
 ```bash
 make campaign-pilot               # short live pilot at paper timings
 make campaign                     # full campaign (~49 h; arms A live, B baselines, C mock)
+make campaign-v2                  # v2 re-run: equal n, paired seeds, interleaved, fixed metering (D-105)
 make campaign-status              # heartbeat; make campaign-stop to stop resumably
 make adversarial-corpus           # adversarial corpus vs the pinned OPA → results/adversarial.json
 ```
 
 Every run is keyed `"{config}__{scenario}__r{replicate}"` with seed
 `sha256("{config}:{scenario}:{replicate}") % 2**32`, and the runner skips runs already in the
-manifest, so a killed campaign resumes where it left off. See [`docs/CAMPAIGN.md`](docs/CAMPAIGN.md).
+manifest, so a killed campaign resumes where it left off. The `paper_v2` profile drops the config
+from the seed so every config sees the same faults. See [`docs/CAMPAIGN.md`](docs/CAMPAIGN.md).
 </details>
 
 ## Cloud deployment (Microsoft Azure)
@@ -228,7 +230,7 @@ src/acde/
 └── connectors/      airflow · prefect · noop
 infra/opa/policies/  Rego policies + tests          infra/postgres/init/  idempotent DDL
 deploy/              production compose, Helm chart, observability, Azure
-tests/unit/          752 tests, no Docker           tests/integration/    needs `make up`
+tests/unit/          774 tests, no Docker           tests/integration/    needs `make up`
 ```
 </details>
 
@@ -271,6 +273,7 @@ proposals within a run, and degrade to `no_action` on any provider failure. The 
 | Hardening | Concurrency fuzzing, OPA audit, bid-based arbitration, migrations, write-ahead audit, Helm, RBAC, multi-tenancy, backups (D-077–D-099) | ✅ verified (unreleased) |
 | Feature focus | Live decision-quality monitoring, Slack/PagerDuty, richer dashboard (D-100–D-103) | ✅ verified (unreleased) |
 | Journal paper (D-104) | 560-run live campaign (2026-09-26), adversarial corpus, sensitivity analyses, manuscript, Azure deployment (D-104t) | ✅ verified (unreleased) |
+| Measurement v2 (D-105) | Incident-level escalations, MTTR from injection, per-run state reset, fixed metering window, paired seeds, `paper_v2` profile | 🟡 unit-tested; integration + re-run pending |
 
 ## License and citation
 

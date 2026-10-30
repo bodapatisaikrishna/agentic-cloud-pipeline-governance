@@ -47,8 +47,8 @@ class TestHarvest:
             ],
             [{"action_type": "replay"}],
         ]
-        # fetch_one: cost, interventions, tokens (freshness now derived from event stalls).
-        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"t": 800}]
+        # fetch_one: cost, interventions, escalated incidents, tokens.
+        fake.fetch_one.side_effect = [{"c": 5.0}, {"n": 2}, {"n": 1}, {"t": 800}]
         monkeypatch.setattr(runner, "db", fake)
         m = runner.harvest_metrics("run", wall_s=12.5, scenario="upstream_delay", config="baseline")
         assert m["mttr_s"] == 20.0  # median
@@ -64,7 +64,7 @@ class TestHarvest:
 
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 999}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 999}]
         monkeypatch.setattr(runner, "db", fake)
         stats = LLMStats(
             real_calls=3, cache_hits=5, tokens_in=100, tokens_out=40, invalid_outputs=1
@@ -77,7 +77,7 @@ class TestHarvest:
     def test_no_llm_config_reports_zeros(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 0}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
         monkeypatch.setattr(runner, "db", fake)
         m = runner.harvest_metrics("run", 1.0, "upstream_delay", "baseline")
         assert m["api_tokens"] == m["llm_calls"] == m["llm_degraded"] == 0.0
@@ -91,7 +91,7 @@ class TestHarvest:
     def test_no_events_zero_mttr(self, monkeypatch):
         fake = MagicMock()
         fake.fetch_all.side_effect = [[], []]
-        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"t": 0}]
+        fake.fetch_one.side_effect = [{"c": 0}, {"n": 0}, {"n": 0}, {"t": 0}]
         monkeypatch.setattr(runner, "db", fake)
         m = runner.harvest_metrics("run", 1.0, scenario="upstream_delay", config="baseline")
         assert m["mttr_s"] == 0.0
@@ -102,6 +102,7 @@ class TestHarvest:
 class TestRunOne:
     def test_writes_row_and_manifest(self, tmp_path, monkeypatch):
         monkeypatch.setattr(runner, "_reset_run", lambda r: None)
+        monkeypatch.setattr(runner, "reset_run_state", lambda: True)
         monkeypatch.setattr(runner, "_sample_resources", lambda r: None)
         monkeypatch.setattr(runner, "_respond", lambda run, seed, timings: None)
         monkeypatch.setattr(runner.time, "sleep", lambda s: None)
@@ -116,6 +117,7 @@ class TestRunOne:
         run = Run("baseline", "upstream_delay", 0)
         metrics = runner.run_one(run, TIMINGS["smoke"], tmp_path)
         assert metrics["mttr_s"] == 4.0
+        assert metrics["state_reset_ok"] == 1.0
         assert (tmp_path / "raw.csv").exists()
         assert runner.load_completed(tmp_path / "manifest.jsonl") == {
             "baseline__upstream_delay__r0"
@@ -126,7 +128,7 @@ class TestRunProfileResumability:
     def test_skips_completed_runs(self, tmp_path, monkeypatch):
         ran: list[str] = []
         monkeypatch.setattr(
-            runner, "run_one", lambda run, t, d, p=None: ran.append(runner.run_id_for(run))
+            runner, "run_one", lambda run, t, d, p=None, **k: ran.append(runner.run_id_for(run))
         )
         # pre-populate the manifest with one of the two smoke runs
         (tmp_path / "manifest.jsonl").write_text(
@@ -213,13 +215,17 @@ class TestProvenance:
 class TestConfigFilter:
     def test_subset_runs_only_selected_configs(self, tmp_path, monkeypatch):
         ran: list[str] = []
-        monkeypatch.setattr(runner, "run_one", lambda run, t, d, p=None: ran.append(run.config))
+        monkeypatch.setattr(
+            runner, "run_one", lambda run, t, d, p=None, **k: ran.append(run.config)
+        )
         runner.run_profile("smoke", tmp_path, configs=frozenset({"full"}))
         assert ran == ["full"]
 
     def test_max_runs_caps_a_call(self, tmp_path, monkeypatch):
         ran: list[str] = []
-        monkeypatch.setattr(runner, "run_one", lambda run, t, d, p=None: ran.append(run.config))
+        monkeypatch.setattr(
+            runner, "run_one", lambda run, t, d, p=None, **k: ran.append(run.config)
+        )
         assert runner.run_profile("smoke", tmp_path, max_runs=1) == 1
         assert ran == ["baseline"]
 

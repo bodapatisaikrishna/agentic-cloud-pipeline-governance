@@ -13,7 +13,8 @@ The full spec lives in the original project brief; this file condenses the rules
 3. **No secrets in code or git.** Everything via `.env` (git-ignored); keep `.env.example` current.
 4. **MOCK_LLM=1 is the default.** All tests and CI pass with zero API calls.
 5. **Determinism.** Every stochastic component takes an explicit seed; LLM temperature=0.
-   Seed policy: `run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`.
+   Seed policy: `run_seed = sha256(f"{config}:{scenario}:{replicate}") % 2**32`; the `paper_v2`
+   profile uses the paired variant without the config (D-105).
 6. **Underspecified decision → simplest defensible option + DEVIATIONS.md entry**
    (decision, alternatives, rationale). DEVIATIONS.md is a research artifact.
 7. **Agents never emit or execute code.** Only output: `ProposedAction` validated by pydantic
