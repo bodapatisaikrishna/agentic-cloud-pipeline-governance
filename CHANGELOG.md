@@ -42,6 +42,9 @@ per phase, `v1.0.0` at Phase 9.
 - **Paper: lesson L8 and Table IX (D-108)**: the v1 human-simulator artifact, with generated numbers,
   referenced from the abstract, results, threats, discussion, conclusion and claims audit.
 
+- **Trust-core drill (D-110)**: `make trust-drill` measures kill-switch stop and resume latency,
+  approval-mode containment and the blast-radius cap on the live stack with the mock model.
+
 ### Changed
 - `runner.py` split into `metrics.py` (metric harvest) and `provenance.py`; the campaign's health
   and model preflight checks moved to `preflight.py`; paper table rendering moved to

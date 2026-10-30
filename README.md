@@ -165,6 +165,7 @@ make campaign                     # full campaign (~49 h; arms A live, B baselin
 make campaign-v2                  # v2 re-run: equal n, paired seeds, interleaved, fixed metering (D-105)
 make campaign-v2-free             # only the v2 arms with no API calls (baselines + mock full)
 make paper-artifacts-v2           # pre-registered v2 analysis → paper/generated-v2
+make trust-drill                  # kill switch / approval mode / blast-radius cap (mock, not mid-campaign)
 make campaign-status              # heartbeat; make campaign-stop to stop resumably
 make adversarial-corpus           # adversarial corpus vs the pinned OPA → results/adversarial.json
 ```

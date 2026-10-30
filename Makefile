@@ -5,7 +5,7 @@ COMPOSE := docker compose
 UV := uv run
 
 .PHONY: up up-core down logs lint fmt test-unit test-integration clean \
-        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-v2 campaign-v2-free paper-artifacts-v2 power campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
+        seed migrate stream agents experiment-smoke experiment-quick experiment-paper campaign-pilot campaign campaign-v2 campaign-v2-free paper-artifacts-v2 power trust-drill campaign-smoke campaign-status campaign-stop adversarial-corpus analyze report paper-repro-quick \
         chaos-schema_drift chaos-upstream_delay chaos-resource_contention chaos-ingress_burst
 
 ## --- Environment ---
@@ -123,6 +123,9 @@ paper-artifacts-v2:  ## Pre-registered v2 analysis (docs/preregistration-v2.md) 
 
 power:  ## v2 power analysis from v1 data -> results/power_v1.json
 	$(UV) python -m acde.analysis.power --root $${ROOT:-results}
+
+trust-drill:  ## D-110: kill switch, approval mode, blast-radius cap (mock LLM; never during a campaign)
+	MOCK_LLM=1 $(UV) python -m acde.eval.trust_drill --out results/trust_drill.json
 
 campaign-smoke:  ## Free 2-run mock drill of the supervisor (kill it mid-run, re-run: it resumes)
 	MOCK_LLM=1 $(UV) python -m acde.experiments.campaign --profile smoke --results-root $${ROOT:-results}

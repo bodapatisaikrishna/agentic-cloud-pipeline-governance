@@ -2743,5 +2743,28 @@ counted twice.
 
 **Effect on the campaign.** The two mock runs made before this change (started at commit `6fa8e40`)
 were moved to `results/_aborted-v2-free-20261030/` and are not part of the v2 dataset; the free arms
-were restarted from scratch at the commit that adds this entry. The pre-registration records this as
+were restarted from scratch at commit `87e7926`, which adds this entry. The pre-registration records this as
 amendment 1.
+
+## D-110 — Trust-core drill; experiment code frozen for v2
+
+**Trust-core drill.** The paper lists the trust core (execution modes, kill switch, blast-radius cap)
+as implemented but not evaluated. `python -m acde.eval.trust_drill` (`make trust-drill`) measures it
+on the live stack with the mock model: (1) kill switch: a `full` loop with 0.5 s ticks acts on an
+injected fault, the switch is engaged mid-run, and the drill records the delay to the last recorded
+action, the side-effecting actions executed after engaging it, and the delay to the first action
+after release (10 trials); (2) approval mode: the same loop with `ACDE_MODE=approval`, counting
+side-effecting actions executed without sign-off and actions queued; (3) blast-radius cap: twelve
+allowed `scale_workers` proposals on one target with a cap of 3. It shares the kill switch with
+every process on the stack, so it must not run during a campaign. *Alternative:* an integration test
+only (rejected: a pass/fail test gives no latency figure for the paper).
+
+**`acde.eval` excluded from the code fingerprint.** No campaign run imports `acde.eval` (adversarial
+corpus, cross-model harness, this drill), so, like `acde.analysis`, editing it does not change
+`code_tree` or abort a running campaign.
+
+**Code freeze.** v2 arms must share one `code_tree`, and the LLM-free arms run before the live arm,
+so experiment code (everything under `CODE_PATHS`) is frozen at the commit that adds this entry
+until the v2 campaign is complete. Any later change there means re-running the LLM-free arms
+(no API cost, about 19 hours). The two mock runs started at `87e7926` were moved to
+`results/_aborted-v2-free-20261030/` with the earlier two.

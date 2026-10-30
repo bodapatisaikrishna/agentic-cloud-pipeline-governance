@@ -15,9 +15,17 @@ from acde.experiments.configs import PAIRED_PROFILES
 from acde.experiments.scenarios import RunTimings
 
 # Paths whose contents can change an experiment's outcome. Editing the manuscript -- or the
-# post-hoc analysis code, which only reads finished results -- while a multi-day campaign runs must
-# not mark (or abort) the runs, so "dirty" is judged on these alone (git pathspec syntax).
-CODE_PATHS = ("src", "infra", "pyproject.toml", "uv.lock", ":(exclude)src/acde/analysis")
+# post-hoc analysis code, which only reads finished results, or the evaluation drills in
+# acde.eval, which no campaign run imports -- while a multi-day campaign runs must not mark (or
+# abort) the runs, so "dirty" is judged on these alone (git pathspec syntax).
+CODE_PATHS = (
+    "src",
+    "infra",
+    "pyproject.toml",
+    "uv.lock",
+    ":(exclude)src/acde/analysis",
+    ":(exclude)src/acde/eval",
+)
 
 
 def _git(*args: str) -> str:
