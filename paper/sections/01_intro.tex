@@ -1,14 +1,13 @@
 \section{INTRODUCTION}\label{sec:intro}
 
-Data pipelines fail in ordinary ways. An upstream schema changes a column's type, a source stalls, a
-co-tenant starves the pipeline of compute, or ingress bursts past capacity. An empirical study of real
-pipelines identifies 41 distinct factors behind such quality and reliability
-failures~\cite{foidl2024datapipeline}. In most deployments the remedy is still an on-call engineer, and
-the time that engineer needs to respond often accounts for much of the recovery time. Large language
-model (LLM) agents could shorten this loop, and agent systems for cloud incidents already run in
-production~\cite{chen2024rcacopilot,wang2023rcagent,luo2025opsagent}. Most of them stop at a
-recommended diagnosis. Once an agent may also \emph{act} on production infrastructure, a governance
-question arises: what limits the actions it can take?
+Most pipeline failures are mundane. A column changes type upstream, a source goes quiet, a co-tenant
+takes the compute the pipeline needs, or a burst of ingress exceeds capacity. Foidl et al. counted 41
+separate factors behind quality and reliability failures in real pipelines~\cite{foidl2024datapipeline}.
+The usual fix is still a person on call, and much of the recovery time is simply the time that person
+needs to respond. Large language model (LLM) agents could cut this loop short. Several agent systems
+for cloud incidents already run in production~\cite{chen2024rcacopilot,wang2023rcagent,luo2025opsagent},
+although most of them only recommend a diagnosis. When an agent is also allowed to \emph{act} on
+production infrastructure, someone has to decide what it may and may not do.
 
 One recent answer~\cite{kirubakaran2025governing} uses four bounded agents for monitoring,
 optimization, schema management, and recovery. Each agent emits only a structured action proposal,
@@ -27,10 +26,10 @@ manual interventions. Four gaps separate these claims from the evidence offered 
     not a tested one. Agent-security benchmarks report high attack success against weak
     defenses~\cite{debenedetti2024agentdojo,zhang2024asb}, and the policy language itself has been
     criticized as too weak for agentic governance~\cite{joshi2026deontic}.
-  \item \emph{Statistics and generality.} The study reports no confidence intervals, effect sizes, or
-    run counts. It describes the GPT, Claude, and Gemini model families as interchangeable backends
-    that differ only in verbosity and latency, yet presents no cross-model results, and other work
-    finds that agent behavior varies across models and providers~\cite{sanna2025crossllm,zhang2026towardagentic}.
+  \item \emph{Statistics and generality.} No confidence intervals, effect sizes, or run counts are
+    given. The paper treats GPT, Claude, and Gemini as interchangeable backends that differ only in
+    verbosity and latency, but it shows no cross-model results. Other studies report that agent
+    behavior does change with the model and the provider~\cite{sanna2025crossllm,zhang2026towardagentic}.
 \end{enumerate}
 We implement the system and ask five research questions.
 \begin{enumerate}
@@ -72,25 +71,25 @@ We count a contribution only if this campaign both implements and measures it. F
     (Eq.~\ref{eq:cost}). We also report where the model's metered term falls short of a like-for-like
     measurement (Section~\ref{sec:limitations}).
 \end{enumerate}
-Two further components are implemented but were not exercised in this campaign, so we present them as
-architecture rather than as results. A cross-model harness could test the base paper's claim of model
-independence, but its live sweep has not been run against real providers. A production trust core
-with graduated autonomy, a durable kill switch, and a per-target blast-radius cap also exists, but
-every run used a single fixed mode, so there is no mode-transition or kill-switch latency to report.
-Section~\ref{sec:system} describes both, and Section~\ref{sec:discussion} returns to them as concrete
-gaps for future work. Finally, Section~\ref{sec:lessons} records \textbf{production-hardening
-lessons} drawn from defects the system actually exhibited.
+Two more components exist in the code but were not exercised in this campaign, and we describe them
+as architecture, not results. The first is a cross-model harness for testing the base paper's claim
+of model independence; we have not yet run its live sweep against real providers. The second is a
+production trust core with graduated autonomy, a durable kill switch, and a per-target blast-radius
+cap. All runs used one fixed mode, so we have no mode-transition or kill-switch latency to report.
+Section~\ref{sec:system} describes both, and Section~\ref{sec:discussion} lists them as open gaps.
+Section~\ref{sec:lessons} collects \textbf{production-hardening lessons}, each taken from a defect the
+system really had.
 
-The architecture itself is not ours. Its three planes, four bounded agents, policy gate, and
-observe--reason--propose loop come from the base paper~\cite{kirubakaran2025governing}, which we
-implemented rather than redesigned. We claim no new agent design, policy language, or statistical
-method. Our contribution is the evidence, the measurement discipline that produced it, and the
-defects found by holding the system to its own stated guarantees instead of to a test suite that
-shares its assumptions.
+We did not design the architecture. The three planes, the four bounded agents, the policy gate, and
+the observe--reason--propose loop all come from the base paper~\cite{kirubakaran2025governing}, and
+our job was to build them as described. There is no new agent design, policy language, or statistical
+method here. Our contribution is the evidence, the way it was measured, and a set of defects that
+surfaced once we checked the system against its stated guarantees instead of a test suite built on
+the same assumptions as the code.
 
-The rest of the paper is organized as follows. Section~\ref{sec:related} reviews related work,
-Section~\ref{sec:problem} formalizes the problem and the metrics, and Section~\ref{sec:system}
-describes the system as built. Section~\ref{sec:method} presents the experimental design, and
-Section~\ref{sec:results} reports the results, centered on the mock-versus-live divergence.
-Section~\ref{sec:lessons} gives the hardening lessons, Section~\ref{sec:discussion} discusses
-implications, limitations, and threats to validity, and Section~\ref{sec:conclusion} concludes.
+Section~\ref{sec:related} covers related work. Section~\ref{sec:problem} sets up the problem and
+defines the metrics, and Section~\ref{sec:system} describes what we built. The experimental design is
+in Section~\ref{sec:method}. Section~\ref{sec:results} gives the results, with most attention on the
+gap between mock and live runs. The hardening lessons follow in Section~\ref{sec:lessons},
+Section~\ref{sec:discussion} covers implications, limitations, and threats to validity, and
+Section~\ref{sec:conclusion} concludes.

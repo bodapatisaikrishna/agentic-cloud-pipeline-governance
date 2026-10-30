@@ -11,8 +11,8 @@ describes the layers in order.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/system_architecture.pdf}
-\caption{Seven-layer system architecture. Tints group the layers into the three logical planes of the
-base design and the enterprise extension; numbered markers trace one control-loop tick.}
+\caption{Seven-layer system architecture. Shading shows which logical plane of the base design, or
+the enterprise extension, each layer belongs to. Numbered markers follow one control-loop tick.}
 \label{fig:arch}
 \end{figure*}
 
@@ -25,12 +25,13 @@ reconstructed from that schema rather than logged separately. The same layer tra
 maintains the cost ledger behind the cost model of Eq.~\ref{eq:cost}.
 
 \subsection{Layers 3 and 6: Agents and Orchestration}
-The four agents share one loop: \emph{observe} a telemetry snapshot, \emph{reason} with a live or mock
-language model, \emph{propose} an action, and \emph{act} through the gate. The monitoring agent is the
+All four agents run the same loop. Each one \emph{observes} a telemetry snapshot, \emph{reasons}
+about it with a live or mock language model, \emph{proposes} an action, and \emph{acts} only through
+the gate. The monitoring agent is the
 detector and is enabled in every agent configuration, so recovery time remains measurable in every
 ablation. The optimization agent scales workers or pool slots, or reprioritizes work. The schema agent
-accepts compatible schema changes and contains breaking ones. The recovery agent retries, replays,
-rolls back, partially recomputes, or escalates to a human. When two proposals target the same
+accepts compatible schema changes and contains breaking ones. The recovery agent can retry, replay,
+roll back, partially recompute, or hand the fault to a human. When two proposals target the same
 resource, a static agent-priority bid resolves the conflict. An earlier design relied on lock ordering
 for this purpose, but lock ordering turned out not to provide the property, so a per-target advisory
 lock now serves only to stop a second process from acting on the same target.
@@ -40,46 +41,47 @@ An agent's only output is a \texttt{ProposedAction} with six fields: agent, acti
 parameters, justification, and confidence. A typed schema validates each proposal and rejects any
 action type outside the agent's allowlist and any scaling target that is not an integer of at least
 one. The second check was added after the adversarial corpus (Section~\ref{sec:results}) showed that
-it was missing. Invalid output is rejected, logged, and counted as \texttt{agent\_output\_invalid},
-and the agent's turn degrades to \texttt{no\_action}. Agents never emit or execute code.
+it was missing. Output that fails validation is rejected and logged, the
+\texttt{agent\_output\_invalid} counter goes up, and that agent's turn becomes a \texttt{no\_action}.
+Agents never emit or execute code.
 
 \subsection{Layer 4: Policy Gate}
 Each proposal carries a context built by the system: the projected marginal cost, the remaining
 budget, the number of actions the proposing agent has taken in the last ten minutes, the schema
-compatibility, and whether a prior version exists. Four Rego policy packs evaluate the proposal: a
-rate limit (Eq.~\ref{eq:rate}), a cost budget (Eq.~\ref{eq:budget}), a recovery-approval policy that
-permits rollback only when a prior version exists, and a schema-compatibility policy. The resulting
-decision is allow, deny, escalate, or allow-and-notify. If the policy engine is unreachable, the gate
-escalates rather than allowing the action.
+compatibility, and whether a prior version exists. The proposal then passes through four Rego policy
+packs: the rate limit of Eq.~\ref{eq:rate}, the cost budget of Eq.~\ref{eq:budget}, a
+recovery-approval policy that allows rollback only if a prior version exists, and a
+schema-compatibility policy. The gate answers allow, deny, escalate, or allow-and-notify. When the
+policy engine cannot be reached, the gate escalates; it never allows by default.
 
 \subsection{Layer 5: Execution and Audit}
-An intent row is written and committed \emph{before} the executor runs, and it is updated with the
-outcome afterward. A crash during an action therefore leaves a durable \texttt{executing} row instead
-of no record at all. This write-ahead ordering was added later and was not part of the original
-design. An action dispatcher routes each allowed action type to a handler that performs its side
-effect: on Airflow, by triggering DAG runs, clearing tasks, and patching pool slots; on PostgreSQL, by
-rollback, quarantine, schema mapping, and desired-state updates.
+Before the executor starts, the system writes and commits an intent row. After the action, it updates
+that row with the outcome. If the process crashes mid-action, what remains is a durable
+\texttt{executing} row, not a missing record. The original design did not have this write-ahead
+ordering; we added it later. Allowed actions reach their side effects through a dispatcher that picks
+a handler by action type. On Airflow the handlers trigger DAG runs, clear tasks, and patch pool slots.
+On PostgreSQL they perform rollback, quarantine, schema mapping, and desired-state updates.
 
 \subsection{Simulated Human}
-Escalations are resolved after a seeded log-normal delay (median \NHumanMedian{}\,s,
-$\sigma=\NHumanSigma{}$) that stands in for the on-call engineer. This delay is a modeling choice
-rather than a measurement, and Section~\ref{sec:sensitivity} quantifies how strongly the headline
-results depend on it.
+The on-call engineer is simulated. An escalation is resolved after a seeded log-normal delay (median
+\NHumanMedian{}\,s, $\sigma=\NHumanSigma{}$). We chose this delay and did not measure it, and
+Section~\ref{sec:sensitivity} shows how far the headline results move when it changes.
 
 \subsection{Cross-Model Harness, Implemented but Not Evaluated}
-A cross-model harness runs a scenario through a configurable set of LLM backends and scores decision
-correctness, latency, and token use per model, which directly tests the base paper's claim of model
-independence. The harness is unit-tested, but this campaign did not run or record the sweep across
-real provider models, so no result from it is reported here.
+The cross-model harness takes one scenario, runs it through a configurable list of LLM backends, and
+scores each model on decision correctness, latency, and token use. That is a direct test of the base
+paper's model-independence claim. The harness has unit tests, but we did not run or record a sweep
+across real provider models during this campaign, so this paper reports no results from it.
 
 \subsection{Layers 5 and 6: Trust Core, Implemented but Not Evaluated}
-Beyond the base paper's design, the system adds a graduated-autonomy layer with three modes.
-\texttt{shadow} mode logs proposals without touching the pipeline, \texttt{approval} mode queues
-allowed actions for a human decision, and \texttt{autonomous} mode executes them directly. A durable
-kill switch, checked once per control-loop tick, and a per-target hourly blast-radius cap bound the
-agents independently of the policy. All three mechanisms are implemented and unit-tested, but every
-configuration in the campaign ran in \texttt{autonomous} mode throughout, so this subsection
-describes a capability rather than a measured result.
+The system also adds something the base paper does not have: a graduated-autonomy layer with three
+modes. In \texttt{shadow} mode, proposals are logged and the pipeline is left alone. In
+\texttt{approval} mode, allowed actions wait in a queue for a human to decide. In \texttt{autonomous}
+mode they run directly. Two further limits act independently of the policy: a durable kill switch that
+the loop checks once per tick, and an hourly blast-radius cap for each target. All three are
+implemented and unit-tested. Every configuration in the campaign, however, stayed in
+\texttt{autonomous} mode for the whole run, so we can describe what this layer does but not how it
+performed.
 
 \subsection{Layer 7: Enterprise Governance, Implemented but Not Evaluated}
 An operator API provides read access to proposals, the audit trail, and costs, and it exports the
@@ -100,12 +102,13 @@ To show that the governance stack runs outside the laboratory host, we deployed 
 Microsoft Azure virtual machine (Fig.~\ref{fig:deploy}): a \texttt{Standard\_B2pls\_v2} instance
 (Arm64, 2 vCPU, 4\,GB) running Ubuntu 24.04 in the Southeast Asia region. One script provisions the
 machine, and cloud-init installs Docker, generates every secret on the machine itself, and starts a
-Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. A Caddy
-reverse proxy obtains a Let's Encrypt certificate and serves the API over HTTPS. The network security
-group exposes only ports 443 and 80, and SSH only from the deployer's address. The policy engine runs
-the same pinned release as the campaign, in its Arm64 build. Because no production pipeline was
-attached, the deployment runs in \texttt{shadow} mode with the mock model and a no-op connector, so
-it observes and proposes but never acts. We verified a valid certificate, the HTTP-to-HTTPS redirect,
-authentication on every protected endpoint, and all seven readiness checks. No experiment ran on this
-deployment, and none of the results in Section~\ref{sec:results} come from it; the campaign needs the
-full stack with Airflow and Redpanda.
+Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. Caddy
+sits in front as a reverse proxy, gets a certificate from Let's Encrypt, and serves the API over
+HTTPS. Ports 443 and 80 are open to the internet, while SSH is open only to the deployer's address.
+The policy engine is the same pinned release used in the campaign, built for Arm64. There is no
+production pipeline behind this deployment, so it runs in \texttt{shadow} mode with the mock model and
+a no-op connector: it watches and proposes, and it never acts. We checked that the certificate is
+valid, that HTTP redirects to HTTPS, that every protected endpoint asks for authentication, and that
+all seven readiness checks pass. Nothing in Section~\ref{sec:results} was measured on this machine.
+The campaign needs the full stack, including Airflow and Redpanda, which this deployment does not
+run.

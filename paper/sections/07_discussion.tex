@@ -1,16 +1,15 @@
 \section{DISCUSSION}\label{sec:discussion}
 
 \subsection{Implications for Evaluating Governed Agents}
-The mock-versus-live divergence (Section~\ref{sec:livemock}) bears directly on how systems of this
-kind should be evaluated, and four practices follow from the results and from the lessons of
-Section~\ref{sec:lessons}. First, state whether the model in the loop was real or mocked, and report
-both numbers whenever both exist, because a mock figure describes only the mock. Second, include cheap
-non-LLM baselines: here two idealized baselines beat the full agent system on recovery time and
-manual interventions, which a comparison against static orchestration alone would have concealed.
-Third, grade any safety claim against an oracle that shares no code with the mechanism under test; the
-independent oracle used here found two contract-layer gaps that the system's own tests had missed.
-Fourth, run a short, paid pilot at the real settings before committing to a long campaign; ours
-detected a retired model on its first call.
+The gap between mock and live runs (Section~\ref{sec:livemock}) has direct consequences for how
+governed-agent systems are evaluated. Together with the lessons of Section~\ref{sec:lessons}, it
+points to four practices. First, say whether the model in the loop was real or mocked, and when both
+numbers exist, report both; a mock figure tells you about the mock. Second, include cheap non-LLM
+baselines. Here, two idealized ones beat the full agent system on recovery time and manual
+interventions, and a comparison with static orchestration alone would have hidden that. Third, grade
+safety claims against an oracle that shares no code with the mechanism being tested. Ours found two
+contract-layer gaps that the system's own tests had missed. Fourth, before a long campaign, pay for a
+short pilot at the real settings. Ours hit a retired model on its very first call.
 
 \subsection{Deployment Implications}
 For deployment, the most relevant decision-quality figure is $\NDeltaDecisionCorrectFull{}$, not the
@@ -24,34 +23,34 @@ deployment recommendation. For now, the trust core is an architectural response 
 our measurements raise; we have not yet measured whether it works.
 
 \subsection{The Manual-Intervention Mechanism Is Measured, Not Explained}
-Section~\ref{sec:results} reports that \texttt{full} and \texttt{recovery\_only} increase manual
-interventions relative to \texttt{baseline}, contrary to the base paper's claim. The measurement
-itself is direct: the metric counts rows in the
-\texttt{telemetry.\allowbreak manual\_\allowbreak interventions} table, to which every configuration
-writes. The mechanism behind the increase is not established. Repeated escalation across the ticks of
-one open fault may dominate, repeated denials may end in human hand-offs, or the two may interact.
-Distinguishing these explanations would require a per-tick trace of proposal outcomes over the
-lifetime of a fault, which the current telemetry does not retain. We therefore leave the mechanism
-open rather than infer it from the aggregate count, and readers should not regard it as resolved in
-the system's favor.
+Section~\ref{sec:results} shows that \texttt{full} and \texttt{recovery\_only} raise manual
+interventions compared with \texttt{baseline}, which contradicts the base paper. The measurement is
+straightforward: the metric counts rows in the
+\texttt{telemetry.\allowbreak manual\_\allowbreak interventions} table, and every configuration writes
+to that table. Why the count rises is a separate question, and we have not answered it. One fault
+that stays open could escalate again on tick after tick. Repeated denials could end in hand-offs to
+the human. Both could be happening at once. Telling these apart needs a per-tick trace of proposal
+outcomes across the life of a fault, and the current telemetry does not keep one. So we leave the
+mechanism open and do not try to infer it from the total. Readers should not assume it resolves in the
+system's favor.
 
 \subsection{Limitations and Threats to Validity}\label{sec:limitations}
 
 \subsubsection{Threats to Validity}
-Eight threats apply directly. \emph{Simulated human.} Every comparison against \texttt{baseline}
-inherits the log-normal on-call model; Section~\ref{sec:sensitivity} reports the break-even point
-rather than defending the model itself. \emph{Modelled baselines.} \texttt{rule\_based} and
-\texttt{autoscale} resolve covered faults after fixed, assumed latencies (Section~\ref{sec:method}),
-so their advantage over the agents reflects those assumptions and is not a measurement of a deployed
-rule engine or autoscaler. \emph{Synthetic workload.} The data come from a downscaled synthetic table
-with injected faults rather than from production traces, and the results may not carry over to real
-workloads. \emph{One live model family.} The live arm used one reasoning model and one faster model
+We see eight threats. \emph{Simulated human.} All comparisons with \texttt{baseline} depend on the
+log-normal on-call model. Section~\ref{sec:sensitivity} gives the break-even point; it does not argue
+that the model is right. \emph{Modelled baselines.} In \texttt{rule\_based} and \texttt{autoscale},
+covered faults are resolved after fixed latencies that we assumed (Section~\ref{sec:method}). Their
+lead over the agents comes from those assumptions and is not a measurement of any deployed rule engine
+or autoscaler. \emph{Synthetic workload.} Our data are a downscaled synthetic table with injected
+faults, not production traces, and real workloads may behave differently. \emph{One live model
+family.} The live arm used one reasoning model and one faster model
 from a single provider at temperature zero, so the decision-quality findings
 (Section~\ref{sec:results}) are properties of that pairing and may not generalize. \emph{Unequal
 replicate counts.} \texttt{baseline}, \texttt{rule\_based}, \texttt{autoscale}, and \texttt{full} each
-have $\NNFull{}$ runs, whereas the four single-agent ablations have half as many. This cost trade-off
-was made before the campaign (Section~\ref{sec:method}) and widens the ablations' confidence
-intervals relative to the headline comparisons. \emph{Nominal seed matching.} Because the per-run
+have $\NNFull{}$ runs, whereas the four single-agent ablations have half as many. We made this
+trade-off for cost reasons before the campaign started (Section~\ref{sec:method}), and it leaves the
+ablations with wider confidence intervals than the headline comparisons. \emph{Nominal seed matching.} Because the per-run
 seed depends on the configuration name (Section~\ref{sec:method}), no two configurations share fault
 or human-latency randomness at a matched (scenario, replicate) index. We therefore used the unpaired
 rank-sum test as the primary test, and the retained signed-rank statistic should not be read as
@@ -83,20 +82,19 @@ harness that could test the base paper's claim of model independence is unit-tes
 sweep against real provider models has not been run, so nothing here is evidence for or against that
 claim. \emph{The trust core.} Graduated autonomy, the kill switch, and the blast-radius cap are
 implemented and unit-tested, but every configuration ran in one fixed mode, so no mode transition or
-kill-switch-to-halt latency was measured. \emph{Cost.} The cost model computes a compute and storage
-split internally, but the committed per-run data keep only the combined total, and the metered term
-is confounded as described above.
+kill-switch-to-halt latency was measured. \emph{Cost.} Internally the cost model splits compute from
+storage, but the per-run data we committed store only the total, and the metered term carries the
+confound described above.
 
-Each gap has a concrete and bounded remedy. The cross-model sweep should be run against at least two
-live providers on the same scenario set. A dedicated drill should engage the kill switch and a mode
-transition under load and record the timing. For cost, the harness should reset the pool size and the
-worker target before each run, sample resources at a fixed cadence over a window that is identical
-for every configuration, and persist the ledger's component breakdown. The first two gaps are
-evidence this campaign did not collect; the third is a measurement flaw that a re-run with these
-changes would remove.
+Each gap can be closed with a specific, limited piece of work. The cross-model sweep should run on the
+same scenario set against at least two live providers. A separate drill should engage the kill switch
+and a mode transition under load and time both. For cost, the harness should reset the pool size and
+worker target before every run, sample resources at a fixed rate over a window that is the same for
+all configurations, and keep the ledger's component breakdown. The first two gaps are missing
+evidence. The third is a flaw in how we measured, and a re-run with these changes would fix it.
 
 \subsubsection{What Would Change Our Conclusion}
-A cross-model repetition of Section~\ref{sec:livemock} that reproduced the same order-of-magnitude
-mock-versus-live gap with a different provider would considerably strengthen the central claim. A
-repetition that did not would suggest that the gap is specific to this model pairing rather than a
-property of mock evaluation as a method, and that result would deserve an equally plain report.
+Suppose the live-versus-mock comparison of Section~\ref{sec:livemock} were repeated with another
+provider. If it showed the same order-of-magnitude gap, the central claim would be much stronger. If
+it did not, the gap would look like a feature of this particular model pairing and not of mock
+evaluation in general, and we would report that outcome just as plainly.

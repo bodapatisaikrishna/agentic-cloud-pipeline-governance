@@ -1,11 +1,11 @@
 \section{EXPERIMENTAL DESIGN}\label{sec:method}
 
 \subsection{Testbed}
-A single node runs the full stack in containers: PostgreSQL, Redpanda, Airflow, and OPA.
-Table~\ref{tab:testbed} lists the hardware, software versions, and fixed parameters. The policy engine
-is pinned to a specific release, and Section~\ref{sec:results} shows why the pin matters. Runs execute
-strictly one at a time, because the resource-contention scenario applies real CPU stress and
-concurrent runs would add host load to the measurement.
+Everything runs in containers on one node: PostgreSQL, Redpanda, Airflow, and OPA. Hardware, software
+versions, and fixed parameters are listed in Table~\ref{tab:testbed}. We pin the policy engine to one
+release, and Section~\ref{sec:results} explains why that matters. Runs never overlap. The
+resource-contention scenario puts real load on the CPU, and a second run in parallel would add its own
+load to the measurement.
 
 \begin{table*}[t]
 \centering
@@ -48,32 +48,34 @@ burst) is resolved 30\,s after detection, while schema drift, which requires rea
 the human. In \texttt{autoscale}, the reactive scaler resolves resource contention and ingress bursts
 20\,s after detection, and every data fault escalates. The recovery times of these configurations
 therefore encode two assumed remediation latencies; they are not measurements of a real rule engine
-or autoscaler. They are idealized comparators: their speed follows from the assumed latencies, and any
-fault outside their coverage still falls to the human, which bounds what they can achieve.
+or autoscaler. These comparators are idealized. How fast they are comes from the latencies we
+assumed, and any fault they do not cover still goes to the human, which caps how well they can do.
 
 \subsection{Matrix and Arms}
-The baselines and \texttt{full} each have $\NNBaseline{}$ runs pooled across the four scenarios, and
-the ablations have fewer; Table~\ref{tab:main} gives the realized $n$ for each configuration. Because
-only agent configurations call a model, the campaign is split into three independently resumable arms
-with separate result directories, so live and mock conditions cannot be pooled by accident. Arm A
-holds the live-model agent configurations. Arm B holds the non-agent configurations with the model
-disabled; their results are identical under live and mock by construction. Arm C runs \texttt{full}
-under a deterministic mock as the direct counterpart to arm A's \texttt{full}. The three arms contain
-\NRunsArmA{}, \NRunsArmB{}, and \NRunsArmC{} runs, \NRunsTotal{} in total. Every run begins with a
+The baselines and \texttt{full} have $\NNBaseline{}$ runs each, pooled over the four scenarios. The
+ablations have fewer, and Table~\ref{tab:main} lists the realized $n$ for every configuration. Only
+agent configurations call a model, so we split the campaign into three arms. Each arm can be resumed
+on its own and writes to its own result directory, which keeps live and mock runs from being pooled
+by mistake. Arm A contains the agent configurations with the live model. Arm B contains the non-agent
+configurations with the model switched off; since they never call it, their results would be the
+same under live and mock. Arm C runs \texttt{full} with a deterministic mock, as the direct
+counterpart of \texttt{full} in arm A. The arms hold \NRunsArmA{}, \NRunsArmB{}, and \NRunsArmC{}
+runs, \NRunsTotal{} altogether. Every run begins with a
 120\,s warm-up before the fault is injected and ends with a 5\,s settle. Agent runs execute a 300\,s
 control loop in between, whereas the non-agent responders resolve the fault without a loop.
 
 \subsection{Live Model and Accounting}
 The live arm calls a remote language model at temperature zero through an OpenAI-compatible endpoint.
-The reasoning agents share one model, and monitoring uses a smaller, faster one. Model identifiers are
-recorded in the run manifest, and a per-run budget caps model calls and tokens.
+The reasoning agents share one model, and monitoring uses a smaller, faster one. Each run manifest
+records the model identifiers, and a per-run budget limits both the number of model calls and the
+token count.
 
-Two properties of the accounting matter for validity. First, a proposal for a snapshot that has
-already been seen is served from an in-run cache, so summing per-action token columns would count one
-real call several times. We therefore count real calls, cache hits, degraded proposals, invalid
-outputs, tokens, and latency only at the moment a call is or is not actually made. A proposal counts
-as degraded when the budget is exhausted, the provider is unavailable, or an earlier degradation is
-replayed. Second, the project's pilot showed that caching a transient provider failure lets a single
+Two details of the accounting affect validity. First, a proposal for a snapshot that has already been
+seen is served from an in-run cache, so summing per-action token columns would count one real call
+several times. For that reason we count real calls, cache hits, degraded proposals, invalid outputs,
+tokens, and latency at the point where a call is made or skipped. A proposal is counted as degraded if
+the budget has run out, if the provider is unavailable, or if it replays an earlier degradation.
+Second, the project's pilot showed that caching a transient provider failure lets a single
 rate-limit episode degrade every later identical snapshot (Section~\ref{sec:lessons}). Transient
 failures are therefore no longer cached, and the degraded count is tracked separately.
 
@@ -81,18 +83,18 @@ failures are therefore no longer cached, and the degraded count is tracked separ
 We report the five metrics defined in Section~\ref{sec:problem}: mean time to recovery (MTTR,
 Eq.~\ref{eq:mttr}), operational cost under a disclosed model (Eq.~\ref{eq:cost}), manual
 interventions, data freshness, and \emph{decision correctness} (Eq.~\ref{eq:decision}). Manual
-interventions are a count of rows in a telemetry table that every configuration writes to, and
-freshness is a lag in seconds read from the same telemetry.
+interventions are counted as rows in a telemetry table that all configurations write to. Freshness is
+a lag in seconds, taken from the same telemetry.
 
 \subsection{Seeds and Provenance}
-The seed of each run is $\mathrm{sha256}(\texttt{config:scenario:replicate}) \bmod 2^{32}$. Because the
-configuration name is part of the hash, runs matched on (scenario, replicate) share no fault or
-human-latency randomness across configurations. The matching is therefore nominal rather than paired,
+The seed of each run is $\mathrm{sha256}(\texttt{config:scenario:replicate}) \bmod 2^{32}$. Since the
+configuration name goes into the hash, two runs with the same (scenario, replicate) but different
+configurations get different fault and human-latency randomness. The matching is therefore nominal rather than paired,
 so we treat the samples as independent and use the rank-sum test as the primary test; the
-signed-rank test on the matched index is kept only for continuity with earlier analysis. Each
-manifest line records the profile, the model mode and identifiers (never credentials), the timings,
-the human-latency and provisioning parameters, the budgets, the code revision, and whether the
-experiment code had uncommitted changes. The analysis refuses to merge runs with differing provenance
+signed-rank test on the matched index is kept only for continuity with earlier analysis. Every
+manifest line records the profile, the model mode, the model identifiers (credentials are never
+written), the timings, the human-latency and provisioning parameters, the budgets, the code revision,
+and a flag for uncommitted changes to the experiment code. The analysis refuses to merge runs with differing provenance
 unless an explicit, documented override is given.
 
 \subsection{Statistics}
@@ -106,20 +108,20 @@ run before any individual comparison was written up, and it was not pre-register
 study.
 
 \subsection{Adversarial Evaluation}
-A generated corpus probes the policy layer directly. It contains an exhaustive grid over every legal
-(agent, action) pair and the decision-relevant context values, including boundary cases such as 4, 5,
-and 6 recent actions and a cost equal to, or infinitesimally above, the budget. It also contains
-attacker-controlled parameter extremes priced by the real gate, hostile strings in free-text fields,
-illegal proposals sent directly to the policy engine without passing the contract, and a seeded fuzz.
-The expected verdicts come from an independently written Python statement of the \emph{documented}
-policy semantics that shares no code with the Rego under test. The independence lies in the
-implementation, not in the authorship. Consistent with the threat model, the agent controls only its
-own proposal, and the surrounding policy context is built by the system and lies outside the agent's
-reach.
+A generated corpus probes the policy layer directly. It covers every legal (agent, action) pair on an
+exhaustive grid, crossed with the context values that drive decisions. Boundary cases are included,
+for example 4, 5, and 6 recent actions, or a cost exactly at or just above the budget. The corpus also
+has extreme parameter values chosen by an attacker and priced by the real gate, hostile strings in
+free-text fields, illegal proposals sent straight to the policy engine so that they skip the
+contract, and a seeded fuzz. Expected verdicts come from a separate Python implementation of the
+\emph{documented} policy semantics, which shares no code with the Rego being tested. Both were written
+by the same team, so the independence is in the code, not in the people. In line with the threat
+model, the agent controls its own proposal and nothing else. The system builds the policy context, and
+the agent cannot reach it.
 
 \subsection{Sensitivity}
-Sampled human latency follows $\mathrm{median}\cdot e^{\sigma Z}$, with $Z$ fixed by the seed. In this
-scale family any all-human outcome scales exactly linearly with the assumed median. We confirm the
-linearity directly against the sampler and use it to derive, in closed form, the human median at
-which each configuration stops outperforming the baseline. For the cost model, we sweep the
-provisioning parameters and report where the break-even point lies.
+The sampled human latency is $\mathrm{median}\cdot e^{\sigma Z}$, where the seed fixes $Z$. Under this
+scale family, any outcome handled entirely by the human grows in exact proportion to the assumed
+median. We checked that linearity against the sampler itself and used it to compute, in closed form,
+the human median below which each configuration no longer beats the baseline. For cost, we sweep the
+provisioning parameters and report the break-even point.

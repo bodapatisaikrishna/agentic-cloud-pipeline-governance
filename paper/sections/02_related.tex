@@ -1,35 +1,34 @@
 \section{BACKGROUND AND RELATED WORK}\label{sec:related}
 
-This work draws on four bodies of literature: LLM agents for cloud operations, the validity of LLM
-agent evaluations, runtime governance of agent actions, and the non-LLM automation against which such
-agents should be measured. We review each in turn and then state how the present study differs.
+Four strands of prior work matter here: LLM agents for cloud operations, how far LLM agent
+evaluations can be trusted, runtime governance of agent actions, and the non-LLM automation that such
+agents ought to be compared with. We go through them below and close with how this study differs.
 
 \subsection{The Base Architecture}
-The base paper~\cite{kirubakaran2025governing} describes a data plane, a policy plane, and an agentic
-control plane. Four bounded agents share the control plane, and each produces only a validated action
-proposal. The evaluation compares the system with a static-orchestration baseline across injected
-failures. Our implementation follows the same decomposition. Wherever the description leaves a choice
-open, we record our decision and the alternatives in the accompanying artifact.
+The base paper~\cite{kirubakaran2025governing} splits the system into a data plane, a policy plane,
+and an agentic control plane. The control plane hosts four bounded agents, and none of them can do
+more than submit a validated action proposal. Its evaluation compares the system with static
+orchestration on a set of injected failures. We kept the same decomposition. Where the paper left a
+choice open, the accompanying artifact records what we chose and what else we considered.
 
-\subsection{Heuristic Automation as the Baseline}
-Workflow orchestrators such as Airflow, Prefect, and Dagster are execution-centric. They schedule,
-retry, and alert, but they do not reason about failures their authors did not anticipate. Automation
-driven only by resource signals nonetheless achieves a great deal at production scale: Google's
-Autopilot~\cite{rzadca2020autopilot}, a heuristic autoscaler that covers a large share of Google's
-fleet, uses no LLM. Such automation is therefore a legitimate comparator rather than a strawman. An
-empirical study of real data pipelines catalogs 41 failure factors~\cite{foidl2024datapipeline}, and a
-comparison against static orchestration alone cannot show whether an agent system handles them better
-than cheap automation does. In our own evaluation, two idealized heuristic baselines outperform the
-full agent system on recovery time and manual interventions (Section~\ref{sec:results}).
+\subsection{Non-LLM Automation as a Comparator}
+Orchestrators such as Airflow, Prefect, and Dagster are built around execution. They schedule tasks,
+retry them, and raise alerts, but they cannot reason about a failure nobody anticipated. Simple
+automation is still far from weak. Google's Autopilot~\cite{rzadca2020autopilot} is a heuristic
+autoscaler with no LLM, and it manages a large share of Google's fleet. A baseline of this kind is a
+fair comparator, not a strawman. Real pipelines fail for 41 documented reasons~\cite{foidl2024datapipeline},
+and comparing an agent system only with static orchestration says nothing about whether it handles
+those failures better than cheap automation would. In our runs, two idealized heuristic baselines beat
+the full agent system on both recovery time and manual interventions (Section~\ref{sec:results}).
 
 \subsection{LLM Agents for Cloud Operations}
-Reasoning-and-acting loops~\cite{yao2022react} are the general pattern behind agents that observe a
-system and propose actions. For root-cause analysis, RCACopilot~\cite{chen2024rcacopilot} and
-RCAgent~\cite{wang2023rcagent} apply tool-augmented LLMs to production incidents at Microsoft and
-Alibaba Cloud. Both stop at a recommended diagnosis. The design studied here also \emph{executes} an
-action, and that step is what makes a policy gate necessary. OpsAgent~\cite{luo2025opsagent}, a
-multi-agent incident-management system in production at Lenovo, shows industrial practice moving in
-the same direction.
+An agent that watches a system and proposes actions usually follows a reasoning-and-acting
+loop~\cite{yao2022react}. RCACopilot~\cite{chen2024rcacopilot} and RCAgent~\cite{wang2023rcagent} use
+tool-augmented LLMs for root-cause analysis of production incidents at Microsoft and Alibaba Cloud,
+respectively. Both end with a suggested diagnosis. The system studied here goes one step further and
+\emph{executes} the action, which is why it needs a policy gate. OpsAgent~\cite{luo2025opsagent}, a
+multi-agent incident-management system running at Lenovo, suggests that industry is heading the same
+way.
 
 \subsection{Evaluation Validity for LLM Agents}
 Our central finding is that a mock and a live evaluation of the same system diverge by orders of
@@ -73,25 +72,24 @@ rather than the policy engine under test, so the containment figure does not dep
 grading itself.
 
 \subsection{Decision Quality and Cross-Model Generalization}
-Resolving an incident quickly is not the same as resolving it correctly.
-AIOpsLab~\cite{chen2025aiopslab} evaluates cloud agents on detection, localization, and mitigation
-rather than on latency alone, and OpenSec~\cite{barnes2026opensec} finds that frontier models detect
-incidents well but are poorly calibrated, with false-positive containment-action rates of 82.5\% and
-45\% for two current models. Our correct-mitigation metric (Section~\ref{sec:method}) rests on the same
-distinction.
+Fast resolution and correct resolution are different things. AIOpsLab~\cite{chen2025aiopslab} scores
+cloud agents on detection, localization, and mitigation instead of latency alone.
+OpenSec~\cite{barnes2026opensec} reports that frontier models are good at detecting incidents but
+badly calibrated: two current models had false-positive containment-action rates of 82.5\% and 45\%.
+Our correct-mitigation metric (Section~\ref{sec:method}) is built on the same distinction.
 
-The base paper states that the GPT, Claude, and Gemini model families worked as interchangeable
-backends, but it reports no cross-model results. Evidence from other settings suggests caution. One
-study~\cite{sanna2025crossllm} measures a 43.4-point accuracy drop when a behavioral backdoor detector
-moves from in-distribution to cross-LLM evaluation across six production models. Another
-study~\cite{zhang2026towardagentic} shows that, on identical input, agent behavior shifts with model
-version, open- versus closed-weight status, serving provider, and system prompt, and that
-weight-release status predicts behavior better than model identity. The cross-model harness described
-in Section~\ref{sec:system} was built to test this claim, but its live sweep was not run in this
-campaign (Section~\ref{sec:discussion}).
+According to the base paper, the GPT, Claude, and Gemini model families were interchangeable as
+backends, yet no cross-model results are shown. Work in other settings gives reason for doubt.
+Sanna~\cite{sanna2025crossllm} found a 43.4-point drop in accuracy when a behavioral backdoor detector
+was evaluated across six production LLMs instead of in-distribution. Zhang
+et al.~\cite{zhang2026towardagentic} gave agents identical input and still saw their behavior change
+with model version, open or closed weights, serving provider, and system prompt; whether the weights
+had been released predicted behavior better than which model it was. We built the cross-model harness
+of Section~\ref{sec:system} to test this claim, but did not run its live sweep in this campaign
+(Section~\ref{sec:discussion}).
 
 \subsection{Fault Injection and Statistics}
-Injecting faults deliberately to test resilience is established practice~\cite{basiri2016chaos}. Our
+Deliberate fault injection is a standard way to test resilience~\cite{basiri2016chaos}. Our
 seeded injector reproduces four scenarios exactly: schema drift, upstream delay, resource contention,
 and ingress burst. For inference we use bootstrap resampling~\cite{efron1979}, the Mann--Whitney
 rank-sum test~\cite{mann1947}, the Wilcoxon signed-rank test~\cite{wilcoxon1945}, Holm's step-down

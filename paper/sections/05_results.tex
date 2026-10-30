@@ -1,21 +1,21 @@
 \section{RESULTS}\label{sec:results}
 
-Every measured value in this section is generated directly from the campaign's raw telemetry
-(Section~\ref{sec:method}) and can be traced to the script that produced it; only design constants
-and the base paper's reported figures are typed by hand. All \NRunsTotal{} runs finished across the
-three arms, with no aborts and no token-ceiling breaches. The provenance check found
-$\NProvenanceProblems{}$ deviation across the merged arms: the campaign supervisor was restarted
-mid-campaign after a host infrastructure failure unrelated to the experiment. The fix deployed with
-that restart changed only the supervisor's own health check and none of the code on a run's execution
-path, which we confirmed by diff before treating the arms as one dataset. The first three subsections
-answer RQ1--RQ3 with the live model, and Section~\ref{sec:livemock} then shows that these answers
-depend on whether the model was real (RQ4).
+All measured values in this section come straight from the campaign's raw telemetry
+(Section~\ref{sec:method}), and each can be traced to the script that computed it. The only numbers
+typed by hand are design constants and figures quoted from the base paper. All \NRunsTotal{} runs
+across the three arms completed; none aborted and none hit the token ceiling. The provenance check
+flagged $\NProvenanceProblems{}$ deviation across the merged arms. Midway through the campaign the
+supervisor had to be restarted after a host infrastructure failure that had nothing to do with the
+experiment. The fix shipped with that restart touched only the supervisor's health check and no code
+that a run executes, and we confirmed this with a diff before treating the three arms as one dataset.
+The first three subsections answer RQ1--RQ3 with the live model. Section~\ref{sec:livemock} then shows
+that those answers change depending on whether the model was real (RQ4).
 
 \subsection{Does the Full Agent System Beat Static Orchestration?}
 
 \begin{table*}[t]
 \centering
-\caption{Medians [IQR] per Configuration, With $n$ Replicates Pooled Across Scenarios}
+\caption{Median [IQR] for Each Configuration; $n$ Counts Replicates Pooled Over All Scenarios}
 \label{tab:main}
 \small
 \input{generated/tab_main.tex}
@@ -23,8 +23,8 @@ depend on whether the model was real (RQ4).
 
 \begin{table*}[t]
 \centering
-\caption{Effect of Each Configuration Against \texttt{baseline}: Bootstrap 95\% CI on the Median
-  Difference, Cliff's $\delta$ With Its Own 95\% CI, and Holm-Corrected Mann--Whitney $p$-Value
+\caption{Each Configuration Compared With \texttt{baseline}: Median Difference and Cliff's $\delta$,
+  Each With a Bootstrap 95\% CI, and the Mann--Whitney $p$-Value After Holm Correction
   ($^{*}p_{\mathrm{Holm}}<0.05$)}
 \label{tab:effects}
 \scriptsize
@@ -34,15 +34,15 @@ depend on whether the model was real (RQ4).
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.75\linewidth]{generated/fig_mttr.pdf}
-\caption{Recovery-time distribution by configuration (log scale).}
+\caption{MTTR of every run, grouped by configuration and plotted on a log scale.}
 \label{fig:mttr}
 \end{figure*}
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\linewidth]{generated/fig_effects.pdf}
-\caption{Cliff's $\delta$ against \texttt{baseline}, by configuration and metric, with bootstrap 95\%
-  intervals.}
+\caption{Cliff's $\delta$ of each configuration against \texttt{baseline} for MTTR and cost. Bars
+  show bootstrap 95\% intervals.}
 \label{fig:effects}
 \end{figure*}
 
@@ -92,18 +92,18 @@ orchestration on recovery time and cost, but not on manual interventions.
 \subsection{Is the Full System Better Than Cheap, Non-Agent Automation?}
 
 The \texttt{rule\_based} and \texttt{autoscale} configurations call no model, yet both beat every
-agent configuration on MTTR, including \texttt{full}. This ranking depends on the modelled
-remediation latencies of Section~\ref{sec:method}. Both comparators resolve covered faults after a
-fixed 30\,s or 20\,s, so they show what an idealized non-LLM responder could achieve rather than the
-measured speed of a deployed one. \texttt{rule\_based} reaches \NMttrRuleBasedMedian{}\,s
+agent configuration on MTTR, including \texttt{full}. That ranking follows from the remediation
+latencies we modelled in Section~\ref{sec:method}. Each comparator resolves a covered fault after a
+fixed 30\,s or 20\,s, so its numbers show what an idealized non-LLM responder could do, not how fast a
+deployed one actually is. \texttt{rule\_based} reaches \NMttrRuleBasedMedian{}\,s
 ($\NRelpctMttrSRuleBased{}$\% relative to \texttt{baseline}, $\delta=\NDeltaMttrSRuleBased{}$), and
 \texttt{autoscale} reaches \NMttrAutoscaleMedian{}\,s ($\NRelpctMttrSAutoscale{}$\%,
-$\delta=\NDeltaMttrSAutoscale{}$), compared with $\NRelpctMttrSFull{}$\% for \texttt{full}. Both keep
-manual interventions flat or reduce them (\mbox{\NRelpctManualInterventionsRuleBased{}\%} and
-\mbox{\NRelpctManualInterventionsAutoscale{}\%}), whereas \texttt{full} increases them.
+$\delta=\NDeltaMttrSAutoscale{}$), compared with $\NRelpctMttrSFull{}$\% for \texttt{full}. Neither
+raises manual interventions (\mbox{\NRelpctManualInterventionsRuleBased{}\%} and
+\mbox{\NRelpctManualInterventionsAutoscale{}\%}), while \texttt{full} raises them.
 
-On cost, \texttt{autoscale} changes the median by \NRelpctCostUnitsAutoscale{}\%, a smaller
-reduction than the \NRelpctCostUnitsFull{}\% of \texttt{full}. \texttt{rule\_based}, which does not
+On cost, \texttt{autoscale} moves the median by \NRelpctCostUnitsAutoscale{}\%, less than the
+\NRelpctCostUnitsFull{}\% achieved by \texttt{full}. \texttt{rule\_based}, which does not
 right-size, shows no cost effect ($\NRelpctCostUnitsRuleBased{}$\%,
 $p_{\mathrm{Holm}}=\NPHolmCostUnitsRuleBased{}$), as its design predicts. By construction, neither
 comparator can execute an accepted mitigation (\texttt{decision\_correct}$=0$), and decision quality is
@@ -167,36 +167,38 @@ also cautions against treating any single scenario's result as a configuration's
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.95\linewidth]{generated/fig_live_mock.pdf}
-\caption{Live versus mock medians for \texttt{full}, per metric. The axes are linear because two
-  metrics are exactly zero for one arm, which a log axis cannot show.}
+\caption{Live versus mock medians for \texttt{full}, per metric. We use linear axes since two of the
+  metrics are exactly zero in one arm and could not be drawn on a log axis.}
 \label{fig:live_mock}
 \end{figure*}
 
 Table~\ref{tab:live_mock} and Fig.~\ref{fig:live_mock} compare \texttt{full} under two conditions
-that differ only in the model: arm A (live) and arm C, its deterministic-mock counterpart. MTTR falls
-from \NLiveVsMockMttrSLive{}\,s live to \NLiveVsMockMttrSMock{}\,s mock, a divergence ratio of
-$R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$ (Eq.~\ref{eq:ratio}). The median decision-correct score
-rises from \NLiveVsMockDecisionCorrectLive{} to \NLiveVsMockDecisionCorrectMock{}, although the live
-correct-mitigation rate is \NDeltaDecisionCorrectFull{}. Manual interventions fall from
-\NLiveVsMockManualInterventionsLive{} to \NLiveVsMockManualInterventionsMock{}, and freshness falls from
-\NLiveVsMockFreshnessSLive{}\,s to \NLiveVsMockFreshnessSMock{}\,s.
+that differ only in the model: arm A (live) and arm C, its deterministic-mock counterpart. MTTR is
+\NLiveVsMockMttrSLive{}\,s with the live model and \NLiveVsMockMttrSMock{}\,s with the mock, a
+divergence ratio of $R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$ (Eq.~\ref{eq:ratio}). The median
+decision-correct score goes from \NLiveVsMockDecisionCorrectLive{} live to
+\NLiveVsMockDecisionCorrectMock{} mock, even though the live correct-mitigation rate is
+\NDeltaDecisionCorrectFull{}. Manual interventions drop from \NLiveVsMockManualInterventionsLive{} to
+\NLiveVsMockManualInterventionsMock{}. Freshness drops from \NLiveVsMockFreshnessSLive{}\,s to
+\NLiveVsMockFreshnessSMock{}\,s.
 
-Cost moves the other way: the live arm is cheaper than the mock arm (\NLiveVsMockCostUnitsLive{}
-vs.\ \NLiveVsMockCostUnitsMock{} units), and the mock's cost even exceeds that of \texttt{baseline}.
-Much of this gap likely reflects the harness rather than the model. The Airflow pool size and the
-streaming-worker target are global settings that the campaign did not reset between runs, so each run
-inherits the state left by the previous agent action. The mock arm ran last, after
-\texttt{schema\_only}. In the schema-drift and upstream-delay scenarios, where the mock's rule-based
-optimization agent takes no action, mock \texttt{full} meters exactly the same compute as live
-\texttt{schema\_only}. The live \texttt{full} arm ran first, from a different starting state, and its
-metered compute stayed low in three of the four scenarios. The cost comparison between the two arms
-is therefore not a clean measurement of the model's effect, and we do not interpret it as one.
+Cost goes the opposite way. The live arm costs less than the mock arm (\NLiveVsMockCostUnitsLive{}
+vs.\ \NLiveVsMockCostUnitsMock{} units), and the mock even costs more than \texttt{baseline}. We think
+most of this gap comes from the harness, not the model. The campaign never reset two global settings
+between runs, the Airflow pool size and the streaming-worker target, so every run started from
+whatever the previous agent action had left behind. The mock arm ran last, right after
+\texttt{schema\_only}. In schema drift and upstream delay, the mock's rule-based optimization agent
+does nothing, and mock \texttt{full} meters exactly the compute that live \texttt{schema\_only} did.
+Live \texttt{full} ran first, from another starting state, and its metered compute stayed low in three
+of the four scenarios. The cost difference between the two arms therefore does not cleanly measure
+what the model changes, and we do not read it that way.
 
 These results answer RQ4. The mock evaluation is not a noisier or scaled-down version of the live
 one. On recovery time and decision quality it is a categorically different and far more flattering
-experiment, and the earlier results in this section should be read with that in mind. The base
-paper's headline figures came from an evaluation path that its description does not identify, and
-for one system this campaign measures how far the evaluation path alone can move the answer. A claim
+experiment, and the earlier results in this section should be read with that in mind. We cannot tell
+which evaluation path produced the base paper's headline figures, because the paper does not say.
+What this campaign does show, for one system, is how much the evaluation path by itself can shift the
+result. A claim
 about this class of system drawn from a mock run is a claim about the mock, not about the model it
 replaces.
 
@@ -204,7 +206,7 @@ replaces.
 
 \begin{table*}[t]
 \centering
-\caption{LLM Accounting per Agent Configuration, Counted When a Call Is or Is Not Made}
+\caption{Model Usage per Agent Configuration, Counted Where Each Call Is Made or Skipped}
 \label{tab:llm}
 \small
 \input{generated/tab_llm.tex}
@@ -212,13 +214,13 @@ replaces.
 
 Table~\ref{tab:llm} reports real model calls, cache hits, degraded proposals, invalid outputs,
 tokens, and latency for each agent configuration, counted at the moment a call is or is not made
-(Section~\ref{sec:method}). Degraded and invalid rates are zero across the whole campaign: no run
-exhausted its budget or met a provider outage, and no schema-invalid output reached the final runs.
-This is a property of \emph{this} campaign, not a standing guarantee. The pilot that preceded it found
-a live cache-poisoning defect, exactly the kind of failure the accounting is designed to catch, and
-the defect was fixed before the campaign began.
+(Section~\ref{sec:method}). Over the whole campaign, the degraded and invalid rates are both zero. No
+run used up its budget or ran into a provider outage, and no output that failed the schema made it
+into the final runs. That holds for \emph{this} campaign and is not guaranteed in general. In the
+pilot that came before it we found a live cache-poisoning defect, which is precisely what the
+accounting is meant to catch, and we fixed it before the campaign started.
 
-The agents' overhead is small in absolute terms. Across the \NRunsLive{} live-arm runs, the agents
+In absolute terms, the agents cost little. Across the \NRunsLive{} live-arm runs, the agents
 made \NLlmCallsTotal{} real model calls and consumed \NApiTokensTotal{} API tokens in total, and no run
 came close to the per-run budget: the largest used \NApiTokensMaxRun{} tokens against a cap of
 \NBudgetTokens{}, and at most \NLlmCallsMaxRun{} calls against a cap of \NBudgetCalls{}. The per-run
@@ -231,8 +233,8 @@ portable measure.
 
 \begin{table*}[t]
 \centering
-\caption{Closed-Form Break-Even Points: Assumed Human-Latency Median (s) and Static Provisioning
-  (Units) at Which Each Configuration Stops Beating Its Comparator}
+\caption{Closed-Form Break-Even Points: The Assumed Median Human Latency (s) and Static Provisioning
+  Level (Units) Below Which Each Configuration No Longer Beats Its Comparator}
 \label{tab:sensitivity}
 \small
 \input{generated/tab_sensitivity.tex}

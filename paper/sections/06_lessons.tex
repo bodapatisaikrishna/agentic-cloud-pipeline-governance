@@ -10,34 +10,36 @@ is documented in the accompanying artifact.
 The base design states that execution is deterministic and auditable. Versioned partition creation,
 however, read the current maximum version and then dropped, created, and registered a table in
 separate statements without a lock, so two concurrent callers targeting the same partition could
-compute the same next version and race. The defect appeared as an intermittent continuous-integration
-failure, and we traced it to its root instead of retrying it away: a recovery-agent replay had
-triggered the same DAG as an unrelated test. The fix serializes the read-modify-write behind a
-database advisory lock. \emph{Lesson:} once an agent can trigger real work, every shared resource it
-touches becomes a concurrency surface that a single-actor test never exercises.
+compute the same next version and race. It first showed up as a continuous-integration failure that
+came and went. We tracked it down instead of retrying until it passed, and found that a replay by the
+recovery agent had triggered the same DAG that an unrelated test was using. The fix wraps the
+read-modify-write in a database advisory lock. \emph{Lesson:} as soon as an agent can start real
+work, every shared resource it touches becomes a concurrency problem, and a test with a single actor
+will never exercise it.
 
 \subsection{L2: An Action Could Be Lost From the Audit Trail}
-The audit row was originally written \emph{after} execution. A crash, an out-of-memory kill, or a
-database outage in that window could therefore leave an action that genuinely happened with no
-record, and because the control loop suppresses per-tick exceptions, the failure was silent. For a
-system whose central claim is that every action is policy-gated and auditable, an executed action
-without an audit record contradicts that claim directly. The intent row, which already carries the
-policy verdict, is now committed \emph{before} execution and updated with the outcome afterward.
-\emph{Lesson:} record the intent before the action, not after it.
+At first the audit row was written \emph{after} execution. If the process crashed, was killed for
+running out of memory, or lost its database in that window, an action could take effect and leave no
+record behind. The control loop swallows per-tick exceptions, so nobody would have noticed. The
+system's main promise is that every action passes the policy gate and is audited, and an action with
+no audit row breaks that promise outright. Now the intent row, which already holds the policy verdict,
+is committed \emph{before} execution and updated with the outcome once the action finishes.
+\emph{Lesson:} write down the intent first and act second.
 
 \subsection{L3: The Detector That Had No Callers}
-The table on which both the recovery-time statistics and decision scoring depend was written only by
-the fault injector. The monitoring agent updated the detection time of an existing row but never
-created a new row, which left a complete, unit-tested, deterministic anomaly detector with no caller.
-In a deployment without the injector, a genuinely detected incident would have reached the audit
-table but never become an incident record, so production could not have reproduced the experiment's
-own metrics. We found the gap while planning a later feature, by reading the code rather than through
-a failing test. \emph{Lesson:} a component can pass every test it owns and still be disconnected, so
-trace the data path from production input to the reported metric.
+Only the fault injector wrote to the table that both the recovery-time statistics and decision
+scoring read from. The monitoring agent updated the detection time on a row that already existed but
+never inserted one. The result was a complete, deterministic anomaly detector, with unit tests, that
+nothing called. Without the injector, a real incident that the agent detected would have reached the
+audit table but never become an incident record, and production would have been unable to reproduce
+the experiment's own metrics. We noticed this while planning a later feature, by reading the code; no
+test failed. \emph{Lesson:} a component can pass all of its own tests and still be disconnected, so
+follow the data from production input all the way to the reported metric.
 
 \subsection{L4: Two Taxonomies That Never Met}
-Decision correctness is scored against an accepted-mitigation set (Eq.~\ref{eq:decision}) keyed by the
-name of the \emph{injected scenario}, whereas live incidents carry different fault-type names.
+Decision correctness is scored against a set of accepted mitigations (Eq.~\ref{eq:decision}), and
+that set is keyed by the name of the \emph{injected scenario}. Live incidents use different fault-type
+names.
 Applying the set to live incidents would have marked every real incident ``incorrect by
 construction.'' A mapping from live fault types onto the same accepted-mitigation set was added
 before the metric was exposed outside the experiment harness. \emph{Lesson:} a metric defined in the
@@ -45,11 +47,12 @@ experiment's own vocabulary cannot move into production without an explicit mapp
 
 \subsection{L5: Hermeticity by Enumeration Does Not Scale}
 One class of unit-test failure kept recurring: a test that did not mock one module's database handle
-turned a millisecond test into a thirty-second connection-pool timeout. We fixed it instance by
-instance four times before addressing the mechanism. Every such call now goes through a single
-connection-pool accessor that is patched to fail fast under test. Mutation testing of this guard, by
-removing one essential mock, made six tests fail within seconds, each naming the exact cause.
-\emph{Lesson:} when the same bug appears a fourth time, fix the mechanism rather than the instance.
+turned a millisecond test into a thirty-second connection-pool timeout. We patched it one test at a
+time, four times over, before dealing with the cause. Now every such call goes through one
+connection-pool accessor, and under test that accessor is patched to fail immediately. Mutation
+testing of this guard, by removing one essential mock, made six tests fail within seconds, each naming
+the exact cause. \emph{Lesson:} by the fourth time the same bug turns up, stop fixing instances and
+fix the mechanism.
 
 \subsection{L6: What the Adversarial Corpus Found}
 Grading a generated corpus against an independent oracle revealed three things (numbers in
@@ -62,14 +65,14 @@ at least one, and any violation follows the ordinary invalid-output path.
 
 Second, under a newer policy-engine release than the one this project pins, some floating-point budget
 comparisons evaluated as within budget when they were not, whereas the pinned release behaved
-correctly. We report this observation without having traced its root cause or reported it upstream,
-because the consequence holds either way: the version pin is essential, and the corpus now serves as
-an integration test that would catch a version upgrade that changes these semantics again.
+correctly. We have not traced the root cause or filed an upstream report. Whatever the cause, the
+practical consequence is the same: the version pin is necessary, and the corpus now doubles as an
+integration test that would flag any future upgrade that changes these semantics.
 
-Third, once the contract fixes were in place, the policy agreed with the independent specification on
-every graded case. The containment claim is therefore a measured property with a confidence interval
-rather than an assertion repeated from the code under test. \emph{Lesson:} a safety property asserted
-by a policy's own authors is not evidence until an independent oracle has tried to break it.
+Third, with the contract fixes in place, the policy matched the independent specification on every
+graded case. Containment is now something we measured, with a confidence interval, and not a claim
+copied from the code under test. \emph{Lesson:} when a policy's own authors say it is safe, treat
+that as a hypothesis until an independent oracle has tried and failed to break it.
 
 \subsection{L7: The Pilot Found a Retired Model}
 Before the live campaign, an eight-run pilot at the real paper timings measured cost and wall time.
@@ -77,7 +80,7 @@ Within minutes it found that the provider had retired the small model configured
 agent (HTTP 410, end of life). Because monitoring is the detector in every agent configuration, the
 full campaign would otherwise have run with a detector degraded to a no-op, and every downstream
 number would have measured the provider's retirement of the model rather than the system. The
-supervisor's degraded-streak guard would eventually have caught the problem, but only after several
-wasted runs; the pilot caught it on the first call. \emph{Lesson:} the cheapest validity check in a
-long, paid experiment is a short run at the real settings, because a model that a provider lists is
-not necessarily a model that still answers.
+supervisor has a guard against streaks of degraded calls, so it would have caught the problem
+eventually, but only after several runs had been wasted. The pilot caught it on the first call.
+\emph{Lesson:} in a long experiment that costs money, the cheapest validity check is a short run with
+the real settings. A model that a provider still lists may no longer answer.
