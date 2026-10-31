@@ -6,7 +6,7 @@ flatters the headline numbers: the path the tests exercised was not the path pro
 lesson below was found through an audit or an experiment rather than through a failing test, and each
 is documented in the accompanying artifact.
 
-\subsection{L1: The Shared Resource Nobody Declared Concurrency-Unsafe}
+\subsection{L1: The Shared Resource Nobody Declared Concurrency-Unsafe}\label{sec:l1}
 The base design states that execution is deterministic and auditable. Versioned partition creation,
 however, read the current maximum version and then dropped, created, and registered a table in
 separate statements without a lock, so two concurrent callers targeting the same partition could
@@ -17,7 +17,7 @@ read-modify-write in a database advisory lock. \emph{Lesson:} as soon as an agen
 work, every shared resource it touches becomes a concurrency problem, and a test with a single actor
 will never exercise it.
 
-\subsection{L2: An Action Could Be Lost From the Audit Trail}
+\subsection{L2: An Action Could Be Lost From the Audit Trail}\label{sec:l2}
 At first the audit row was written \emph{after} execution. If the process crashed, was killed for
 running out of memory, or lost its database in that window, an action could take effect and leave no
 record behind. The control loop swallows per-tick exceptions, so nobody would have noticed. The
@@ -26,7 +26,7 @@ no audit row breaks that promise outright. Now the intent row, which already hol
 is committed \emph{before} execution and updated with the outcome once the action finishes.
 \emph{Lesson:} write down the intent first and act second.
 
-\subsection{L3: The Detector That Had No Callers}
+\subsection{L3: The Detector That Had No Callers}\label{sec:l3}
 Only the fault injector wrote to the table that both the recovery-time statistics and decision
 scoring read from. The monitoring agent updated the detection time on a row that already existed but
 never inserted one. The result was a complete, deterministic anomaly detector, with unit tests, that
@@ -36,7 +36,7 @@ the experiment's own metrics. We noticed this while planning a later feature, by
 test failed. \emph{Lesson:} a component can pass all of its own tests and still be disconnected, so
 follow the data from production input all the way to the reported metric.
 
-\subsection{L4: Two Taxonomies That Never Met}
+\subsection{L4: Two Taxonomies That Never Met}\label{sec:l4}
 Decision correctness is scored against a set of accepted mitigations (Eq.~\ref{eq:decision}), and
 that set is keyed by the name of the \emph{injected scenario}. Live incidents use different fault-type
 names.
@@ -45,7 +45,7 @@ construction.'' A mapping from live fault types onto the same accepted-mitigatio
 before the metric was exposed outside the experiment harness. \emph{Lesson:} a metric defined in the
 experiment's own vocabulary cannot move into production without an explicit mapping.
 
-\subsection{L5: Hermeticity by Enumeration Does Not Scale}
+\subsection{L5: Hermeticity by Enumeration Does Not Scale}\label{sec:l5}
 One class of unit-test failure kept recurring: a test that did not mock one module's database handle
 turned a millisecond test into a thirty-second connection-pool timeout. We patched it one test at a
 time, four times over, before dealing with the cause. Now every such call goes through one
@@ -54,7 +54,7 @@ testing of this guard, by removing one essential mock, made six tests fail withi
 the exact cause. \emph{Lesson:} by the fourth time the same bug turns up, stop fixing instances and
 fix the mechanism.
 
-\subsection{L6: What the Adversarial Corpus Found}
+\subsection{L6: What the Adversarial Corpus Found}\label{sec:l6}
 Grading a generated corpus against an independent oracle revealed three things (numbers in
 Section~\ref{sec:results}). First, the contract layer had two gaps. The cost policy priced a scaling
 target against the budget but did not check its floor. Zero workers, which halts ingestion entirely,
@@ -74,7 +74,7 @@ graded case. Containment is now something we measured, with a confidence interva
 copied from the code under test. \emph{Lesson:} when a policy's own authors say it is safe, treat
 that as a hypothesis until an independent oracle has tried and failed to break it.
 
-\subsection{L7: The Pilot Found a Retired Model}
+\subsection{L7: The Pilot Found a Retired Model}\label{sec:l7}
 Before the live campaign, an eight-run pilot at the real paper timings measured cost and wall time.
 Within minutes it found that the provider had retired the small model configured for the monitoring
 agent (HTTP 410, end of life). Because monitoring is the detector in every agent configuration, the

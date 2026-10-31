@@ -18,7 +18,7 @@ process (codebase inventory, filled results, gap analysis) are likewise committe
 Claim & Evidence artifact & Generating code \\
 \midrule
 \texttt{full} vs.\ \texttt{baseline}: MTTR $\NRelpctMttrSFull{}$\%, cost $\NRelpctCostUnitsFull{}$\%,
-  both $p_{\mathrm{Holm}}<0.05$; the MTTR gain is mostly a simulator artifact (L8) &
+  both $p_{\mathrm{Holm}}<0.05$; the MTTR gain is mostly a simulator artifact (L8, \S\ref{sec:humanartifact}) &
   Tables~\ref{tab:main}, \ref{tab:effects} &
   \texttt{analysis.paper\_stats}, \texttt{paper\_artifacts} \\
 \texttt{full} increases manual interventions vs.\ \texttt{baseline} ($\NRelpctManualInterventionsFull{}$\%) &
@@ -50,7 +50,7 @@ Zero degraded/invalid live LLM calls in the final campaign &
 Cross-model sweep and trust-core evaluation not run; framed as future work, not measured &
   \texttt{paper2/\allowbreak GAP\_ANALYSIS.md}, \texttt{paper2/\allowbreak results\_filled.md} &
   n/a: absence verified by exhaustive repository search \\
-L1--L7 production-hardening lessons (\S\ref{sec:lessons}) &
+L1--L8 production-hardening lessons (\S\ref{sec:lessons}) &
   \texttt{DEVIATIONS.md} (entries cited per lesson) &
   Regression tests named in each entry \\
 \bottomrule
