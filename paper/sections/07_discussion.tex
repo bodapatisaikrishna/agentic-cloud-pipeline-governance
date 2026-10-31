@@ -12,7 +12,8 @@ contract-layer gaps that the system's own tests had missed. Fourth, before a lon
 short pilot at the real settings. Ours hit a retired model on its very first call.
 
 \subsection{Deployment Implications}
-For deployment, the most relevant decision-quality figure is $\NDeltaDecisionCorrectFull{}$, not the
+For deployment, the most relevant decision-quality figure is $\NDeltaDecisionCorrectFull{}$
+(Table~\ref{tab:effects}), not the
 headline MTTR: at these settings \texttt{full} executes an accepted mitigation in fewer than half of
 its runs. Together with the rise in manual interventions, this campaign gives no support for running
 this class of system unattended and fully autonomously against real infrastructure. The results
@@ -32,7 +33,7 @@ that stays open could escalate again on tick after tick. Repeated denials could 
 the human. Both could be happening at once. Telling these apart needs a per-tick trace of proposal
 outcomes across the life of a fault, and the current telemetry does not keep one.
 Section~\ref{sec:humanartifact} settles one piece: the median human-resolved \texttt{full} run
-escalated \NHumanEscalationsFull{} times, so repeated escalation on an open fault is at least part of
+escalated \NHumanEscalationsFull{} times (Table~\ref{tab:humancheck}), so repeated escalation on an open fault is at least part of
 the mechanism. We leave the rest open and do not try to infer it from the total. Readers should not
 assume it resolves in the
 system's favor.
@@ -74,7 +75,7 @@ reports, and the metered part should not be read as a like-for-like measurement.
 \subsubsection{Scope of the Testbed}
 The testbed is a single machine. The resource-contention scenario applies real CPU stress, which is
 why runs cannot be parallelized and why the size of the campaign is bounded. The policy engine is
-pinned to one release, and lesson L6 (Section~\ref{sec:l6}) shows that a newer release from the
+pinned to one release (Table~\ref{tab:testbed}), and lesson L6 (Section~\ref{sec:l6}) shows that a newer release from the
 same vendor would have changed the adversarial result had the version not been pinned. We disclose
 this as a property of our evaluation, not as a defect we investigated in the policy engine. Only four
 fault types were injected, whereas a real pipeline's incident taxonomy is larger, and lesson L4

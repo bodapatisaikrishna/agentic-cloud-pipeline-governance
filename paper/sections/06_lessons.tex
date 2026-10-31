@@ -63,7 +63,7 @@ raised an exception inside the gate before the audit row was written, so a rejec
 leave no record. Both gaps are now closed in the contract layer: scaling targets must be integers of
 at least one, and any violation follows the ordinary invalid-output path.
 
-Second, under a newer policy-engine release than the one this project pins, some floating-point budget
+Second, under a newer policy-engine release than the one this project pins (Table~\ref{tab:testbed}), some floating-point budget
 comparisons evaluated as within budget when they were not, whereas the pinned release behaved
 correctly. We have not traced the root cause or filed an upstream report. Whatever the cause, the
 practical consequence is the same: the version pin is necessary, and the corpus now doubles as an

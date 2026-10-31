@@ -105,7 +105,8 @@ machine, and cloud-init installs Docker, generates every secret on the machine i
 Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. Caddy
 sits in front as a reverse proxy, gets a certificate from Let's Encrypt, and serves the API over
 HTTPS. Ports 443 and 80 are open to the internet, while SSH is open only to the deployer's address.
-The policy engine is the same pinned release used in the campaign, built for Arm64. There is no
+The policy engine is the same pinned release used in the campaign (Table~\ref{tab:testbed}),
+built for Arm64. There is no
 production pipeline behind this deployment, so it runs in \texttt{shadow} mode with the mock model and
 a no-op connector: it watches and proposes, and it never acts. We checked that the certificate is
 valid, that HTTP redirects to HTTPS, that every protected endpoint asks for authentication, and that

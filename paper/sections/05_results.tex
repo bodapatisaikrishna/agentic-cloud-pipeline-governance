@@ -60,8 +60,8 @@ smaller than the one the mock evaluation of the same configuration produces
 rewarded repeated escalation (Section~\ref{sec:humanartifact}). This caveat applies to every MTTR
 comparison that follows.
 
-Cost is the only headline metric whose change reaches the base paper's reported 25\% reduction, but
-the reduction depends on the assumed provisioning gap (Section~\ref{sec:sensitivity}). Most of it
+Cost is the only headline metric whose change reaches the base paper's reported 25\% reduction
+(Table~\ref{tab:effects}), but the reduction depends on the assumed provisioning gap (Section~\ref{sec:sensitivity}). Most of it
 comes from the provisioning term of Eq.~\eqref{eq:cost}, which is an assumption, rather than from
 metered compute. The pooled figure also hides two features of the cost data. First, the saving
 depends on the scenario: the median cost of \texttt{full} is below that of \texttt{baseline} in three
@@ -69,7 +69,7 @@ scenarios but above it in \texttt{ingress\_burst} (\NCostScenFullIngressBurst{} 
 \NCostScenBaselineIngressBurst{} units). Second, agent configurations that do not right-size cost far
 more than \texttt{baseline} in the pooled data: \texttt{monitor\_only} and \texttt{recovery\_only} by
 \NRelpctCostUnitsMonitorOnly{}\% and \NRelpctCostUnitsRecoveryOnly{}\%, and \texttt{schema\_only} by
-\NRelpctCostUnitsSchemaOnly{}\%. Because these configurations hold the same static allocation as
+\NRelpctCostUnitsSchemaOnly{}\% (Table~\ref{tab:effects}). Because these configurations hold the same static allocation as
 \texttt{baseline}, the excess lies entirely in the metered compute term, and it is largely an
 artifact of how that term is measured (Section~\ref{sec:limitations}). Resources are sampled once
 before injection and once after the settle, so an agent configuration meters compute over its full
@@ -77,7 +77,8 @@ before injection and once after the settle, so an agent configuration meters com
 a few seconds. The saving is therefore better attributed to the right-sizing configurations, chiefly
 the optimization agent, than to agent control in general.
 
-Manual interventions move in the opposite direction. The median rises from \NIntervBaselineMedian{}
+Manual interventions move in the opposite direction (Tables~\ref{tab:main} and~\ref{tab:effects}).
+The median rises from \NIntervBaselineMedian{}
 to \NIntervFullMedian{} ($\Delta=\NDiffManualInterventionsFull{}$,
 $\NRelpctManualInterventionsFull{}$\%, $\delta=\NDeltaManualInterventionsFull{}$,
 $p_{\mathrm{Holm}}\NPHolmManualInterventionsFull{}$), the reverse of the base paper's reported
@@ -94,7 +95,8 @@ orchestration on recovery time and cost, but not on manual interventions.
 \subsection{Is the Full System Better Than Cheap, Non-Agent Automation?}
 
 The \texttt{rule\_based} and \texttt{autoscale} configurations call no model, yet both beat every
-agent configuration on MTTR, including \texttt{full}. That ranking follows from the remediation
+agent configuration on MTTR, including \texttt{full} (Tables~\ref{tab:main}
+and~\ref{tab:effects}). That ranking follows from the remediation
 latencies we modelled in Section~\ref{sec:method}. Each comparator resolves a covered fault after a
 fixed 30\,s or 20\,s, so its numbers show what an idealized non-LLM responder could do, not how fast a
 deployed one actually is. \texttt{rule\_based} reaches \NMttrRuleBasedMedian{}\,s
@@ -104,7 +106,7 @@ $\delta=\NDeltaMttrSAutoscale{}$), compared with $\NRelpctMttrSFull{}$\% for \te
 raises manual interventions (\mbox{\NRelpctManualInterventionsRuleBased{}\%} and
 \mbox{\NRelpctManualInterventionsAutoscale{}\%}), while \texttt{full} raises them.
 
-On cost, \texttt{autoscale} moves the median by \NRelpctCostUnitsAutoscale{}\%, less than the
+On cost (Table~\ref{tab:effects}), \texttt{autoscale} moves the median by \NRelpctCostUnitsAutoscale{}\%, less than the
 \NRelpctCostUnitsFull{}\% achieved by \texttt{full}. \texttt{rule\_based}, which does not
 right-size, shows no cost effect ($\NRelpctCostUnitsRuleBased{}$\%,
 $p_{\mathrm{Holm}}=\NPHolmCostUnitsRuleBased{}$), as its design predicts. By construction, neither
@@ -118,7 +120,7 @@ system does not beat cheap automation on speed or on manual interventions.
 
 The \texttt{decision\_correct} metric is scored against a per-scenario set of accepted mitigations
 (Eq.~\eqref{eq:decision}, Section~\ref{sec:method}), and every non-agent configuration scores zero by
-construction. Among the agent configurations, only \texttt{full}
+construction. Among the agent configurations (Table~\ref{tab:effects}), only \texttt{full}
 ($\delta=\NDeltaDecisionCorrectFull{}$, $p_{\mathrm{Holm}}\NPHolmDecisionCorrectFull{}$),
 \texttt{optimization\_only} ($\delta=\NDeltaDecisionCorrectOptimizationOnly{}$), and
 \texttt{schema\_only} ($\delta=\NDeltaDecisionCorrectSchemaOnly{}$) change the metric significantly;
@@ -185,7 +187,7 @@ decision-correct score goes from \NLiveVsMockDecisionCorrectLive{} live to
 \NLiveVsMockFreshnessSMock{}\,s.
 
 Cost goes the opposite way. The live arm costs less than the mock arm (\NLiveVsMockCostUnitsLive{}
-vs.\ \NLiveVsMockCostUnitsMock{} units), and the mock even costs more than \texttt{baseline}. We think
+vs.\ \NLiveVsMockCostUnitsMock{} units, Table~\ref{tab:live_mock}), and the mock even costs more than \texttt{baseline}. We think
 most of this gap comes from the harness, not the model. The campaign never reset two global settings
 between runs, the Airflow pool size and the streaming-worker target, so every run started from
 whatever the previous agent action had left behind. The mock arm ran last, right after
