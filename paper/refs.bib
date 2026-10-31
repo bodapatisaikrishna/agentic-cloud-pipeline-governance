@@ -1,19 +1,21 @@
-% Every entry below was checked against its primary source (Crossref / arXiv / publisher index).
+% Every entry below was checked against its primary source (Crossref / arXiv / publisher index);
+% re-verified 2026-10-31, and preprints with a published version now cite it.
 % Do not add an entry that has not been verified the same way.
 % Trimmed 2026-09-27 to the 30 most load-bearing references (from an 87-entry pool built during a
 % five-agent literature-review expansion); see paper2/references.md for the full pool and the
 % selection rationale, and paper/_archive_v1/ for nothing (this trim only touched refs.bib and
 % 02_related.tex, not prose sections).
 
-@misc{kirubakaran2025governing,
-  title         = {Governing Cloud Data Pipelines with Agentic {AI}},
-  author        = {Kirubakaran, Aswathnarayan Muthukrishnan and others},
-  year          = {2025},
-  eprint        = {2512.23737},
-  doi           = {10.48550/arXiv.2512.23737},
-  archiveprefix = {arXiv},
-  howpublished  = {arXiv:2512.23737},
-  note      = {doi: \url{10.48550/arXiv.2512.23737}}
+@article{kirubakaran2025governing,
+  title   = {Governing Cloud Data Pipelines with Agentic {AI}},
+  author  = {Kirubakaran, Aswathnarayan Muthukrishnan and others},
+  journal = {Int. J. Comput. Sci. Trends Technol. (IJCST)},
+  volume  = {13},
+  number  = {6},
+  month   = dec,
+  year    = {2025},
+  doi     = {10.5281/zenodo.18048728},
+  note    = {doi: \url{10.5281/zenodo.18048728}; also arXiv:2512.23737}
 }
 @inproceedings{yao2022react,
   title     = {{ReAct}: Synergizing Reasoning and Acting in Language Models},
@@ -98,6 +100,7 @@
   journal = {Ann. Statist.},
   volume  = {7},
   number  = {1},
+  pages   = {1--26},
   year    = {1979},
   doi     = {10.1214/aos/1176344552},
   note      = {doi: \url{10.1214/aos/1176344552}}
@@ -115,15 +118,14 @@
 }
 
 % -- The mock-versus-live / sim-to-real evaluation gap (this paper's central thesis) -----------------
-@misc{liu2026simtoreal,
-  title         = {The Sim-to-Real Gap of Foundation Model Agents: A Unified {MDP} Perspective},
-  author        = {Liu, Xiaoou and Chen, Tiejin and Li, Weibo and Hu, Xiyang and Wei, Hua},
-  year          = {2026},
-  eprint        = {2606.07017},
-  doi           = {10.48550/arXiv.2606.07017},
-  archiveprefix = {arXiv},
-  howpublished  = {arXiv:2606.07017},
-  note          = {{KDD} 2026 Blue Sky Ideas Track, doi: \url{10.48550/arXiv.2606.07017}}
+@inproceedings{liu2026simtoreal,
+  title     = {The Sim-to-Real Gap of Foundation Model Agents: A Unified {MDP} Perspective},
+  author    = {Liu, Xiaoou and Chen, Tiejin and Li, Weibo and Hu, Xiyang and Wei, Hua},
+  booktitle = {Proc. 32nd ACM SIGKDD Conf. Knowl. Discov. Data Min. (KDD), Blue Sky Ideas Track},
+  pages     = {13192--13198},
+  year      = {2026},
+  doi       = {10.1145/3770855.3818660},
+  note      = {doi: \url{10.1145/3770855.3818660}}
 }
 @misc{zhu2026realusersim,
   title         = {{RealUserSim}: Bridging the Reality Gap in Agent Benchmarking via Grounded User Simulation},
@@ -145,15 +147,15 @@
   howpublished  = {arXiv:2601.06112},
   note      = {doi: \url{10.48550/arXiv.2601.06112}}
 }
-@misc{xu2024agentcompany,
-  title         = {{TheAgentCompany}: Benchmarking {LLM} Agents on Consequential Real World Tasks},
-  author        = {Xu, Frank F. and others},
-  year          = {2024},
-  eprint        = {2412.14161},
-  doi           = {10.48550/arXiv.2412.14161},
-  archiveprefix = {arXiv},
-  howpublished  = {arXiv:2412.14161},
-  note      = {doi: \url{10.48550/arXiv.2412.14161}}
+@inproceedings{xu2024agentcompany,
+  title     = {{TheAgentCompany}: Benchmarking {LLM} Agents on Consequential Real World Tasks},
+  author    = {Xu, Frank F. and others},
+  booktitle = {Proc. Adv. Neural Inf. Process. Syst. (NeurIPS)},
+  volume    = {38},
+  pages     = {10291--10321},
+  year      = {2025},
+  doi       = {10.52202/085713-0315},
+  note      = {doi: \url{10.52202/085713-0315}}
 }
 
 % -- Benchmark validity ---------------------------------------------------------------------------
@@ -200,15 +202,14 @@
 }
 
 % -- Policy as code and runtime governance (the OPA gate) ------------------------------------------
-@misc{joshi2026deontic,
-  title         = {Deontic Policies for Runtime Governance of Agentic {AI} Systems},
-  author        = {Joshi, Anupam and Finin, Tim and Joshi, Karuna Pande and Kagal, Lalana},
-  year          = {2026},
-  eprint        = {2606.19464},
-  doi           = {10.48550/arXiv.2606.19464},
-  archiveprefix = {arXiv},
-  howpublished  = {arXiv:2606.19464},
-  note      = {doi: \url{10.48550/arXiv.2606.19464}}
+@inproceedings{joshi2026deontic,
+  title     = {Deontic Policies for Runtime Governance of Agentic {AI} Systems},
+  author    = {Joshi, Anupam and Finin, Tim and Joshi, Karuna Pande and Kagal, Lalana},
+  booktitle = {Proc. IEEE Int. Conf. Web Services (ICWS)},
+  pages     = {1255--1264},
+  year      = {2026},
+  doi       = {10.1109/ICWS72778.2026.00159},
+  note      = {doi: \url{10.1109/ICWS72778.2026.00159}}
 }
 @misc{zhang2026actgov,
   title         = {{ActGov}: Governing {LLM} Agent Actions via Policy-Constrained Validation},
@@ -249,20 +250,20 @@
   doi       = {10.1145/3627673.3680016},
   note      = {doi: \url{10.1145/3627673.3680016}}
 }
-@misc{luo2025opsagent,
-  title         = {{OpsAgent}: An Evolving Multi-agent System for Incident Management in Microservices},
-  author        = {Luo, Yu and others},
-  year          = {2025},
-  eprint        = {2510.24145},
-  doi           = {10.48550/arXiv.2510.24145},
-  archiveprefix = {arXiv},
-  howpublished  = {arXiv:2510.24145},
-  note      = {doi: \url{10.48550/arXiv.2510.24145}}
+@inproceedings{luo2025opsagent,
+  title     = {{OpsAgent}: An Evolving Multi-agent System for Incident Management in Microservices},
+  author    = {Luo, Yu and others},
+  booktitle = {Proc. 41st IEEE/ACM Int. Conf. Autom. Softw. Eng. (ASE)},
+  pages     = {3896--3907},
+  year      = {2026},
+  doi       = {10.1145/3832783.3834479},
+  note      = {doi: \url{10.1145/3832783.3834479}}
 }
 @inproceedings{rzadca2020autopilot,
   title         = {Autopilot: Workload Autoscaling at {Google}},
   author        = {Rzadca, Krzysztof and others},
   booktitle     = {Proc. 15th Eur. Conf. Comput. Syst. (EuroSys)},
+  pages         = {1--16},
   year          = {2020},
   doi           = {10.1145/3342195.3387524},
   note      = {doi: \url{10.1145/3342195.3387524}}
