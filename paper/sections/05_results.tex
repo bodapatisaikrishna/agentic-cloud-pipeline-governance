@@ -50,7 +50,7 @@ Table~\ref{tab:main} reports medians and interquartile ranges per configuration,
 Table~\ref{tab:effects} compares each configuration with \texttt{baseline} using bootstrap confidence
 intervals, Cliff's $\delta$, and Holm-corrected Mann--Whitney $p$-values.
 Figures~\ref{fig:mttr} and~\ref{fig:effects} show the underlying distributions and effect sizes. The
-\texttt{full} configuration changes MTTR from \NMttrBaselineMedian{}\,s to \NMttrFullMedian{}\,s
+\texttt{full} configuration changes MTTR (Eq.~\eqref{eq:mttr}) from \NMttrBaselineMedian{}\,s to \NMttrFullMedian{}\,s
 ($\Delta=\NDiffMttrSFull{}$\,s, $\NRelpctMttrSFull{}$\%, Cliff's $\delta=\NDeltaMttrSFull{}$,
 $p_{\mathrm{Holm}}\NPHolmMttrSFull{}$) and cost from \NCostBaselineMedian{} to \NCostFullMedian{}
 units ($\NRelpctCostUnitsFull{}$\%, $\delta=\NDeltaCostUnitsFull{}$,
@@ -117,14 +117,14 @@ system does not beat cheap automation on speed or on manual interventions.
 \subsection{Decision Quality}\label{sec:decision}
 
 The \texttt{decision\_correct} metric is scored against a per-scenario set of accepted mitigations
-(Eq.~\ref{eq:decision}, Section~\ref{sec:method}), and every non-agent configuration scores zero by
+(Eq.~\eqref{eq:decision}, Section~\ref{sec:method}), and every non-agent configuration scores zero by
 construction. Among the agent configurations, only \texttt{full}
 ($\delta=\NDeltaDecisionCorrectFull{}$, $p_{\mathrm{Holm}}\NPHolmDecisionCorrectFull{}$),
 \texttt{optimization\_only} ($\delta=\NDeltaDecisionCorrectOptimizationOnly{}$), and
 \texttt{schema\_only} ($\delta=\NDeltaDecisionCorrectSchemaOnly{}$) change the metric significantly;
 \texttt{monitor\_only} and \texttt{recovery\_only} do not. Against an all-zero comparator, Cliff's
 $\delta$ equals the treatment group's success rate, so these values are also correct-mitigation
-rates: \texttt{full} executes an accepted mitigation in $\NDeltaDecisionCorrectFull{}$ of its runs.
+rates in the sense of Eq.~\eqref{eq:decision}: \texttt{full} executes an accepted mitigation in $\NDeltaDecisionCorrectFull{}$ of its runs.
 This is the one metric on which the live system achieves something that neither the static baseline
 nor the rule-based comparator can achieve at all. It answers RQ3 only in part, however, because fewer
 than half of the full system's runs act correctly. As Section~\ref{sec:livemock} shows, the mock
@@ -177,7 +177,7 @@ also cautions against treating any single scenario's result as a configuration's
 Table~\ref{tab:live_mock} and Fig.~\ref{fig:live_mock} compare \texttt{full} under two conditions
 that differ only in the model: arm A (live) and arm C, its deterministic-mock counterpart. MTTR is
 \NLiveVsMockMttrSLive{}\,s with the live model and \NLiveVsMockMttrSMock{}\,s with the mock, a
-divergence ratio of $R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$ (Eq.~\ref{eq:ratio}). The median
+divergence ratio of $R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$ (Eq.~\eqref{eq:ratio}). The median
 decision-correct score goes from \NLiveVsMockDecisionCorrectLive{} live to
 \NLiveVsMockDecisionCorrectMock{} mock, even though the live correct-mitigation rate is
 \NDeltaDecisionCorrectFull{}. Manual interventions drop from \NLiveVsMockManualInterventionsLive{} to

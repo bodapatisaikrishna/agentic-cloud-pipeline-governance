@@ -61,14 +61,14 @@ We count a contribution only if this campaign both implements and measures it. F
   \item \textbf{Explicit non-LLM baselines and a decision-quality metric.} A rule-based responder and
     a threshold autoscaler, each modelled with a fixed remediation latency, run through the same
     campaign and show whether the agent system beats cheap automation as well as static
-    orchestration. A correct-mitigation metric shows whether the system acts correctly, not only
-    quickly (Section~\ref{sec:results}).
+    orchestration. A correct-mitigation metric (Eq.~\eqref{eq:decision}) shows whether the system acts
+    correctly, not only quickly (Section~\ref{sec:results}).
   \item \textbf{An adversarial evaluation against an independent oracle.} A generated corpus is graded
     by a specification written separately from the policy code under test, so the containment rate
     does not rest on the policy grading itself (Sections~\ref{sec:results} and~\ref{sec:l6}).
   \item \textbf{A disclosed cost model with closed-form sensitivity analyses} for the two assumptions
     on which the headline numbers depend: the simulated human's latency and the provisioning gap
-    (Eq.~\ref{eq:cost}). We also report where the model's metered term falls short of a like-for-like
+    (Eq.~\eqref{eq:cost}). We also report where the model's metered term falls short of a like-for-like
     measurement (Section~\ref{sec:limitations}).
 \end{enumerate}
 Two more components exist in the code but were not exercised in this campaign, and we describe them

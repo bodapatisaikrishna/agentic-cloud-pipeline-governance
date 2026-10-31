@@ -88,7 +88,7 @@ harness that could test the base paper's claim of model independence is unit-tes
 sweep against real provider models has not been run, so nothing here is evidence for or against that
 claim. \emph{The trust core.} Graduated autonomy, the kill switch, and the blast-radius cap are
 implemented and unit-tested, but every configuration ran in one fixed mode, so no mode transition or
-kill-switch-to-halt latency was measured. \emph{Cost.} Internally the cost model splits compute from
+kill-switch-to-halt latency was measured. \emph{Cost.} Internally the cost model of Eq.~\eqref{eq:cost} splits compute from
 storage, but the per-run data we committed store only the total, and the metered term carries the
 confound described above.
 

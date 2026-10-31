@@ -22,7 +22,7 @@ partitions, and a streaming consumer reads from a Redpanda topic. All telemetry,
 metrics, resource usage, task runs, agent actions, failure events, and manual interventions, is
 written to a PostgreSQL \texttt{telemetry} schema. Every experimental metric in this paper is
 reconstructed from that schema rather than logged separately. The same layer tracks data freshness and
-maintains the cost ledger behind the cost model of Eq.~\ref{eq:cost}.
+maintains the cost ledger behind the cost model of Eq.~\eqref{eq:cost}.
 
 \subsection{Layers 3 and 6: Agents and Orchestration}
 All four agents run the same loop. Each one \emph{observes} a telemetry snapshot, \emph{reasons}
@@ -49,7 +49,7 @@ Agents never emit or execute code.
 Each proposal carries a context built by the system: the projected marginal cost, the remaining
 budget, the number of actions the proposing agent has taken in the last ten minutes, the schema
 compatibility, and whether a prior version exists. The proposal then passes through four Rego policy
-packs: the rate limit of Eq.~\ref{eq:rate}, the cost budget of Eq.~\ref{eq:budget}, a
+packs: the rate limit of Eq.~\eqref{eq:rate}, the cost budget of Eq.~\eqref{eq:budget}, a
 recovery-approval policy that allows rollback only if a prior version exists, and a
 schema-compatibility policy. The gate answers allow, deny, escalate, or allow-and-notify. When the
 policy engine cannot be reached, the gate escalates; it never allows by default.
@@ -69,7 +69,7 @@ Section~\ref{sec:sensitivity} shows how far the headline results move when it ch
 
 \subsection{Cross-Model Harness, Implemented but Not Evaluated}
 The cross-model harness takes one scenario, runs it through a configurable list of LLM backends, and
-scores each model on decision correctness, latency, and token use. That is a direct test of the base
+scores each model on decision correctness (Eq.~\eqref{eq:decision}), latency, and token use. That is a direct test of the base
 paper's model-independence claim. The harness has unit tests, but we did not run or record a sweep
 across real provider models during this campaign, so this paper reports no results from it.
 
