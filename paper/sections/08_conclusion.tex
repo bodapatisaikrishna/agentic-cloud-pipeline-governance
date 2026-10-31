@@ -1,21 +1,23 @@
 \section{CONCLUSION AND FUTURE WORK}\label{sec:conclusion}
 
-We implemented and evaluated a policy-gated multi-agent design for cloud pipeline governance using a
-live remote language model, explicit non-agent baselines, an adversarial evaluation against an
-independent oracle, and closed-form sensitivity analyses. The design holds up only in part. Compared
-with static orchestration, it shortens recovery time, though by less than the original report
-claimed. Even that reduction comes mostly from the simulated engineer, not the agents. It lowers cost by more than claimed, but nearly all of that saving comes from an assumed
-provisioning gap. Manual interventions go up, and two idealized non-LLM comparators recover faster
-still. The result we consider most important concerns the evaluation, not the design. With the same
-code path and the same configuration, a deterministic mock and a live model lead to very different
-conclusions. Recovery times differ by about three orders of magnitude, and the mock reports a perfect
-correct-mitigation score that the live model comes nowhere near. For systems like this one, knowing
-\emph{which} evaluation path produced a number matters at least as much as the number. We keep the
-practical conclusion narrow on purpose. It says nothing about LLM agents in operations in general.
-It does say that a governance claim should come with an account of how it was evaluated, and that
-mock and live numbers are separate findings until both have been measured.
+This paper reported an implementation and evaluation of a policy-gated multi-agent design for
+governing cloud pipelines, using a live remote language model, explicit non-agent baselines, an
+adversarial corpus graded by an independent oracle and closed-form sensitivity analyses. The design is
+only partly supported by the evidence. Against static orchestration it shortens recovery, though less
+than the original report claimed, and most of that reduction turned out to come from the simulated
+engineer rather than from the agents; it lowers cost by more than claimed, but almost entirely through
+an assumed provisioning gap; and it increases manual interventions, while two idealized non-LLM
+comparators recover faster still. In our judgement the most important result is about the
+evaluation rather than the design. Run along the same code path with the same configuration, a
+deterministic mock and a live model led to quite different conclusions, with recovery times about
+three orders of magnitude apart and a perfect correct-mitigation score under the mock that the live
+model did not come close to. For systems of this kind, then, the evaluation path behind a number
+matters at least as much as the number itself. We have deliberately kept the practical conclusion
+narrow and draw nothing from it about LLM agents in operations generally; what it does imply is that a
+governance claim should be accompanied by an account of how it was evaluated, and that mock and live
+numbers should be treated as separate findings until both have been measured.
 
-We see two directions for future work. One is to collect the evidence this campaign lacks: a live
+Future work falls into two parts. One is to collect the evidence this campaign lacks: a live
 cross-model sweep to test model independence, a test of the trust core's mode transitions and
 kill-switch latency under load, a pre-registered re-run with the corrected simulator, per-run state
 resets and a fixed cost window, and deployed controllers and real production traces in place of the

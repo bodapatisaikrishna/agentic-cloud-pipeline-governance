@@ -1,12 +1,12 @@
 \section{RESULTS}\label{sec:results}
 
-All measured values in this section come straight from the campaign's raw telemetry
-(Section~\ref{sec:method}), and each can be traced to the script that computed it. The only numbers
-typed by hand are design constants and figures quoted from the base paper. All \NRunsTotal{} runs
-across the three arms completed; none aborted and none hit the token ceiling. The provenance check
-flagged $\NProvenanceProblems{}$ deviation across the merged arms. Midway through the campaign the
-supervisor had to be restarted after a host infrastructure failure that had nothing to do with the
-experiment. The fix shipped with that restart touched only the supervisor's health check and no code
+Every measured value reported below was computed by a script directly from the raw campaign
+telemetry (Section~\ref{sec:method}); apart from design constants and the figures quoted from the base
+paper, no number was entered by hand. The \NRunsTotal{} runs of the three arms all completed, without
+aborts and without reaching the token ceiling, and the provenance check found
+$\NProvenanceProblems{}$ deviation across the merged arms. It stems from a restart of the supervisor
+partway through the campaign, which was needed after a failure of the host infrastructure unrelated
+to the experiment. The fix shipped with that restart touched only the supervisor's health check and no code
 that a run executes, and we confirmed this with a diff before treating the three arms as one dataset.
 The first three subsections answer RQ1--RQ3 with the live model. Section~\ref{sec:livemock} then shows
 that those answers change depending on whether the model was real (RQ4).
@@ -96,18 +96,18 @@ orchestration on recovery time and cost, but not on manual interventions.
 
 The \texttt{rule\_based} and \texttt{autoscale} configurations call no model, yet both beat every
 agent configuration on MTTR, including \texttt{full} (Tables~\ref{tab:main}
-and~\ref{tab:effects}). That ranking follows from the remediation
-latencies we modelled in Section~\ref{sec:method}. Each comparator resolves a covered fault after a
-fixed 30\,s or 20\,s, so its numbers show what an idealized non-LLM responder could do, not how fast a
-deployed one actually is. \texttt{rule\_based} reaches \NMttrRuleBasedMedian{}\,s
+and~\ref{tab:effects}). This ordering is largely a consequence of the
+remediation latencies assumed in Section~\ref{sec:method}: a covered fault is resolved after a fixed
+30\,s or 20\,s, so the comparators indicate what an idealized non-LLM responder could achieve and say
+little about the speed of a deployed one. \texttt{rule\_based} reaches \NMttrRuleBasedMedian{}\,s
 ($\NRelpctMttrSRuleBased{}$\% relative to \texttt{baseline}, $\delta=\NDeltaMttrSRuleBased{}$), and
 \texttt{autoscale} reaches \NMttrAutoscaleMedian{}\,s ($\NRelpctMttrSAutoscale{}$\%,
-$\delta=\NDeltaMttrSAutoscale{}$), compared with $\NRelpctMttrSFull{}$\% for \texttt{full}. Neither
-raises manual interventions (\mbox{\NRelpctManualInterventionsRuleBased{}\%} and
-\mbox{\NRelpctManualInterventionsAutoscale{}\%}), while \texttt{full} raises them.
+$\delta=\NDeltaMttrSAutoscale{}$), compared with $\NRelpctMttrSFull{}$\% for \texttt{full}. Manual
+interventions go down for both comparators (\mbox{\NRelpctManualInterventionsRuleBased{}\%} and
+\mbox{\NRelpctManualInterventionsAutoscale{}\%}) but up for \texttt{full}.
 
-On cost (Table~\ref{tab:effects}), \texttt{autoscale} moves the median by \NRelpctCostUnitsAutoscale{}\%, less than the
-\NRelpctCostUnitsFull{}\% achieved by \texttt{full}. \texttt{rule\_based}, which does not
+The cost results in Table~\ref{tab:effects} put \texttt{autoscale} at \NRelpctCostUnitsAutoscale{}\%,
+somewhat short of the \NRelpctCostUnitsFull{}\% of \texttt{full}. \texttt{rule\_based}, which does not
 right-size, shows no cost effect ($\NRelpctCostUnitsRuleBased{}$\%,
 $p_{\mathrm{Holm}}=\NPHolmCostUnitsRuleBased{}$), as its design predicts. By construction, neither
 comparator can execute an accepted mitigation (\texttt{decision\_correct}$=0$), and decision quality is
@@ -176,25 +176,26 @@ also cautions against treating any single scenario's result as a configuration's
 \label{fig:live_mock}
 \end{figure*}
 
-Table~\ref{tab:live_mock} and Fig.~\ref{fig:live_mock} compare \texttt{full} under two conditions
-that differ only in the model: arm A (live) and arm C, its deterministic-mock counterpart. MTTR is
-\NLiveVsMockMttrSLive{}\,s with the live model and \NLiveVsMockMttrSMock{}\,s with the mock, a
-divergence ratio of $R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$ (Eq.~\eqref{eq:ratio}). The median
-decision-correct score goes from \NLiveVsMockDecisionCorrectLive{} live to
-\NLiveVsMockDecisionCorrectMock{} mock, even though the live correct-mitigation rate is
-\NDeltaDecisionCorrectFull{}. Manual interventions drop from \NLiveVsMockManualInterventionsLive{} to
-\NLiveVsMockManualInterventionsMock{}. Freshness drops from \NLiveVsMockFreshnessSLive{}\,s to
-\NLiveVsMockFreshnessSMock{}\,s.
+In Table~\ref{tab:live_mock} and Fig.~\ref{fig:live_mock}, \texttt{full} is compared under two
+conditions that differ only in the model, the live model of arm A and the deterministic mock of arm C.
+With the live model the median MTTR is \NLiveVsMockMttrSLive{}\,s, against \NLiveVsMockMttrSMock{}\,s
+under the mock, which gives a divergence ratio $R_{\mathrm{MTTR}}=\NLiveVsMockMttrSRatio{}$
+(Eq.~\eqref{eq:ratio}). The median decision-correct score rises from \NLiveVsMockDecisionCorrectLive{}
+to \NLiveVsMockDecisionCorrectMock{} when the mock replaces the model (the live correct-mitigation rate
+being \NDeltaDecisionCorrectFull{}), and under the mock manual interventions fall from
+\NLiveVsMockManualInterventionsLive{} to \NLiveVsMockManualInterventionsMock{} and freshness from
+\NLiveVsMockFreshnessSLive{}\,s to \NLiveVsMockFreshnessSMock{}\,s.
 
-Cost goes the opposite way. The live arm costs less than the mock arm (\NLiveVsMockCostUnitsLive{}
-vs.\ \NLiveVsMockCostUnitsMock{} units, Table~\ref{tab:live_mock}), and the mock even costs more than \texttt{baseline}. We think
-most of this gap comes from the harness, not the model. The campaign never reset two global settings
-between runs, the Airflow pool size and the streaming-worker target, so every run started from
-whatever the previous agent action had left behind. The mock arm ran last, right after
-\texttt{schema\_only}. In schema drift and upstream delay, the mock's rule-based optimization agent
-does nothing, and mock \texttt{full} meters exactly the compute that live \texttt{schema\_only} did.
-Live \texttt{full} ran first, from another starting state, and its metered compute stayed low in three
-of the four scenarios. The cost difference between the two arms therefore does not cleanly measure
+For cost the direction is reversed: the live arm is cheaper than the mock arm
+(\NLiveVsMockCostUnitsLive{} vs.\ \NLiveVsMockCostUnitsMock{} units, Table~\ref{tab:live_mock}), and
+the mock is even more expensive than \texttt{baseline}. In our view the harness, rather than the
+model, accounts for most of this gap. Two global settings (the Airflow pool size and the
+streaming-worker target) were never reset between runs, so each run inherited whatever state the
+previous agent action had left. The mock arm was the last to run, immediately after
+\texttt{schema\_only}; in schema drift and upstream delay the mock's rule-based optimization agent
+takes no action, and mock \texttt{full} ends up metering the same compute as live
+\texttt{schema\_only}. Live \texttt{full}, which ran first and started from a different state, kept
+its metered compute low in three of the four scenarios. The cost difference between the two arms therefore does not cleanly measure
 what the model changes, and we do not read it that way.
 
 These results answer RQ4. The mock evaluation is not a noisier or scaled-down version of the live
@@ -210,7 +211,7 @@ replaces.
 
 \begin{table*}[t]
 \centering
-\caption{Model Usage per Agent Configuration, Counted Where Each Call Is Made or Skipped}
+\caption{Median Per-Run LLM Usage of Each Agent Configuration (Calls, Cache Hits, Degraded and Invalid Proposals, Tokens, Latency)}
 \label{tab:llm}
 \small
 \input{generated/tab_llm.tex}
@@ -255,7 +256,7 @@ portable measure.
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.75\linewidth]{generated/fig_cost.pdf}
-\caption{Cost reduction of \texttt{full} as a function of the assumed static provisioning level.}
+\caption{Cost reduction of \texttt{full} relative to \texttt{baseline} for static provisioning levels from 4 to 12 units, one curve per right-sized level; the dotted line marks the break-even point.}
 \label{fig:cost}
 \end{figure*}
 

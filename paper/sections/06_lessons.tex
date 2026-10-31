@@ -7,24 +7,25 @@ lesson below was found through an audit or an experiment rather than through a f
 is documented in the accompanying artifact.
 
 \subsection{L1: The Shared Resource Nobody Declared Concurrency-Unsafe}\label{sec:l1}
-The base design states that execution is deterministic and auditable. Versioned partition creation,
-however, read the current maximum version and then dropped, created, and registered a table in
-separate statements without a lock, so two concurrent callers targeting the same partition could
-compute the same next version and race. It first showed up as a continuous-integration failure that
-came and went. We tracked it down instead of retrying until it passed, and found that a replay by the
-recovery agent had triggered the same DAG that an unrelated test was using. The fix wraps the
-read-modify-write in a database advisory lock. \emph{Lesson:} as soon as an agent can start real
-work, every shared resource it touches becomes a concurrency problem, and a test with a single actor
-will never exercise it.
+Although the base design describes execution as deterministic and auditable, our code for creating a
+versioned partition read the current maximum version and then dropped, created and registered a
+table in separate statements with no lock held, so that two callers working on the same partition at
+once could arrive at the same next version. The symptom was an intermittent failure in continuous
+integration. Rather than rerun the job until it passed, we traced it and found that a replay issued by
+the recovery agent had triggered a DAG that an unrelated test was using at the same moment. The
+read-modify-write is now protected by a database advisory lock. \emph{Lesson:} once an agent is
+allowed to start real work, any resource it shares with other actors needs concurrency control, and a
+single-actor test suite will not reveal the problem.
 
 \subsection{L2: An Action Could Be Lost From the Audit Trail}\label{sec:l2}
-At first the audit row was written \emph{after} execution. If the process crashed, was killed for
-running out of memory, or lost its database in that window, an action could take effect and leave no
-record behind. The control loop swallows per-tick exceptions, so nobody would have noticed. The
-system's main promise is that every action passes the policy gate and is audited, and an action with
-no audit row breaks that promise outright. Now the intent row, which already holds the policy verdict,
-is committed \emph{before} execution and updated with the outcome once the action finishes.
-\emph{Lesson:} write down the intent first and act second.
+In the first version the audit row was written \emph{after} execution. A crash in that window,
+whether an out-of-memory kill or a lost database connection, could therefore let an action take
+effect without any record of it, and because the control loop catches per-tick exceptions the loss
+would probably have gone unnoticed. Since the system's central promise is that every action is both
+gated and audited, a single unaudited action would be enough to break it. The intent row, which
+already contains the policy verdict, is now committed \emph{before} execution and completed with the
+outcome afterwards. \emph{Lesson:} the record of what an agent intends to do should be durable before
+the agent does it.
 
 \subsection{L3: The Detector That Had No Callers}\label{sec:l3}
 Only the fault injector wrote to the table that both the recovery-time statistics and decision
@@ -48,31 +49,34 @@ experiment's own vocabulary cannot move into production without an explicit mapp
 \subsection{L5: Hermeticity by Enumeration Does Not Scale}\label{sec:l5}
 One class of unit-test failure kept recurring: a test that did not mock one module's database handle
 turned a millisecond test into a thirty-second connection-pool timeout. We patched it one test at a
-time, four times over, before dealing with the cause. Now every such call goes through one
-connection-pool accessor, and under test that accessor is patched to fail immediately. Mutation
-testing of this guard, by removing one essential mock, made six tests fail within seconds, each naming
-the exact cause. \emph{Lesson:} by the fourth time the same bug turns up, stop fixing instances and
-fix the mechanism.
+time, four times over, before dealing with the cause. All such calls
+now go through a single connection-pool accessor, which the test setup patches to fail at once. When
+we removed one essential mock to check the guard, six tests failed within seconds and each one named
+the cause. \emph{Lesson:} a bug that has been fixed four times in four places is a sign that the
+mechanism producing it needs to change.
 
 \subsection{L6: What the Adversarial Corpus Found}\label{sec:l6}
-Grading a generated corpus against an independent oracle revealed three things (numbers in
-Section~\ref{sec:results}). First, the contract layer had two gaps. The cost policy priced a scaling
-target against the budget but did not check its floor. Zero workers, which halts ingestion entirely,
-was therefore within budget, and so was a negative ``scale-down.'' In addition, non-numeric targets
-raised an exception inside the gate before the audit row was written, so a rejected proposal could
-leave no record. Both gaps are now closed in the contract layer: scaling targets must be integers of
-at least one, and any violation follows the ordinary invalid-output path.
+When the generated corpus was graded against the independent oracle (the numbers are in
+Section~\ref{sec:results}), three findings emerged. The first was a pair of gaps in the contract
+layer. Because the cost policy compared a scaling target with the budget without checking a lower
+bound, a target of zero workers, which stops ingestion altogether, passed as within budget, and a
+negative ``scale-down'' passed as well. Separately, a non-numeric target made the gate raise an
+exception before the audit row had been written, so a proposal that was in effect rejected could leave
+no trace. Both gaps have been closed in the contract layer, which now requires scaling targets to be
+integers no smaller than one and sends any violation down the normal invalid-output path.
 
-Second, under a newer policy-engine release than the one this project pins (Table~\ref{tab:testbed}), some floating-point budget
-comparisons evaluated as within budget when they were not, whereas the pinned release behaved
-correctly. We have not traced the root cause or filed an upstream report. Whatever the cause, the
-practical consequence is the same: the version pin is necessary, and the corpus now doubles as an
-integration test that would flag any future upgrade that changes these semantics.
+The second finding concerned the policy engine itself. Run under a newer release than the one pinned
+for this project (Table~\ref{tab:testbed}), some floating-point budget comparisons came out as within
+budget when they were not, while the pinned release handled them correctly. We have neither traced
+the root cause nor reported it upstream. Whatever the cause turns out to be, the pin is needed, and the
+corpus now also serves as an integration test that should catch any later upgrade that alters these
+semantics.
 
-Third, with the contract fixes in place, the policy matched the independent specification on every
-graded case. Containment is now something we measured, with a confidence interval, and not a claim
-copied from the code under test. \emph{Lesson:} when a policy's own authors say it is safe, treat
-that as a hypothesis until an independent oracle has tried and failed to break it.
+Third, once the contract fixes were in, the policy agreed with the independent specification on all
+graded cases, so containment is now a measured quantity with a confidence interval rather than an
+assertion inherited from the code under test. \emph{Lesson:} a policy that its authors consider safe
+should be regarded as untested until an oracle written independently of it has tried to break it and
+failed.
 
 \subsection{L7: The Pilot Found a Retired Model}\label{sec:l7}
 Before the live campaign, an eight-run pilot at the real paper timings measured cost and wall time.
@@ -109,12 +113,14 @@ Their median MTTR, \NHumanMttrFull{}\,s, is much closer to the \NHumanFastestDra
 from the fastest of \NHumanEscalationsFull{} draws than to the \NHumanFastestDrawBaseline{}\,s of a
 single draw. \texttt{recovery\_only} shows the same pattern (\NHumanMttrRecoveryOnly{}\,s), whereas
 \texttt{monitor\_only}, which escalates once, stays at \NHumanMttrMonitorOnly{}\,s, close to
-\texttt{baseline}. For \texttt{full} and \texttt{recovery\_only}, then, the simulator rather than
-the agents produced most of the MTTR reduction reported in Section~\ref{sec:results}. It also
-explains part of the rise in manual interventions, because every re-escalation adds a row.
+\texttt{baseline}. We conclude that most of the MTTR reduction reported for \texttt{full} and
+\texttt{recovery\_only} in Section~\ref{sec:results} was produced by the simulator and not by the
+agents, and that some of the increase in manual interventions has the same origin, since each
+re-escalation was recorded as a further row.
 
 The simulator now pages the engineer once per incident, starting at the first escalation, with a
-single delay per fault that paired runs share (D-106 in the repository). We plan a pre-registered
-re-run with this fix; this paper reports none of its numbers. \emph{Lesson:} a simulated human
-belongs to the measuring instrument and needs the same scrutiny as the system under test. Its output
-should not change with how often the system asks for help.
+single delay per fault that paired runs share (D-106 in the repository). A pre-registered
+re-run with the corrected simulator is planned, but none of its numbers appear here. \emph{Lesson:}
+because a simulated human is part of the measuring instrument, it has to be checked as carefully as
+the system under test, and in particular its output should not depend on how often the system asks
+it for help.

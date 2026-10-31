@@ -1,11 +1,11 @@
 \section{DISCUSSION}\label{sec:discussion}
 
 \subsection{Implications for Evaluating Governed Agents}
-The gap between mock and live runs (Section~\ref{sec:livemock}) has direct consequences for how
-governed-agent systems are evaluated. Together with the lessons of Section~\ref{sec:lessons}, it
-points to four practices. First, say whether the model in the loop was real or mocked, and when both
-numbers exist, report both; a mock figure tells you about the mock. Second, include cheap non-LLM
-baselines. Here, two idealized ones beat the full agent system on recovery time and manual
+Taken together with the lessons of Section~\ref{sec:lessons}, the difference between mock and live
+runs (Section~\ref{sec:livemock}) suggests four practices for evaluating governed-agent systems. The
+first is to state whether the model in the loop was real or mocked and, where both numbers are
+available, to report both, since a figure obtained with a mock mainly characterizes the mock. The
+second is to include inexpensive non-LLM baselines. Here, two idealized ones beat the full agent system on recovery time and manual
 interventions, and a comparison with static orchestration alone would have hidden that. Third, grade
 safety claims against an oracle that shares no code with the mechanism being tested. Ours found two
 contract-layer gaps that the system's own tests had missed. Fourth, before a long campaign, pay for a
@@ -19,8 +19,8 @@ its runs. Together with the rise in manual interventions, this campaign gives no
 this class of system unattended and fully autonomously against real infrastructure. The results
 instead favor the graduated trust ladder of Section~\ref{sec:system} as the safer production
 default: shadow, approval, and autonomous modes, with a durable kill switch and a per-target action
-cap. They also argue against treating the research benchmark's default of full autonomy as a
-deployment recommendation. For now, the trust core is an architectural response to a question that
+cap. Nor do we think the full autonomy used as the research benchmark's default should be read as a
+recommendation for deployment. For now, the trust core is an architectural response to a question that
 our measurements raise; we have not yet measured whether it works.
 
 \subsection{The Manual-Intervention Mechanism Is Measured, Not Explained}
@@ -28,13 +28,13 @@ Section~\ref{sec:results} shows that \texttt{full} and \texttt{recovery\_only} r
 interventions compared with \texttt{baseline}, which contradicts the base paper. The measurement is
 straightforward: the metric counts rows in the
 \texttt{telemetry.\allowbreak manual\_\allowbreak interventions} table, and every configuration writes
-to that table. Why the count rises is a separate question, and we have not answered it. One fault
-that stays open could escalate again on tick after tick. Repeated denials could end in hand-offs to
-the human. Both could be happening at once. Telling these apart needs a per-tick trace of proposal
-outcomes across the life of a fault, and the current telemetry does not keep one.
-Section~\ref{sec:humanartifact} settles one piece: the median human-resolved \texttt{full} run
-escalated \NHumanEscalationsFull{} times (Table~\ref{tab:humancheck}), so repeated escalation on an open fault is at least part of
-the mechanism. We leave the rest open and do not try to infer it from the total. Readers should not
+to that table. Why the count rises is a separate question, and we have not answered it. Possible explanations include a fault that remains open and is escalated again on successive ticks,
+and repeated denials that eventually end in a hand-off to the human, and the two may well occur
+together. Separating them would require a per-tick trace of proposal outcomes over the lifetime of a
+fault, which the current telemetry does not record. Section~\ref{sec:humanartifact} does settle part
+of the question: the median human-resolved \texttt{full} run escalated \NHumanEscalationsFull{} times
+(Table~\ref{tab:humancheck}), so repeated escalation on an open fault contributes at least some of
+the increase. Beyond that we leave the mechanism open rather than infer it from the totals. Readers should not
 assume it resolves in the
 system's favor.
 
@@ -93,15 +93,17 @@ kill-switch-to-halt latency was measured. \emph{Cost.} Internally the cost model
 storage, but the per-run data we committed store only the total, and the metered term carries the
 confound described above.
 
-Each gap can be closed with a specific, limited piece of work. The cross-model sweep should run on the
-same scenario set against at least two live providers. A separate drill should engage the kill switch
-and a mode transition under load and time both. For cost, the harness should reset the pool size and
-worker target before every run, sample resources at a fixed rate over a window that is the same for
-all configurations, and keep the ledger's component breakdown. The first two gaps are missing
-evidence. The third is a flaw in how we measured, and a re-run with these changes would fix it.
+None of these gaps needs much more than a well-defined piece of additional work. For the cross-model
+question, the sweep would be run on the same scenarios against at least two live providers, and the
+trust core could be tested with a drill that engages the kill switch and a mode transition under load
+while timing both. The cost problem is of a different kind, a flaw in our measurement rather than
+missing evidence; it would be removed by a re-run in which the pool size and worker target are reset
+before every run, resources are sampled at a fixed rate over the same window for all configurations,
+and the component breakdown of the ledger is kept.
 
 \subsubsection{What Would Change Our Conclusion}
-Suppose the live-versus-mock comparison of Section~\ref{sec:livemock} were repeated with another
-provider. If it showed the same order-of-magnitude gap, the central claim would be much stronger. If
-it did not, the gap would look like a feature of this particular model pairing and not of mock
-evaluation in general, and we would report that outcome just as plainly.
+The test we would most like to see is a repetition of the live-versus-mock comparison of
+Section~\ref{sec:livemock} with a different provider. A gap of the same order of magnitude would
+strengthen the central claim considerably; a much smaller one would point to a property of this
+particular model pairing rather than of mock evaluation as such, and we would report that result in
+the same way.

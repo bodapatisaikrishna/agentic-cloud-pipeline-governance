@@ -1,22 +1,24 @@
 \section{BACKGROUND AND RELATED WORK}\label{sec:related}
 
-Four strands of prior work matter here: LLM agents for cloud operations, how far LLM agent
-evaluations can be trusted, runtime governance of agent actions, and the non-LLM automation that such
-agents ought to be compared with. We go through them below and close with how this study differs.
+This study draws on work on LLM agents for cloud operations and on the trustworthiness of agent
+evaluations, and also on runtime governance of agent actions and on the non-LLM automation against
+which such agents should be compared. These areas are reviewed in turn below, and the section ends by
+positioning our study among them.
 
 \subsection{The Base Architecture}
-The base paper~\cite{kirubakaran2025governing} splits the system into a data plane, a policy plane,
-and an agentic control plane. The control plane hosts four bounded agents, and none of them can do
-more than submit a validated action proposal. Its evaluation compares the system with static
-orchestration on a set of injected failures. We kept the same decomposition. Where the paper left a
-choice open, the accompanying artifact records what we chose and what else we considered.
+In the base paper~\cite{kirubakaran2025governing} the system is divided into a data plane, a policy
+plane and an agentic control plane, and the four agents in the control plane are bounded in the sense
+that none of them can do anything beyond submitting a validated action proposal. The paper evaluates
+this design against static orchestration on a set of injected failures. We kept that decomposition
+unchanged; wherever the paper left a decision open, the choice we made (and the alternatives we
+weighed) is recorded in the accompanying artifact.
 
 \subsection{Non-LLM Automation as a Comparator}
-Orchestrators such as Airflow, Prefect, and Dagster are built around execution. They schedule tasks,
-retry them, and raise alerts, but they cannot reason about a failure nobody anticipated. Simple
-automation is still far from weak. Google's Autopilot~\cite{rzadca2020autopilot} is a heuristic
-autoscaler with no LLM, and it manages a large share of Google's fleet. A baseline of this kind is a
-fair comparator, not a strawman. Real pipelines fail for 41 documented reasons~\cite{foidl2024datapipeline},
+Orchestrators such as Airflow, Prefect and Dagster are execution engines: they schedule and retry
+tasks and raise alerts, but they have no way to reason about a failure that nobody planned for. That
+does not make simple automation weak. Google's Autopilot~\cite{rzadca2020autopilot}, for instance,
+is a heuristic autoscaler without any LLM and manages a large share of Google's fleet, so a baseline
+of this kind is a fair point of comparison rather than a strawman. Real pipelines fail for 41 documented reasons~\cite{foidl2024datapipeline},
 and comparing an agent system only with static orchestration says nothing about whether it handles
 those failures better than cheap automation would. In our runs, two idealized heuristic baselines beat
 the full agent system on both recovery time and manual interventions (Section~\ref{sec:results}).
@@ -67,19 +69,20 @@ the same per-action gate that our \texttt{ProposedAction} contract and OPA polic
 A policy bound that is asserted has not thereby been tested. Among extensible benchmarks,
 AgentDojo~\cite{debenedetti2024agentdojo} and the Agent Security Bench~\cite{zhang2024asb}, which
 reports attack success rates of up to 84.3\% against weak defenses, are the closest to the corpus used
-here. The difference lies in the oracle. Ours is an independently written specification of the policy
-rather than the policy engine under test, so the containment figure does not depend on the policy
-grading itself.
+here. Where we differ is in the oracle: our verdicts come from a separately written specification of
+the policy instead of from the policy engine being tested, which means the containment figure is not
+the policy grading its own behaviour.
 
 \subsection{Decision Quality and Cross-Model Generalization}
-Fast resolution and correct resolution are different things. AIOpsLab~\cite{chen2025aiopslab} scores
-cloud agents on detection, localization, and mitigation instead of latency alone.
-OpenSec~\cite{barnes2026opensec} reports that frontier models are good at detecting incidents but
-badly calibrated: two current models had false-positive containment-action rates of 82.5\% and 45\%.
-Our correct-mitigation metric (Eq.~\eqref{eq:decision}, Section~\ref{sec:method}) is built on the same distinction.
+A fault can be resolved quickly and still be resolved wrongly, and recent benchmarks score the two
+separately. AIOpsLab~\cite{chen2025aiopslab} grades cloud agents on detection, localization and
+mitigation rather than on latency alone, while OpenSec~\cite{barnes2026opensec} found frontier models
+to be good at noticing incidents but poorly calibrated in how they respond, with false-positive
+containment-action rates of 82.5\% and 45\% for two current models. Our correct-mitigation metric
+(Eq.~\eqref{eq:decision}, Section~\ref{sec:method}) follows the same reasoning.
 
-According to the base paper, the GPT, Claude, and Gemini model families were interchangeable as
-backends, yet no cross-model results are shown. Work in other settings gives reason for doubt.
+The base paper describes the GPT, Claude and Gemini model families as interchangeable backends but
+reports no results that compare them. Work in other settings gives reason for doubt.
 Sanna~\cite{sanna2025crossllm} found a 43.4-point drop in accuracy when a behavioral backdoor detector
 was evaluated across six production LLMs instead of in-distribution. Zhang
 et al.~\cite{zhang2026towardagentic} gave agents identical input and still saw their behavior change

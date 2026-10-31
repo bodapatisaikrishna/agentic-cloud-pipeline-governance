@@ -29,9 +29,10 @@ All four agents run the same loop. Each one \emph{observes} a telemetry snapshot
 about it with a live or mock language model, \emph{proposes} an action, and \emph{acts} only through
 the gate. The monitoring agent is the
 detector and is enabled in every agent configuration, so recovery time remains measurable in every
-ablation. The optimization agent scales workers or pool slots, or reprioritizes work. The schema agent
-accepts compatible schema changes and contains breaking ones. The recovery agent can retry, replay,
-roll back, partially recompute, or hand the fault to a human. When two proposals target the same
+ablation. The optimization agent scales workers or pool slots, or reprioritizes work. Schema changes
+that are compatible are accepted by the schema agent and breaking ones are contained, while the
+recovery agent has a wider repertoire (retry, replay, rollback, partial recomputation) and can also
+hand a fault over to the human. When two proposals target the same
 resource, a static agent-priority bid resolves the conflict. An earlier design relied on lock ordering
 for this purpose, but lock ordering turned out not to provide the property, so a per-target advisory
 lock now serves only to stop a second process from acting on the same target.
@@ -46,42 +47,42 @@ it was missing. Output that fails validation is rejected and logged, the
 Agents never emit or execute code.
 
 \subsection{Layer 4: Policy Gate}
-Each proposal carries a context built by the system: the projected marginal cost, the remaining
-budget, the number of actions the proposing agent has taken in the last ten minutes, the schema
-compatibility, and whether a prior version exists. The proposal then passes through four Rego policy
-packs: the rate limit of Eq.~\eqref{eq:rate}, the cost budget of Eq.~\eqref{eq:budget}, a
-recovery-approval policy that allows rollback only if a prior version exists, and a
-schema-compatibility policy. The gate answers allow, deny, escalate, or allow-and-notify. When the
-policy engine cannot be reached, the gate escalates; it never allows by default.
+The context $c$ of Section~\ref{sec:problem} is assembled by the system, not by the agent, and is
+attached to each proposal before it is evaluated by four Rego policy packs. Two of them are the rate
+limit of Eq.~\eqref{eq:rate} and the cost budget of Eq.~\eqref{eq:budget}; the third approves a
+rollback only when a prior version exists, and the fourth checks schema compatibility. Any of the four
+verdicts (allow, deny, escalate, allow-and-notify) can come back, and if the policy engine is
+unreachable the proposal is escalated, so nothing is ever allowed by default.
 
 \subsection{Layer 5: Execution and Audit}
-Before the executor starts, the system writes and commits an intent row. After the action, it updates
-that row with the outcome. If the process crashes mid-action, what remains is a durable
-\texttt{executing} row, not a missing record. The original design did not have this write-ahead
-ordering; we added it later. Allowed actions reach their side effects through a dispatcher that picks
-a handler by action type. On Airflow the handlers trigger DAG runs, clear tasks, and patch pool slots.
-On PostgreSQL they perform rollback, quarantine, schema mapping, and desired-state updates.
+An intent row is written and committed before the executor starts and is updated with the outcome
+once the action has finished, so a process that crashes halfway through leaves a durable
+\texttt{executing} row behind instead of no record at all. This write-ahead ordering was not part
+of the original design and was added later (lesson L2, Section~\ref{sec:l2}). Side effects are
+produced by handlers that a dispatcher selects by action type; against Airflow these trigger DAG
+runs, clear tasks or patch pool slots, and against PostgreSQL they carry out rollbacks, quarantines,
+schema mappings and desired-state updates.
 
 \subsection{Simulated Human}
-The on-call engineer is simulated. An escalation is resolved after a seeded log-normal delay (median
-\NHumanMedian{}\,s, $\sigma=\NHumanSigma{}$). We chose this delay and did not measure it, and
-Section~\ref{sec:sensitivity} shows how far the headline results move when it changes.
+No real engineer was on call. Escalations were resolved by a simulator after a seeded log-normal delay
+with a median of \NHumanMedian{}\,s and $\sigma=\NHumanSigma{}$, values we picked rather than
+measured; Section~\ref{sec:sensitivity} reports how much the headline results depend on them.
 
 \subsection{Cross-Model Harness, Implemented but Not Evaluated}
-The cross-model harness takes one scenario, runs it through a configurable list of LLM backends, and
-scores each model on decision correctness (Eq.~\eqref{eq:decision}), latency, and token use. That is a direct test of the base
-paper's model-independence claim. The harness has unit tests, but we did not run or record a sweep
-across real provider models during this campaign, so this paper reports no results from it.
+Given one scenario and a configurable list of LLM backends, the cross-model harness runs the scenario
+on each backend and records decision correctness (Eq.~\eqref{eq:decision}), latency and token use,
+which would test the base paper's model-independence claim directly. It is covered by unit tests, but
+no sweep over real provider models was run or recorded in this campaign, and the paper therefore
+contains no results from it.
 
 \subsection{Layers 5 and 6: Trust Core, Implemented but Not Evaluated}
-The system also adds something the base paper does not have: a graduated-autonomy layer with three
-modes. In \texttt{shadow} mode, proposals are logged and the pipeline is left alone. In
-\texttt{approval} mode, allowed actions wait in a queue for a human to decide. In \texttt{autonomous}
-mode they run directly. Two further limits act independently of the policy: a durable kill switch that
-the loop checks once per tick, and an hourly blast-radius cap for each target. All three are
-implemented and unit-tested. Every configuration in the campaign, however, stayed in
-\texttt{autonomous} mode for the whole run, so we can describe what this layer does but not how it
-performed.
+Beyond the base design, our implementation has a graduated-autonomy layer. In \texttt{shadow} mode
+proposals are only logged and the pipeline is not touched; in \texttt{approval} mode allowed actions
+are queued until a human decides on them; and in \texttt{autonomous} mode they are executed
+directly. Independently of the policy, the loop also checks a durable kill switch on every tick and
+enforces an hourly blast-radius cap per target. These mechanisms are implemented and have unit
+tests, but since every configuration in the campaign ran in \texttt{autonomous} mode throughout, we
+can say what the layer does and not how well it works.
 
 \subsection{Layer 7: Enterprise Governance, Implemented but Not Evaluated}
 An operator API provides read access to proposals, the audit trail, and costs, and it exports the
@@ -102,14 +103,12 @@ To show that the governance stack runs outside the laboratory host, we deployed 
 Microsoft Azure virtual machine (Fig.~\ref{fig:deploy}): a \texttt{Standard\_B2pls\_v2} instance
 (Arm64, 2 vCPU, 4\,GB) running Ubuntu 24.04 in the Southeast Asia region. One script provisions the
 machine, and cloud-init installs Docker, generates every secret on the machine itself, and starts a
-Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. Caddy
-sits in front as a reverse proxy, gets a certificate from Let's Encrypt, and serves the API over
-HTTPS. Ports 443 and 80 are open to the internet, while SSH is open only to the deployer's address.
-The policy engine is the same pinned release used in the campaign (Table~\ref{tab:testbed}),
-built for Arm64. There is no
-production pipeline behind this deployment, so it runs in \texttt{shadow} mode with the mock model and
-a no-op connector: it watches and proposes, and it never acts. We checked that the certificate is
-valid, that HTTP redirects to HTTPS, that every protected endpoint asks for authentication, and that
-all seven readiness checks pass. Nothing in Section~\ref{sec:results} was measured on this machine.
-The campaign needs the full stack, including Airflow and Redpanda, which this deployment does not
-run.
+Docker Compose stack of PostgreSQL, the policy engine, the operator API, and the control loop. The API is served over HTTPS
+by a Caddy reverse proxy with a Let's Encrypt certificate; ports 443 and 80 are reachable from the
+internet and SSH only from the deployer's address. The policy engine runs the release pinned for the
+campaign (Table~\ref{tab:testbed}), rebuilt for Arm64. Because no production pipeline sits behind
+this machine, it runs in \texttt{shadow} mode with the mock model and a no-op connector, so it
+observes and proposes but never acts. On the deployed instance we confirmed a valid certificate, the
+HTTP-to-HTTPS redirect, authentication on every protected endpoint and a pass on all seven readiness
+checks. None of the results in Section~\ref{sec:results} come from this machine, since the campaign
+also needs Airflow and Redpanda and these are not part of the cloud deployment.

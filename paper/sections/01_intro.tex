@@ -1,6 +1,6 @@
 \section{INTRODUCTION}\label{sec:intro}
 
-Most pipeline failures are mundane. A column changes type upstream, a source goes quiet, a co-tenant
+In practice, the failures that stop a data pipeline tend to be ordinary ones: a column changes type upstream, a source goes quiet, a co-tenant
 takes the compute the pipeline needs, or a burst of ingress exceeds capacity. Foidl et al. counted 41
 separate factors behind quality and reliability failures in real pipelines~\cite{foidl2024datapipeline}.
 The usual fix is still a person on call, and much of the recovery time is simply the time that person
@@ -75,21 +75,22 @@ Two more components exist in the code but were not exercised in this campaign, a
 as architecture, not results. The first is a cross-model harness for testing the base paper's claim
 of model independence; we have not yet run its live sweep against real providers. The second is a
 production trust core with graduated autonomy, a durable kill switch, and a per-target blast-radius
-cap. All runs used one fixed mode, so we have no mode-transition or kill-switch latency to report.
-Section~\ref{sec:system} describes both, and Section~\ref{sec:discussion} lists them as open gaps.
-Section~\ref{sec:lessons} collects \textbf{production-hardening lessons}, each taken from a defect the
-system really had.
+cap. Because every run was made in a single fixed mode, we have no measurement of mode transitions
+or of kill-switch latency; both components are described in Section~\ref{sec:system} and listed as
+open gaps in Section~\ref{sec:discussion}. Section~\ref{sec:lessons} then reports
+\textbf{production-hardening lessons}, and every one of them comes from a defect we actually found in
+the running system.
 
-We did not design the architecture. The three planes, the four bounded agents, the policy gate, and
-the observe--reason--propose loop all come from the base paper~\cite{kirubakaran2025governing}, and
-our job was to build them as described. There is no new agent design, policy language, or statistical
-method here. Our contribution is the evidence, the way it was measured, and a set of defects that
-surfaced once we checked the system against its stated guarantees instead of a test suite built on
-the same assumptions as the code.
+The architecture itself is taken from the base paper~\cite{kirubakaran2025governing}; the three
+planes, the four bounded agents, the policy gate and the observe--reason--propose loop were
+implemented as described there, and this paper proposes no new agent design, policy language or
+statistical method. What we add is evidence about that design, an account of how the evidence was
+collected, and a set of defects that only came to light when the system was checked against its own
+stated guarantees rather than against a test suite written under the same assumptions as the code.
 
-Section~\ref{sec:related} covers related work. Section~\ref{sec:problem} sets up the problem and
-defines the metrics, and Section~\ref{sec:system} describes what we built. The experimental design is
-in Section~\ref{sec:method}. Section~\ref{sec:results} gives the results, with most attention on the
-gap between mock and live runs. The hardening lessons follow in Section~\ref{sec:lessons},
-Section~\ref{sec:discussion} covers implications, limitations, and threats to validity, and
-Section~\ref{sec:conclusion} concludes.
+After a review of related work in Section~\ref{sec:related}, we formalize the problem and its
+metrics (Section~\ref{sec:problem}) and describe the implementation (Section~\ref{sec:system}). The
+experimental design is given in Section~\ref{sec:method} and the results in
+Section~\ref{sec:results}, where most of the space goes to the difference between mock and live
+runs. Sections~\ref{sec:lessons} and~\ref{sec:discussion} cover the hardening lessons and the
+implications, limitations and threats to validity, and Section~\ref{sec:conclusion} closes the paper.

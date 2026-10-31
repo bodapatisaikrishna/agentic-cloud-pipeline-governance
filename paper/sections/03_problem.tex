@@ -9,9 +9,9 @@ snapshots to actions. In an agent configuration, each enabled agent $g$ proposes
 $a = (g, \text{type}, \text{target}, \text{params}, \text{justification}, \text{confidence})$ from the
 typed action space $\mathcal{A}$ of the contract (Section~\ref{sec:system}). A policy gate $G$
 decides each proposal from a context $c = (m, B, n, \kappa, v)$ that the system builds outside the
-agent's influence. Its parts are the projected marginal cost $m$ of the action, the budget $B$ still
-left, the number $n$ of actions the proposing agent has recorded in the past ten minutes, the
-schema-compatibility class $\kappa$, and a flag $v$ that is true when a prior version exists. The gate
+agent's influence. In $c$, $m$ is the projected marginal cost of the action and $B$ the budget that
+remains, $n$ counts the actions the proposing agent has recorded over the past ten minutes, $\kappa$
+is the schema-compatibility class, and $v$ is set when a prior version exists. The gate
 returns \textsc{allow}, \textsc{deny}, \textsc{escalate}, or \textsc{allow-and-notify}.
 
 \subsection{Gate Semantics}
