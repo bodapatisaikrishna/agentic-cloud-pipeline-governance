@@ -6,6 +6,9 @@ per phase, `v1.0.0` at Phase 9.
 ## [Unreleased]
 
 ### Security
+- **pyasn1 0.6.4 → 0.6.5** (`uv lock --upgrade-package pyasn1`): four HIGH CVEs
+  (CVE-2026-119194 … CVE-2026-119197) published after 2026-11-25 failed both the pip-audit step
+  and the Trivy image scan. Transitive via google-genai → google-auth → pyasn1-modules.
 - **CI green again (red on `main` since 2026-10-02)**: bumped three transitive deps in `uv.lock`
   (`uv lock --upgrade-package ...`, no `pyproject.toml` change). certifi 2026.7.22 → 2026.10.23
   (GHSA-6q48-6c7w-9gw2, CRITICAL) and urllib3 2.7.0 → 2.8.0 (CVE-2026-97687, CVE-2026-97689, HIGH)
