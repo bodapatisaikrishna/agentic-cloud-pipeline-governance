@@ -37,19 +37,19 @@ ACDE is two things at once:
 
 ## Highlights
 
-- 🛡️ **Policy before action.** Four Rego policy packs (rate limit, cost budget, recovery approval,
+-  **Policy before action.** Four Rego policy packs (rate limit, cost budget, recovery approval,
   schema compatibility). If OPA is unreachable the gate escalates to a human; it never allows by
   default.
-- 🧪 **Live, not just mocked.** The same code path runs under a deterministic mock *and* a real
+-  **Live, not just mocked.** The same code path runs under a deterministic mock *and* a real
   remote model (NVIDIA Nemotron, temperature 0). The two disagree by **1,219×** on recovery time,
   which is the project's central finding.
-- ⚖️ **Fair baselines.** Agents are compared with static orchestration *and* with cheap non-LLM
+-  **Fair baselines.** Agents are compared with static orchestration *and* with cheap non-LLM
   automation (a rule-based responder and a threshold autoscaler).
-- 🎯 **Correctness, not just speed.** A `decision_correct` metric scores whether the executed
+-  **Correctness, not just speed.** A `decision_correct` metric scores whether the executed
   mitigation was an accepted one.
-- 🔒 **Adversarially tested.** 5,547 generated cases graded by an independent oracle: all **3,867
+-  **Adversarially tested.** 5,547 generated cases graded by an independent oracle: all **3,867
   unsafe proposals contained**, 0 fail-open.
-- 📊 **Every number regenerable.** Tables, figures and every number in the paper are rebuilt from
+-  **Every number regenerable.** Tables, figures and every number in the paper are rebuilt from
   committed data with one command.
 
 ## Architecture
