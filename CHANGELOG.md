@@ -14,6 +14,10 @@ per phase, `v1.0.0` at Phase 9.
   only, since the server image installs `--no-dev`. No code or paper data changed.
 
 ### Fixed
+- **`LICENSE` is now the verbatim Apache-2.0 text**: the file added in v2.0 (D-067) was an abridged
+  rewrite missing parts of §4(c)/(d), §4's last paragraph, §5, §7, §8 and §9, so GitHub detected
+  it as "Other". Replaced with the official apache.org text; the copyright line stays in `NOTICE`.
+  The license choice itself (Apache-2.0) is unchanged.
 - **Simulated human drew one delay per escalation and kept the fastest (D-106)**: an agent that
   re-escalated on every tick got the minimum of several draws, which accounts for most of the v1
   MTTR gain of `full` and `recovery_only`. The human now handles each incident once: one delay per
